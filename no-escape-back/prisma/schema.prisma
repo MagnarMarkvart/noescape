@@ -11,17 +11,49 @@ datasource db {
 }
 
 model Skill {
-  id         Int         @id @default(autoincrement())
-  name       String
-  slug       String      @unique
-  category   String
-  level      Int         @default(1)
-  xp         Int         @default(0)
-  icon       String?
-  xpSources  String
-  sortOrder  Int         @default(0)
-  activities Activity[]
-  dailyTasks DailyTask[]
+  id                 Int                  @id @default(autoincrement())
+  name               String
+  slug               String               @unique
+  category           String
+  level              Int                  @default(1)
+  xp                 Int                  @default(0)
+  icon               String?
+  xpSources          String
+  sortOrder          Int                  @default(0)
+  activities         Activity[]
+  dailyTasks         DailyTask[]
+  taskTemplates      DailyTaskTemplate[]
+  horologiumSessions HorologiumSession[]
+  levelUps           LevelUpEvent[]
+  rewards            Reward[]
+  habits             Habit[]
+}
+
+enum UnlockType {
+  GEAR
+  FEATURE
+  COSMETIC
+  RESOURCE
+}
+
+model Reward {
+  id             Int        @id @default(autoincrement())
+  skillId        Int
+  skill          Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  levelReq       Int
+  type           UnlockType
+  label          String
+  description    String
+  permissionKey  String?
+  wealthLevelReq Int?
+  questIds       String?
+  orderIndex     Int
+  icon           String
+  unlocked       Boolean    @default(false)
+  claimedAt      DateTime?
+
+  @@unique([skillId, levelReq, orderIndex])
+  @@index([skillId])
 }
 
 model Activity {
@@ -42,6 +74,10 @@ model DailyTask {
   title           String    @default("")
   skillId         Int?
   skill           Skill?    @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  habitId         Int?
+  habit           Habit?    @relation(fields: [habitId], references: [id], onDelete: SetNull)
+  /// When set, completion awards this XP instead of the importance formula.
+  fixedXp         Int?
   effortLevel     Int       @default(5)
   durationMinutes Int       @default(45)
   completed       Boolean   @default(false)
@@ -53,6 +89,26 @@ model DailyTask {
 
   @@unique([date, importance, slotIndex])
   @@index([date])
+  @@index([habitId])
+}
+
+/// Reusable daily presets (not habits) — quick-fill for repetitive chores.
+model DailyTaskTemplate {
+  id              Int      @id @default(autoincrement())
+  name            String
+  icon            String?
+  skillId         Int
+  skill           Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  fixedXp         Int
+  effortLevel     Int      @default(5)
+  durationMinutes Int      @default(30)
+  sortOrder       Int      @default(0)
+  createdByUser   Boolean  @default(false)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([skillId])
+  @@index([active])
 }
 
 /// Immutable day archive — full board + skill tree at seal time.
@@ -65,4 +121,135 @@ model DailyLog {
   earnedXp       Int
   projectedXp    Int
   snapshotJson   String
+}
+
+/// Recorded whenever a skill gains one or more levels.
+model LevelUpEvent {
+  id           Int      @id @default(autoincrement())
+  skillId      Int
+  skill        Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  fromLevel    Int
+  toLevel      Int
+  levelsGained Int
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([skillId])
+}
+
+/// Completed Horologium (deep-work) focus session — awards Focus XP.
+model HorologiumSession {
+  id              Int      @id @default(autoincrement())
+  date            String
+  workMinutes     Int
+  restMinutes     Int
+  iterations      Int
+  durationMinutes Int
+  presetId        String?
+  skillId         Int?
+  skill           Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  xpAwarded       Int
+  activityId      Int?
+  note            String?
+  completedAt     DateTime @default(now())
+
+  @@index([date])
+  @@index([completedAt])
+}
+
+/// Singleton player profile (titles, informative status).
+model Character {
+  id        Int      @id @default(1)
+  title     String   @default("Peasant")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// App feature gates (e.g. Habitus / streaks).
+model FeatureUnlock {
+  id         Int       @id @default(autoincrement())
+  key        String    @unique
+  unlocked   Boolean   @default(false)
+  unlockedAt DateTime?
+}
+
+/// Catalog + custom IRL goal quests.
+model Quest {
+  id             Int        @id @default(autoincrement())
+  slug           String     @unique
+  name           String
+  tier           String     @default("NOVICE")
+  summary        String
+  description    String
+  /// Filename under /assets/images/quests/ (e.g. "1st-quest.png")
+  coverImage     String?
+  skillSlug      String?
+  durationDays   Int?
+  kind           String     @default("GENERIC")
+  skillReqsJson  String?
+  unlockReqsJson String?
+  questReqsJson  String?
+  rewardJson     String?
+  xpPlanJson     String?
+  createdByUser  Boolean    @default(false)
+  sortOrder      Int        @default(0)
+  createdAt      DateTime   @default(now())
+  runs           QuestRun[]
+}
+
+model QuestRun {
+  id          Int           @id @default(autoincrement())
+  questId     Int
+  quest       Quest         @relation(fields: [questId], references: [id], onDelete: Cascade)
+  status      String        @default("ACTIVE")
+  streakCount Int           @default(0)
+  bestStreak  Int           @default(0)
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+  lastLogDate String?
+  logs        QuestDayLog[]
+
+  @@index([status])
+  @@index([questId])
+}
+
+model QuestDayLog {
+  id        Int      @id @default(autoincrement())
+  runId     Int
+  run       QuestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  date      String
+  result    String
+  xpAwarded Int      @default(0)
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([runId, date])
+  @@index([date])
+}
+
+model Habit {
+  id          Int               @id @default(autoincrement())
+  name        String
+  icon        String?
+  skillId     Int?
+  skill       Skill?            @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  cadence     String            @default("DAILY")
+  everyNDays  Int               @default(1)
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  completions HabitCompletion[]
+  dailyTasks  DailyTask[]
+}
+
+model HabitCompletion {
+  id          Int      @id @default(autoincrement())
+  habitId     Int
+  habit       Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date        String
+  source      String   @default("manual")
+  dailyTaskId Int?
+  createdAt   DateTime @default(now())
+
+  @@unique([habitId, date])
+  @@index([date])
 }

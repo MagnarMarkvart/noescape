@@ -35,6 +35,51 @@ export interface SkillTree {
   categories: SkillCategory[];
 }
 
+export type UnlockType = 'GEAR' | 'FEATURE' | 'COSMETIC' | 'RESOURCE';
+
+export type RewardStatus =
+  | 'unlocked'
+  | 'available'
+  | 'locked_level'
+  | 'locked_requirements';
+
+export interface Reward {
+  id: number;
+  skillId: number;
+  levelReq: number;
+  type: UnlockType;
+  label: string;
+  description: string;
+  permissionKey: string | null;
+  wealthLevelReq: number | null;
+  questIds: string | null;
+  orderIndex: number;
+  icon: string;
+  unlocked: boolean;
+  claimedAt: string | null;
+  status?: RewardStatus;
+  missing?: string[];
+}
+
+export interface SkillGuideBracket {
+  levelReq: number;
+  rewards: Reward[];
+}
+
+export interface SkillGuide {
+  skill: {
+    id: number;
+    name: string;
+    slug: string;
+    icon: string | null;
+    category: string;
+    level: number;
+  };
+  wealthLevel: number;
+  brackets: SkillGuideBracket[];
+  rewards: Reward[];
+}
+
 export interface LogActivityResponse {
   activity: {
     id: number;
@@ -47,4 +92,18 @@ export interface LogActivityResponse {
   skill: Skill;
   leveledUp: boolean;
   levelsGained: number;
+  previousLevel: number;
+  previousXp: number;
+  previousProgress: SkillProgress;
+  newUnlocks?: Reward[];
+}
+
+export interface XpReversalResponse {
+  skill: Skill;
+  xpRemoved: number;
+  leveledDown: boolean;
+  levelsLost: number;
+  previousLevel: number;
+  previousXp: number;
+  previousProgress: SkillProgress;
 }

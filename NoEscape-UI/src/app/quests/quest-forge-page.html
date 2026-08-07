@@ -1,0 +1,43 @@
+<section class="forge-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Workshop</p>
+      <h1>Forge a quest</h1>
+      <p class="lede">Configure a custom IRL goal. It will appear in your catalogue.</p>
+    </div>
+    <a routerLink="/quests" class="back">← Catalogue</a>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  <form class="forge-form" (submit)="$event.preventDefault(); createQuest()">
+    <label>
+      Name
+      <input type="text" [formField]="createForm.name" placeholder="Custodia Mentis" />
+    </label>
+    <label>
+      Summary
+      <input
+        type="text"
+        [formField]="createForm.summary"
+        placeholder="One-line pitch"
+      />
+    </label>
+    <label>
+      Description
+      <textarea
+        [formField]="createForm.description"
+        rows="8"
+        placeholder="Rules, stakes, how to win…"
+      ></textarea>
+    </label>
+    <div class="actions">
+      <button type="submit" class="primary" [disabled]="creating()">
+        {{ creating() ? 'Forging…' : 'Forge quest' }}
+      </button>
+      <a routerLink="/quests" class="ghost">Cancel</a>
+    </div>
+  </form>
+</section>

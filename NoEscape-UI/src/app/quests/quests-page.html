@@ -1,0 +1,78 @@
+<section class="quests-shell">
+  <header class="toolbar">
+    <div class="brand-block">
+      <p class="kicker">IRL Goals</p>
+      <h1>Quests</h1>
+    </div>
+    <div class="toolbar-right">
+      <a routerLink="/quests/forge" class="forge-btn">Forge new</a>
+      <div class="filters" role="tablist">
+        @for (f of ['all', 'available', 'locked', 'active', 'completed']; track f) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="filter() === f"
+            (click)="setFilter(f)"
+          >
+            {{ f }}
+          </button>
+        }
+      </div>
+    </div>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  <div class="list-col">
+    @if (loading()) {
+      <p class="state">Loading…</p>
+    } @else if (quests().length === 0) {
+      <p class="state">No quests in this filter.</p>
+    } @else {
+      <ul class="quest-list">
+        @for (q of quests(); track q.id) {
+          <li>
+            <button
+              type="button"
+              class="quest-card"
+              [class.locked]="q.availability === 'locked'"
+              [class.active]="q.availability === 'active'"
+              [class.completed]="q.availability === 'completed'"
+              (click)="open(q)"
+            >
+              @if (q.coverUrl) {
+                <span
+                  class="card-thumb"
+                  [style.background-image]="'url(' + q.coverUrl + ')'"
+                  aria-hidden="true"
+                ></span>
+              }
+              <span class="card-body">
+                <div class="card-top">
+                  <strong>{{ q.name }}</strong>
+                  <span class="tier">{{ q.tier }}</span>
+                </div>
+                <p class="summary">{{ q.summary }}</p>
+                @if (q.requirements.length) {
+                  <ul class="reqs">
+                    @for (r of q.requirements; track r.label) {
+                      <li [class.met]="r.met" [class.unmet]="!r.met">
+                        {{ r.met ? '✓' : '✗' }} {{ r.label }}
+                        <span class="detail">({{ r.detail }})</span>
+                      </li>
+                    }
+                  </ul>
+                } @else {
+                  <p class="open-tag">No requirements — open to all</p>
+                }
+                <p class="avail">{{ q.availability }}</p>
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+</section>

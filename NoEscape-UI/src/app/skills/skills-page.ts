@@ -8,18 +8,21 @@ import {
   signal,
 } from '@angular/core';
 import { form, FormField, min, required, submit } from '@angular/forms/signals';
+import { RouterLink } from '@angular/router';
+import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import { Skill, SkillTree } from './skill.model';
 import { SkillsService } from './skills.service';
 
 @Component({
   selector: 'app-skills-page',
-  imports: [DecimalPipe, FormField],
+  imports: [DecimalPipe, FormField, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './skills-page.html',
   styleUrl: './skills-page.css',
 })
 export class SkillsPage implements OnInit {
   private readonly skillsService = inject(SkillsService);
+  private readonly xpFeedback = inject(XpFeedbackService);
 
   protected readonly tree = signal<SkillTree | null>(null);
   protected readonly selected = signal<Skill | null>(null);
@@ -41,7 +44,14 @@ export class SkillsPage implements OnInit {
   protected readonly averageLevel = computed(() => this.tree()?.averageLevel ?? 1);
 
   ngOnInit(): void {
-    this.loadTree();
+    const cached = this.skillsService.peekTree();
+    if (cached) {
+      this.tree.set(cached);
+      this.loading.set(false);
+      this.loadTree(false, true);
+      return;
+    }
+    this.loadTree(true, true);
   }
 
   protected selectSkill(skill: Skill): void {
@@ -68,12 +78,24 @@ export class SkillsPage implements OnInit {
           next: (result) => {
             this.selected.set(result.skill);
             this.activityModel.update((m) => ({ ...m, note: '' }));
-            this.toast.set(
-              result.leveledUp
-                ? `${result.skill.name} leveled up! Now level ${result.skill.level}.`
-                : `+${result.activity.xpGained} XP to ${result.skill.name}.`,
-            );
-            this.loadTree(false);
+            this.xpFeedback.publishAward(result);
+            if (result.leveledUp) {
+              const unlocks = result.newUnlocks ?? [];
+              if (unlocks.length === 1) {
+                this.toast.set(
+                  `${result.skill.name} leveled up! New unlock: ${unlocks[0].label} ✓`,
+                );
+              } else if (unlocks.length > 1) {
+                this.toast.set(
+                  `${result.skill.name} leveled up! New unlocks: ${unlocks
+                    .map((u) => `${u.label} ✓`)
+                    .join(', ')}`,
+                );
+              } else {
+                this.toast.set(`${result.skill.name} leveled up!`);
+              }
+            }
+            this.loadTree(false, true);
             this.logging.set(false);
           },
           error: (err: { error?: { message?: string | string[] } }) => {
@@ -89,11 +111,11 @@ export class SkillsPage implements OnInit {
     });
   }
 
-  private loadTree(showLoading = true): void {
+  private loadTree(showLoading = true, force = false): void {
     if (showLoading) {
       this.loading.set(true);
     }
-    this.skillsService.getTree().subscribe({
+    this.skillsService.getTree(force).subscribe({
       next: (tree) => {
         this.tree.set(tree);
         const current = this.selected();
@@ -110,9 +132,11 @@ export class SkillsPage implements OnInit {
       },
       error: () => {
         this.loading.set(false);
-        this.error.set(
-          'Could not reach the Status server. Is the backend running?',
-        );
+        if (!this.tree()) {
+          this.error.set(
+            'Could not reach the Status server. Is the backend running?',
+          );
+        }
       },
     });
   }

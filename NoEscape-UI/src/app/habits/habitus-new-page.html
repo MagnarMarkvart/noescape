@@ -1,0 +1,75 @@
+<section class="new-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Habitus</p>
+      <h1>New habit</h1>
+      <p class="lede">Configure cadence and icon. Logs stay in Progression forever.</p>
+    </div>
+    <a routerLink="/habitus" class="back">← Habitus</a>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  <form class="create" (submit)="$event.preventDefault(); create()">
+    <label>
+      Name
+      <input type="text" [formField]="createForm.name" />
+    </label>
+
+    <div class="icon-picker">
+      <div class="icon-picker-head">
+        <span>Icon</span>
+        <span class="icon-preview" aria-hidden="true">{{ createModel().icon }}</span>
+      </div>
+      <div class="icon-tabs" role="tablist" aria-label="Icon categories">
+        @for (group of iconGroups; track group.id) {
+          <button
+            type="button"
+            role="tab"
+            class="icon-tab"
+            [class.selected]="iconGroupId() === group.id"
+            (click)="setIconGroup(group.id)"
+          >
+            {{ group.label }}
+          </button>
+        }
+      </div>
+      <div class="icon-grid" role="listbox">
+        @for (opt of activeIconGroup().icons; track opt.glyph) {
+          <button
+            type="button"
+            role="option"
+            class="icon-tile"
+            [class.selected]="createModel().icon === opt.glyph"
+            [title]="opt.label"
+            (click)="pickIcon(opt.glyph)"
+          >
+            <span class="glyph" aria-hidden="true">{{ opt.glyph }}</span>
+            <span class="icon-label">{{ opt.label }}</span>
+          </button>
+        }
+      </div>
+    </div>
+
+    <label>
+      Cadence
+      <select [formField]="createForm.cadence">
+        <option value="DAILY">Daily</option>
+        <option value="EVERY_N_DAYS">Every N days</option>
+      </select>
+    </label>
+    <label>
+      Every N days
+      <input type="number" [formField]="createForm.everyNDays" />
+    </label>
+
+    <div class="actions">
+      <button type="submit" [disabled]="creating()">
+        {{ creating() ? '…' : 'Create habit' }}
+      </button>
+      <a routerLink="/habitus">Cancel</a>
+    </div>
+  </form>
+</section>

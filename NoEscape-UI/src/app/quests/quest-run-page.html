@@ -1,0 +1,88 @@
+<section class="run-shell">
+  <header class="run-head">
+    <div>
+      <p class="kicker">In progress</p>
+      @if (quest(); as q) {
+        <h1>{{ q.name }}</h1>
+      } @else {
+        <h1>Quest run</h1>
+      }
+    </div>
+    <div class="head-actions">
+      <button type="button" class="ghost-btn" (click)="openBriefing()">
+        Briefing
+      </button>
+      <a routerLink="/quests" class="ghost-btn">Catalog</a>
+    </div>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  @if (loading()) {
+    <p class="state">Loading run…</p>
+  } @else if (quest(); as q) {
+    <div class="run-grid">
+      <div class="streak-card">
+        <p class="label">Streak</p>
+        <p class="streak-num">
+          {{ q.run?.streakCount ?? 0 }}
+          @if (q.durationDays) {
+            <span class="of">/ {{ q.durationDays }}</span>
+          }
+        </p>
+        <p class="best">Best {{ q.run?.bestStreak ?? 0 }}</p>
+        @if (q.run?.lastLogDate) {
+          <p class="last">Last log: {{ q.run!.lastLogDate }}</p>
+        }
+      </div>
+
+      @if (q.kind === 'STREAK_LOG' && q.run?.status === 'ACTIVE') {
+        <div class="log-panel">
+          <h2>Today’s log</h2>
+          <p class="hint">One short is OK. Scrolling = fail. Missed day = broken.</p>
+          <div class="log-actions">
+            <button
+              type="button"
+              class="primary"
+              [disabled]="logging()"
+              (click)="log('CLEAN')"
+            >
+              Log Clean
+            </button>
+            <button
+              type="button"
+              class="danger"
+              [disabled]="logging()"
+              (click)="log('BROKEN')"
+            >
+              Log Broken
+            </button>
+          </div>
+        </div>
+      }
+
+      <div class="log-history">
+        <h2>Chronicle</h2>
+        @if (q.run?.logs?.length) {
+          <ul>
+            @for (log of q.run!.logs; track log.id) {
+              <li [class.clean]="log.result === 'CLEAN'" [class.broken]="log.result === 'BROKEN'">
+                <span>{{ log.date }}</span>
+                <strong>{{ log.result }}</strong>
+                @if (log.xpAwarded) {
+                  <span class="xp">+{{ log.xpAwarded }}</span>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="state">No days logged yet.</p>
+        }
+      </div>
+    </div>
+  } @else {
+    <p class="state">Quest not found.</p>
+  }
+</section>

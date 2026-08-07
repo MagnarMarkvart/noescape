@@ -53,6 +53,31 @@ export class DailiesController {
     return this.dailiesService.upsertSlot(dto);
   }
 
+  @Get('templates')
+  listTemplates() {
+    return this.dailiesService.listTemplates();
+  }
+
+  @Post('templates')
+  createTemplate(
+    @Body()
+    body: {
+      name: string;
+      icon?: string;
+      skillId: number;
+      fixedXp: number;
+      effortLevel?: number;
+      durationMinutes?: number;
+    },
+  ) {
+    return this.dailiesService.createTemplate(body);
+  }
+
+  @Delete('templates/:id')
+  removeTemplate(@Param('id', ParseIntPipe) id: number) {
+    return this.dailiesService.removeTemplate(id);
+  }
+
   @Post(':id/complete')
   complete(@Param('id', ParseIntPipe) id: number) {
     return this.dailiesService.complete(id);

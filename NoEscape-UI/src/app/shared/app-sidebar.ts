@@ -3,11 +3,15 @@ import {
   Component,
   computed,
   inject,
+  isDevMode,
+  OnInit,
   signal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
+import { CharacterService } from '../character/character.service';
+import { QuestsService } from '../quests/quests.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -30,14 +34,66 @@ import { filter, map, startWith } from 'rxjs';
         <span class="sr-only">{{ viewLabel() }}</span>
       } @else {
         <nav class="nav">
-          <a routerLink="/status" routerLinkActive="active">Status</a>
-          <a routerLink="/dailies" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+          <a
+            routerLink="/status"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            Status
+          </a>
+          <a routerLink="/character" routerLinkActive="active">Character</a>
+          <a routerLink="/quests" routerLinkActive="active">Quests</a>
+          @if (activeQuests().length) {
+            <p class="group-label">Started</p>
+            @for (q of activeQuests(); track q.runId) {
+              <a
+                class="sub goal"
+                [routerLink]="['/quests', q.questId, 'run']"
+              >
+                {{ q.name }}
+                @if (q.durationDays) {
+                  <span class="streak">{{ q.streakCount }}/{{ q.durationDays }}</span>
+                }
+              </a>
+            }
+          }
+          @if (showHabitus()) {
+            <a
+              routerLink="/habitus"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: true }"
+            >
+              Habitus
+            </a>
+            <a routerLink="/habitus/progression" routerLinkActive="active" class="sub">
+              Progression
+            </a>
+          }
+          <a
+            routerLink="/dailies"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
             Dailies
           </a>
           <a routerLink="/dailies/logs" routerLinkActive="active" class="sub">
             Quest Logs
           </a>
-          <a routerLink="/quest-timer" routerLinkActive="active">Quest Timer</a>
+          <a routerLink="/dailies/defaults" routerLinkActive="active" class="sub">
+            Defaults
+          </a>
+          <a
+            routerLink="/horologium"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            Horologium
+          </a>
+          <a routerLink="/horologium/log" routerLinkActive="active" class="sub">
+            Horo Log
+          </a>
+          <a routerLink="/level-ups" routerLinkActive="active">Level Ups</a>
+          <a routerLink="/preview" routerLinkActive="active">Preview</a>
         </nav>
       }
     </aside>
@@ -60,6 +116,7 @@ import { filter, map, startWith } from 'rxjs';
       border-right: 1px solid #8a7340;
       background: linear-gradient(180deg, #2a2316, #1c1810);
       transition: width 0.15s ease;
+      overflow: auto;
     }
 
     .sidebar.collapsed {
@@ -107,6 +164,28 @@ import { filter, map, startWith } from 'rxjs';
       opacity: 0.9;
     }
 
+    .nav a.goal {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      font-size: 0.78rem;
+      line-height: 1.25;
+    }
+
+    .streak {
+      color: #d4a84b;
+      font-size: 0.72rem;
+    }
+
+    .group-label {
+      margin: 0.45rem 0 0;
+      padding-inline: 0.65rem;
+      font-size: 0.68rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #8a7340;
+    }
+
     .nav a:hover,
     .nav a:focus-visible {
       color: #f0e6c8;
@@ -142,10 +221,18 @@ import { filter, map, startWith } from 'rxjs';
     }
   `,
 })
-export class AppSidebar {
+export class AppSidebar implements OnInit {
   private readonly router = inject(Router);
+  private readonly questsService = inject(QuestsService);
+  private readonly characterService = inject(CharacterService);
 
   protected readonly collapsed = signal(false);
+  protected readonly habitusUnlocked = signal(false);
+  protected readonly activeQuests = this.questsService.activeQuests;
+
+  protected readonly showHabitus = computed(
+    () => isDevMode() || this.habitusUnlocked(),
+  );
 
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -156,16 +243,42 @@ export class AppSidebar {
     { initialValue: this.router.url },
   );
 
+  ngOnInit(): void {
+    void this.questsService.refreshActive().subscribe();
+    this.characterService.getProfile().subscribe({
+      next: (p) => this.habitusUnlocked.set(p.habitusUnlocked),
+      error: () => this.habitusUnlocked.set(false),
+    });
+  }
+
   protected readonly viewLabel = computed(() => {
     const path = this.url();
+    if (path.includes('/guide')) {
+      return 'GUIDE';
+    }
+    if (path.startsWith('/character')) {
+      return 'CHARACTER';
+    }
+    if (path.startsWith('/quests')) {
+      return 'QUESTS';
+    }
+    if (path.startsWith('/habitus')) {
+      return 'HABITUS';
+    }
     if (path.startsWith('/dailies/logs')) {
       return 'LOGS';
     }
     if (path.startsWith('/dailies')) {
       return 'DAILIES';
     }
-    if (path.startsWith('/quest-timer')) {
-      return 'TIMER';
+    if (path.startsWith('/horologium') || path.startsWith('/quest-timer')) {
+      return 'HOROLOGIUM';
+    }
+    if (path.startsWith('/level-ups')) {
+      return 'LEVEL UPS';
+    }
+    if (path.startsWith('/preview')) {
+      return 'PREVIEW';
     }
     return 'STATUS';
   });

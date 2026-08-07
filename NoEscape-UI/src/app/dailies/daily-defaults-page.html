@@ -1,0 +1,67 @@
+<section class="defaults-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Dailies</p>
+      <h1>Default tasks</h1>
+      <p class="lede">
+        Quick-fill presets with fixed XP. Not habits — just repetitive chores.
+      </p>
+    </div>
+    <a routerLink="/dailies" class="back">← Dailies</a>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  <ul class="template-list">
+    @for (t of templates(); track t.id) {
+      <li>
+        <span class="icon" aria-hidden="true">{{ t.icon || '◆' }}</span>
+        <div>
+          <strong>{{ t.name }}</strong>
+          <small>
+            +{{ t.fixedXp }} {{ t.skill.name }}
+            @if (t.createdByUser) {
+              · custom
+            } @else {
+              · seeded
+            }
+          </small>
+        </div>
+        <button type="button" class="danger" (click)="remove(t)">Remove</button>
+      </li>
+    }
+  </ul>
+
+  <form class="create" (submit)="$event.preventDefault(); create()">
+    <h2>Create default</h2>
+    <label>
+      Name
+      <input type="text" [formField]="createForm.name" />
+    </label>
+    <label>
+      Icon
+      <input type="text" [formField]="createForm.icon" />
+    </label>
+    <label>
+      Skill
+      <select
+        [value]="createModel().skillId"
+        (change)="onSkillSelect($event)"
+      >
+        <option [value]="0">— pick —</option>
+        @for (s of allSkills(); track s.id) {
+          <option [value]="s.id">{{ s.icon }} {{ s.name }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      Fixed XP
+      <input type="number" [formField]="createForm.fixedXp" />
+    </label>
+    <button type="submit" [disabled]="creating()">
+      {{ creating() ? '…' : 'Create' }}
+    </button>
+  </form>
+</section>

@@ -23,24 +23,26 @@ npm run dev
 
 All XP math lives in the backend under `no-escape-back/src/xp/`.
 
-### Skill levels (1 → 99)
+### Skill levels (1 → 99) — exact OSRS curve
 
-Max level is **99**. Cumulative XP to *reach* a level:
+Max level is **99**. Same formula as Old School RuneScape
+([Experience](https://oldschool.runescape.wiki/w/Experience)):
 
 ```
-xpToAdvance(1) = 100
-xpToAdvance(L) = floor(100 + L × 45 + 2^(L/7) × 12)   for L ≥ 2
-
 xpForLevel(1) = 0
-xpForLevel(N) = sum(xpToAdvance(i) for i in 1..N-1)
+xpForLevel(L) = floor( (1/4) * sum_{n=1}^{L-1} floor(n + 300 * 2^(n/7)) )
 ```
+
+XP needed roughly doubles every 7 levels. Famous checkpoint: **92 is half of 99**.
 
 | Milestone | Cumulative XP (`xpForLevel`) |
 |-----------|------------------------------|
-| Level 2   | 100 |
-| Level 99  | **2,313,312** |
+| Level 2   | 83 |
+| Level 50  | 101,333 |
+| Level 92  | **6,517,253** (≈ 50% to 99) |
+| Level 99  | **13,034,431** |
 
-So a skill at 0 XP is level 1. Hitting the XP total for level 99 maxes the skill.
+So a skill at 0 XP is level 1. Hitting 13,034,431 XP maxes the skill.
 
 Level from XP:
 
@@ -59,6 +61,45 @@ percent   = intoLevel / needed × 100
 ### Manual activity log
 
 `POST /skills/:id/activities` awards the XP amount you send (no extra multiplier). Used for ad-hoc training outside Dailies.
+
+### Horologium (deep-work timer) XP
+
+Independent of Dailies. Awards Focus XP (`slug: focus`).
+
+**Modes**
+- **Track (adhoc):** open-ended work/rest loops. Block XP only (low rate). No goal bonus.
+- **Sessio (planned):** set iterations. Each finished work block pays planned block XP. Finishing *all* iterations pays a goal bonus. Abort early → block XP only, never the bonus.
+
+**Per finished work block**
+```
+XP = max(1, round(workMinutes × RATE × restMult × workLengthMult × modeMult))
+
+RATE = 1 XP / work minute
+
+restMult (rest length):
+  ≤ 5 min  → 1.00×  (best; plateaus below 5)
+  5–35 min → lerp 1.00 → 0.45
+  ≥ 35 min → 0.45×  (worst; plateaus above 35)
+
+workLengthMult:
+  ≤ 10 → 0.85× · ≤ 20 → 1.00× · ≤ 35 → 1.20× · else 1.40×
+
+modeMult:
+  planned → 1.00×
+  adhoc   → 0.35×
+```
+
+**Goal bonus** (planned, full finish only):
+```
+goalBonus = round(blockXp × iterations × 1.5)
+```
+
+API:
+
+- `GET /horologium/preview?workMinutes=&restMinutes=&iterations=&mode=planned|adhoc`
+- `GET /horologium/sessions`
+- `POST /horologium/blocks` `{ workMinutes, restMinutes, mode, presetId? }`
+- `POST /horologium/goal-bonus` `{ workMinutes, restMinutes, iterations, presetId? }`
 
 ### Dailies board structure
 
@@ -132,6 +173,7 @@ Completing a daily task:
 - `GET /skills/:id`
 - `GET /skills/:id/activities`
 - `POST /skills/:id/activities` `{ xpGained, duration?, note? }`
+- `GET /skills/level-ups?page=&pageSize=` — paginated level-up log
 
 ### Dailies
 

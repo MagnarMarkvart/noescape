@@ -1,0 +1,18 @@
+<section class="preview-shell">
+  <header class="toolbar">
+    <p class="kicker">Dev tools</p>
+    <div class="brand-block">
+      <h1>Preview</h1>
+    </div>
+    <p class="hint">
+      Mock XP feedback — no skills or XP are changed. Play one at a time; they queue if you spam.
+    </p>
+  </header>
+
+  <div class="actions">
+    <button type="button" class="btn gain" (click)="mockXpGain()">XP gain</button>
+    <button type="button" class="btn up" (click)="mockLevelUp()">Level up</button>
+    <button type="button" class="btn loss" (click)="mockXpLoss()">XP loss</button>
+    <button type="button" class="btn down" (click)="mockLevelDown()">Level down</button>
+  </div>
+</section>

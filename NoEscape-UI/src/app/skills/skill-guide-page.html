@@ -1,0 +1,87 @@
+<section class="guide-shell">
+  <header class="toolbar">
+    <a routerLink="/character" class="back">← Character</a>
+    @if (guide(); as g) {
+      <div class="brand-block">
+        <p class="kicker">Skill Guide</p>
+        <h1>
+          <span aria-hidden="true">{{ g.skill.icon || '◆' }}</span>
+          {{ g.skill.name }}
+        </h1>
+        <p class="meta">
+          Your level {{ g.skill.level }} · Finance (Wealth) Lv {{ g.wealthLevel }}
+        </p>
+      </div>
+    }
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  @if (loading()) {
+    <p class="state-msg">Loading guide…</p>
+  } @else if (error()) {
+    <p class="state-msg error">{{ error() }}</p>
+  } @else if (guide(); as g) {
+    @if (g.brackets.length === 0) {
+      <p class="state-msg">No rewards carved for this skill yet.</p>
+    } @else {
+      <div class="brackets">
+        @for (bracket of g.brackets; track bracket.levelReq) {
+          <section class="bracket">
+            <h2>Level {{ bracket.levelReq }}</h2>
+            <ul class="reward-list">
+              @for (reward of bracket.rewards; track reward.id) {
+                <li
+                  class="reward-card"
+                  [class.unlocked]="reward.status === 'unlocked'"
+                  [class.available]="reward.status === 'available'"
+                  [class.locked]="
+                    reward.status === 'locked_level' ||
+                    reward.status === 'locked_requirements'
+                  "
+                >
+                  <div class="reward-head">
+                    <span class="reward-icon" aria-hidden="true">
+                      {{
+                        reward.status === 'unlocked' || reward.status === 'available'
+                          ? '🔓'
+                          : '🔒'
+                      }}
+                      {{ reward.icon }}
+                    </span>
+                    <div>
+                      <strong>{{ reward.label }}</strong>
+                      <p class="type">{{ reward.type }}</p>
+                    </div>
+                  </div>
+                  <p class="desc">{{ reward.description }}</p>
+                  @if (reward.wealthLevelReq) {
+                    <p class="req">
+                      ⚠️ Requires: Finance Lv {{ reward.wealthLevelReq }}
+                      @if (g.wealthLevel < reward.wealthLevelReq) {
+                        <span>(yours {{ g.wealthLevel }})</span>
+                      }
+                    </p>
+                  }
+                  <p class="status-line">{{ statusLabel(reward) }}</p>
+                  @if (reward.status === 'available') {
+                    <button
+                      type="button"
+                      class="claim"
+                      [disabled]="claimingId() === reward.id"
+                      (click)="claim(reward)"
+                    >
+                      {{ claimingId() === reward.id ? 'Claiming…' : 'Claim' }}
+                    </button>
+                  }
+                </li>
+              }
+            </ul>
+          </section>
+        }
+      </div>
+    }
+  }
+</section>

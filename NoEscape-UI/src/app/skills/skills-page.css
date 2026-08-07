@@ -284,6 +284,21 @@
   font-size: 0.95rem;
 }
 
+.guide-link {
+  display: inline-block;
+  margin: 0.15rem 0 0.85rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  color: var(--rs-accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.guide-link:hover,
+.guide-link:focus-visible {
+  border-bottom-color: var(--rs-accent);
+}
+
 .log-form {
   display: grid;
   gap: 0.75rem;

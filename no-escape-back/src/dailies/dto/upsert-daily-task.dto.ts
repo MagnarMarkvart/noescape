@@ -8,4 +8,7 @@ export class UpsertDailyTaskDto {
   skillId!: number;
   effortLevel!: number;
   durationMinutes!: number;
+  habitId?: number | null;
+  /** When set, completion uses this XP instead of the formula. */
+  fixedXp?: number | null;
 }

@@ -1,0 +1,50 @@
+<section class="levelups-shell">
+  <header class="toolbar">
+    <div class="brand-block">
+      <p class="kicker">Ascensus</p>
+      <h1>Level Ups</h1>
+    </div>
+  </header>
+
+  @if (loading() && !data()) {
+    <p class="state-msg" role="status">Loading…</p>
+  } @else if (error()) {
+    <p class="state-msg error" role="alert">{{ error() }}</p>
+  } @else if (data(); as log) {
+    @if (log.total === 0) {
+      <p class="state-msg">No level-ups yet. Train a skill to carve the first mark.</p>
+    } @else {
+      <ul class="levelup-list">
+        @for (row of log.items; track row.id) {
+          <li>
+            <span class="icon" aria-hidden="true">{{ row.skill.icon || '◆' }}</span>
+            <div class="body">
+              <strong>{{ row.skill.name }}</strong>
+              <p>
+                Level {{ row.fromLevel }}
+                <span aria-hidden="true">→</span>
+                {{ row.toLevel }}
+                @if (row.levelsGained > 1) {
+                  <span class="multi">(+{{ row.levelsGained }})</span>
+                }
+              </p>
+            </div>
+            <time [attr.datetime]="row.createdAt">
+              {{ row.createdAt | date: 'yyyy-MM-dd HH:mm' }}
+            </time>
+          </li>
+        }
+      </ul>
+
+      <div class="pager">
+        <button type="button" class="ghost" [disabled]="!log.hasPrev" (click)="goPrev()">
+          ‹ Prev
+        </button>
+        <span class="page-meta">{{ log.page }} / {{ log.totalPages }} · {{ log.total }} total</span>
+        <button type="button" class="ghost" [disabled]="!log.hasNext" (click)="goNext()">
+          Next ›
+        </button>
+      </div>
+    }
+  }
+</section>

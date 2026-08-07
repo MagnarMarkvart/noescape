@@ -1,0 +1,245 @@
+:host {
+  --rs-bg: #2b2518;
+  --rs-panel: #3a3120;
+  --rs-panel-2: #4a3d28;
+  --rs-border: #8a7340;
+  --rs-border-bright: #c6a85a;
+  --rs-text: #f0e6c8;
+  --rs-muted: #b8a878;
+  --rs-accent: #d4a84b;
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
+  --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  display: block;
+  min-height: 100dvh;
+  color: var(--rs-text);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(ellipse at 70% 0%, rgba(47, 143, 58, 0.1), transparent 42%),
+    linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 45%, #221c12 100%);
+}
+
+.prog-shell {
+  padding: 0.85rem 1rem 2rem;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.toolbar h1 {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  color: var(--rs-accent);
+}
+
+.sub {
+  margin: 0.35rem 0 0;
+  color: var(--rs-muted);
+  font-size: 0.9rem;
+}
+
+.back {
+  color: var(--rs-muted);
+  text-decoration: none;
+  font-family: var(--font-display);
+}
+
+.back:hover {
+  color: var(--rs-accent);
+}
+
+.toast {
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.85rem;
+  border: 1px solid var(--rs-border-bright);
+  background: rgba(47, 143, 58, 0.16);
+}
+
+.layout {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(16rem, 22rem) 1fr;
+    align-items: start;
+  }
+}
+
+.habit-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+  text-align: left;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--rs-border);
+  background: linear-gradient(180deg, var(--rs-panel-2), var(--rs-panel));
+  color: var(--rs-text);
+  cursor: pointer;
+}
+
+.card.selected {
+  border-color: var(--rs-border-bright);
+}
+
+.card.archived {
+  opacity: 0.82;
+}
+
+.icon {
+  font-size: 1.25rem;
+}
+
+.body strong {
+  display: block;
+  font-family: var(--font-display);
+}
+
+.body small {
+  display: block;
+  color: var(--rs-muted);
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+}
+
+.badge {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #d4a070;
+  border: 1px solid rgba(196, 92, 74, 0.45);
+  padding: 0.2rem 0.35rem;
+}
+
+.detail {
+  padding: 0.85rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(30, 24, 14, 0.7);
+}
+
+.detail h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--rs-accent);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.45rem;
+  margin: 0.85rem 0;
+}
+
+@media (min-width: 520px) {
+  .stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stats div {
+  padding: 0.45rem;
+  border: 1px solid rgba(138, 115, 64, 0.4);
+  background: rgba(18, 14, 8, 0.4);
+}
+
+.stats dt {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.stats dd {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+}
+
+.skill-link {
+  margin: 0 0 0.75rem;
+  color: var(--rs-muted);
+  font-size: 0.9rem;
+}
+
+.restore {
+  font-family: var(--font-display);
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--rs-border-bright);
+  background: rgba(212, 168, 75, 0.14);
+  color: var(--rs-text);
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.cal-nav {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  font-family: var(--font-display);
+}
+
+.cal-nav button {
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-text);
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+  margin: 0.85rem 0;
+}
+
+.day {
+  aspect-ratio: 1;
+  display: grid;
+  place-content: center;
+  border: 1px solid rgba(138, 115, 64, 0.45);
+  background: #1a1610;
+  font-size: 0.78rem;
+  color: var(--rs-muted);
+}
+
+.day.done {
+  background: rgba(47, 143, 58, 0.35);
+  border-color: #4a9a52;
+  color: var(--rs-text);
+}
+
+.month-count,
+.state {
+  color: var(--rs-muted);
+}
+
+.state.error {
+  color: #d4a070;
+}

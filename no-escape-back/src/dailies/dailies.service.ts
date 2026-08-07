@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { HabitsService } from '../habits/habits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SkillsService } from '../skills/skills.service';
 import {
@@ -15,7 +16,6 @@ import {
   IMPORTANCE_ORDER,
   TaskImportance,
 } from '../xp/daily-xp.util';
-import { levelFromXp } from '../xp/xp.util';
 import { CopyIncompleteDto } from './dto/copy-incomplete.dto';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
 
@@ -36,6 +36,8 @@ type EnrichedTask = {
   title: string;
   skillId: number | null;
   skill: SkillSnap | null;
+  habitId: number | null;
+  fixedXp: number | null;
   effortLevel: number;
   durationMinutes: number;
   completed: boolean;
@@ -83,6 +85,7 @@ export class DailiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly skillsService: SkillsService,
+    private readonly habitsService: HabitsService,
   ) {}
 
   async getBoard(date?: string) {
@@ -119,6 +122,10 @@ export class DailiesService {
       }).length;
     }
 
+    const activeLogDate = await this.resolveActiveLogDate(today);
+    const isEditable =
+      !sealed && (day === activeLogDate || day > today);
+
     return {
       ...board,
       date: day,
@@ -127,12 +134,14 @@ export class DailiesService {
       sealRequired,
       isSealed: Boolean(sealed),
       lastLogDate: lastLog?.date ?? null,
-      canCopyIncomplete: copyableCount > 0 && !sealed && !sealRequired,
+      activeLogDate,
+      isEditable,
+      readOnly: !isEditable,
+      canCopyIncomplete: copyableCount > 0 && isEditable,
       incompleteInLastLog,
       isBaseFilled: this.isBaseBoardFilled(board),
       canAddRegular:
-        !sealed &&
-        !sealRequired &&
+        isEditable &&
         (board.tiers.find((t) => t.importance === 'REGULAR')?.capacity ?? 0) <
           DAILY_SLOT_MAXIMUMS.REGULAR,
     };
@@ -305,12 +314,16 @@ export class DailiesService {
         slotIndex: dto.slotIndex,
         title,
         skillId: dto.skillId,
+        habitId: dto.habitId ?? null,
+        fixedXp: dto.fixedXp ?? null,
         effortLevel,
         durationMinutes,
       },
       update: {
         title,
         skillId: dto.skillId,
+        habitId: dto.habitId ?? null,
+        fixedXp: dto.fixedXp ?? null,
         effortLevel,
         durationMinutes,
       },
@@ -318,6 +331,68 @@ export class DailiesService {
     });
 
     return this.enrichTask(task);
+  }
+
+  async listTemplates() {
+    return this.prisma.dailyTaskTemplate.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: {
+        skill: { select: this.skillSelect() },
+      },
+    });
+  }
+
+  async createTemplate(input: {
+    name: string;
+    icon?: string;
+    skillId: number;
+    fixedXp: number;
+    effortLevel?: number;
+    durationMinutes?: number;
+  }) {
+    const name = input.name?.trim();
+    if (!name) {
+      throw new BadRequestException('name is required');
+    }
+    if (!Number.isInteger(input.skillId) || input.skillId < 1) {
+      throw new BadRequestException('skillId is required');
+    }
+    const fixedXp = Math.round(Number(input.fixedXp));
+    if (!Number.isFinite(fixedXp) || fixedXp < 1) {
+      throw new BadRequestException('fixedXp must be ≥ 1');
+    }
+    await this.skillsService.findOne(input.skillId);
+    return this.prisma.dailyTaskTemplate.create({
+      data: {
+        name,
+        icon: input.icon?.trim() || '◆',
+        skillId: input.skillId,
+        fixedXp,
+        effortLevel: this.assertEffort(input.effortLevel ?? 5),
+        durationMinutes: this.assertDuration(input.durationMinutes ?? 30),
+        createdByUser: true,
+        sortOrder: 100,
+      },
+      include: { skill: { select: this.skillSelect() } },
+    });
+  }
+
+  async removeTemplate(id: number) {
+    const row = await this.prisma.dailyTaskTemplate.findUnique({ where: { id } });
+    if (!row) {
+      throw new NotFoundException(`Template #${id} not found`);
+    }
+    if (!row.createdByUser) {
+      // Soft-hide seeded presets instead of hard delete.
+      await this.prisma.dailyTaskTemplate.update({
+        where: { id },
+        data: { active: false },
+      });
+      return { deleted: true, id, soft: true };
+    }
+    await this.prisma.dailyTaskTemplate.delete({ where: { id } });
+    return { deleted: true, id, soft: false };
   }
 
   async clearSlot(id: number) {
@@ -384,11 +459,14 @@ export class DailiesService {
     }
 
     const importance = task.importance as TaskImportance;
-    const xp = calculateDailyTaskXp({
-      importance,
-      effortLevel: task.effortLevel,
-      durationMinutes: task.durationMinutes,
-    });
+    const xp =
+      task.fixedXp != null && task.fixedXp > 0
+        ? task.fixedXp
+        : calculateDailyTaskXp({
+            importance,
+            effortLevel: task.effortLevel,
+            durationMinutes: task.durationMinutes,
+          });
 
     const award = await this.skillsService.awardXp(task.skillId, {
       xpGained: xp,
@@ -406,6 +484,15 @@ export class DailiesService {
       },
       include: { skill: { select: this.skillSelect() } },
     });
+
+    if (updated.habitId) {
+      await this.habitsService.markComplete(
+        updated.habitId,
+        updated.date,
+        'daily',
+        updated.id,
+      );
+    }
 
     return {
       task: this.enrichTask(updated),
@@ -430,31 +517,11 @@ export class DailiesService {
       throw new BadRequestException('Task has no XP award to reverse');
     }
 
-    let reversal = null;
-    if (task.activityId) {
-      reversal = await this.skillsService.reverseXp(
-        task.skillId,
-        task.activityId,
-        task.xpAwarded,
-      );
-    } else {
-      // Legacy completes without activityId — still reverse skill XP.
-      const skill = await this.prisma.skill.findUnique({
-        where: { id: task.skillId },
-      });
-      if (skill) {
-        const newXp = Math.max(0, skill.xp - task.xpAwarded);
-        const updated = await this.prisma.skill.update({
-          where: { id: skill.id },
-          data: { xp: newXp, level: levelFromXp(newXp) },
-        });
-        reversal = {
-          skill: updated,
-          xpRemoved: task.xpAwarded,
-          leveledDown: updated.level < skill.level,
-        };
-      }
-    }
+    const reversal = await this.skillsService.reverseXp(
+      task.skillId,
+      task.xpAwarded,
+      task.activityId,
+    );
 
     const updated = await this.prisma.dailyTask.update({
       where: { id },
@@ -686,14 +753,34 @@ export class DailiesService {
   private async assertMutableDay(day: string) {
     await this.assertNotSealed(day);
     const today = this.localToday();
-    // Future planning is allowed even if a past day still needs sealing.
+    // Future planning stays open; history before the active log day is locked.
     if (day > today) {
       return;
     }
-    const pending = await this.findOldestPendingSealBefore(day);
-    if (pending && pending !== day) {
-      throw new BadRequestException(`Seal ${pending} before continuing`);
+    const activeLogDate = await this.resolveActiveLogDate(today);
+    if (day !== activeLogDate) {
+      if (day < activeLogDate) {
+        throw new BadRequestException('Older days are read-only');
+      }
+      throw new BadRequestException(`Seal ${activeLogDate} before continuing`);
     }
+  }
+
+  /** Latest day that may still be edited (pending unsealed day, else today). */
+  private async resolveActiveLogDate(today: string): Promise<string> {
+    const pending = await this.findOldestPendingSealBefore(
+      this.addDaysIso(today, 1),
+    );
+    return pending ?? today;
+  }
+
+  private addDaysIso(iso: string, delta: number): string {
+    const next = new Date(`${iso}T12:00:00`);
+    next.setDate(next.getDate() + delta);
+    const yyyy = next.getFullYear();
+    const mm = String(next.getMonth() + 1).padStart(2, '0');
+    const dd = String(next.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   private enrichTask(task: {
@@ -704,6 +791,8 @@ export class DailiesService {
     title: string;
     skillId: number | null;
     skill: SkillSnap | null;
+    habitId?: number | null;
+    fixedXp?: number | null;
     effortLevel: number;
     durationMinutes: number;
     completed: boolean;
@@ -713,28 +802,40 @@ export class DailiesService {
   }): EnrichedTask {
     const importance = task.importance as TaskImportance;
     const isFilled = Boolean(task.title.trim() && task.skillId);
+    const fixedXp = task.fixedXp ?? null;
     const projectedXp = isFilled
-      ? calculateDailyTaskXp({
-          importance,
-          effortLevel: task.effortLevel,
-          durationMinutes: task.durationMinutes,
-        })
+      ? fixedXp != null && fixedXp > 0
+        ? fixedXp
+        : calculateDailyTaskXp({
+            importance,
+            effortLevel: task.effortLevel,
+            durationMinutes: task.durationMinutes,
+          })
       : 0;
 
     return {
       ...task,
       importance,
+      habitId: task.habitId ?? null,
+      fixedXp,
       activityId: task.activityId ?? null,
       isFilled,
       isEmpty: !isFilled,
       projectedXp,
       breakdown: isFilled
         ? {
-            base: IMPORTANCE_BASE_XP[importance],
-            effortMult: Number(effortMultiplier(task.effortLevel).toFixed(3)),
-            durationMult: Number(
-              durationMultiplier(task.durationMinutes).toFixed(3),
-            ),
+            base:
+              fixedXp != null && fixedXp > 0
+                ? fixedXp
+                : IMPORTANCE_BASE_XP[importance],
+            effortMult:
+              fixedXp != null && fixedXp > 0
+                ? 1
+                : Number(effortMultiplier(task.effortLevel).toFixed(3)),
+            durationMult:
+              fixedXp != null && fixedXp > 0
+                ? 1
+                : Number(durationMultiplier(task.durationMinutes).toFixed(3)),
           }
         : null,
     };
@@ -753,6 +854,8 @@ export class DailiesService {
       title: '',
       skillId: null,
       skill: null,
+      habitId: null,
+      fixedXp: null,
       effortLevel: 5,
       durationMinutes: 45,
       completed: false,

@@ -19,17 +19,21 @@
     </div>
 
     <div class="toolbar-actions">
+      <a class="ghost linkish" routerLink="/dailies/defaults">Defaults</a>
       @if (board(); as current) {
         @if (current.canCopyIncomplete) {
           <button type="button" (click)="copyIncomplete()">Carry Over</button>
         }
-        @if (!current.isSealed && current.filledCount > 0) {
+        @if (current.isEditable && current.filledCount > 0) {
           <button type="button" (click)="sealDay()">Seal</button>
         }
         @if (current.sealRequired) {
           <span class="seal-flag">Seal required</span>
         }
-        @if (current.filledCount > 0) {
+        @if (current.readOnly) {
+          <span class="seal-flag">Read only</span>
+        }
+        @if (current.isEditable && current.filledCount > 0) {
           <button type="button" class="ghost" (click)="toggleSetup()">
             {{ setupOpen() ? 'Tasks' : 'Setup' }}
           </button>
@@ -60,6 +64,11 @@
         <div class="stat sealed">
           <span class="stat-label">Status</span>
           <span class="stat-value">Sealed</span>
+        </div>
+      } @else if (current.readOnly) {
+        <div class="stat sealed">
+          <span class="stat-label">Status</span>
+          <span class="stat-value">History</span>
         </div>
       }
     </div>
@@ -92,6 +101,43 @@
                           Title
                           <input type="text" [formField]="slotForm.title" placeholder="Quest" />
                         </label>
+
+                        @if (templates().length) {
+                          <label class="title-field">
+                            Default task
+                            <select
+                              (change)="onTemplateSelect($event)"
+                            >
+                              <option value="">— pick a preset —</option>
+                              @for (t of templates(); track t.id) {
+                                <option [value]="t.id">
+                                  {{ t.icon }} {{ t.name }} (+{{ t.fixedXp }} {{ t.skill.name }})
+                                </option>
+                              }
+                            </select>
+                          </label>
+                        }
+
+                        @if (habits().length) {
+                          <label class="title-field">
+                            Habit (optional)
+                            <select
+                              [value]="slotModel().habitId"
+                              (change)="onHabitSelect($event)"
+                            >
+                              <option [value]="0">— none —</option>
+                              @for (h of habits(); track h.id) {
+                                <option [value]="h.id">
+                                  {{ h.icon }} {{ h.name }}
+                                </option>
+                              }
+                            </select>
+                          </label>
+                        }
+
+                        @if (slotModel().fixedXp; as fx) {
+                          <p class="fixed-xp-note">Fixed reward: +{{ fx }} XP</p>
+                        }
 
                         <fieldset class="picker-block">
                           <legend>Skill</legend>
@@ -222,7 +268,7 @@
                       <button
                         type="button"
                         class="empty-slot"
-                        [disabled]="current.isSealed"
+                        [disabled]="current.readOnly"
                         (click)="startEdit(slot)"
                       >
                         <span class="empty-mark">+</span>
@@ -233,7 +279,7 @@
                         type="button"
                         class="filled-chip"
                         (click)="startEdit(slot)"
-                        [disabled]="slot.completed || current.isSealed"
+                        [disabled]="slot.completed || current.readOnly"
                       >
                         <span aria-hidden="true">{{ slot.skill?.icon }}</span>
                         <span class="filled-chip-text">
@@ -259,7 +305,11 @@
       <section class="board-pane" aria-label="Configured dailies">
         @if (filledSlots().length === 0) {
           <div class="board-empty">
-            <button type="button" (click)="toggleSetup(true)">Setup</button>
+            @if (current.isEditable) {
+              <button type="button" (click)="toggleSetup(true)">Setup</button>
+            } @else {
+              <span class="muted">No tasks logged.</span>
+            }
           </div>
         } @else {
           <div class="board-tiers">
@@ -311,7 +361,7 @@
                             </dl>
 
                             <div class="quest-actions">
-                              @if (!current.isSealed) {
+                              @if (current.isEditable) {
                                 @if (!slot.completed) {
                                   <button
                                     type="button"
@@ -334,11 +384,11 @@
                                   </button>
                                 }
                               } @else {
-                                <span class="done-stamp">{{ slot.completed ? 'Done' : 'Sealed' }}</span>
+                                <span class="done-stamp">{{ slot.completed ? 'Done' : (current.isSealed ? 'Sealed' : 'Locked') }}</span>
                               }
                             </div>
 
-                            @if (!current.isSealed && !slot.completed) {
+                            @if (current.isEditable && !slot.completed) {
                               <button
                                 type="button"
                                 class="icon-clear"

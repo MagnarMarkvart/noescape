@@ -19,6 +19,8 @@ export interface DailyTaskSlot {
   title: string;
   skillId: number | null;
   skill: DailySkillRef | null;
+  habitId?: number | null;
+  fixedXp?: number | null;
   effortLevel: number;
   durationMinutes: number;
   completed: boolean;
@@ -60,6 +62,10 @@ export interface DailyBoard {
   pendingSealDate: string | null;
   sealRequired: boolean;
   lastLogDate: string | null;
+  /** Latest day that may still be edited (pending seal day, else today). */
+  activeLogDate?: string;
+  isEditable: boolean;
+  readOnly: boolean;
   canCopyIncomplete: boolean;
   incompleteInLastLog: number;
   isBaseFilled: boolean;
@@ -74,6 +80,21 @@ export interface UpsertDailyTaskPayload {
   skillId: number;
   effortLevel: number;
   durationMinutes: number;
+  habitId?: number | null;
+  fixedXp?: number | null;
+}
+
+export interface DailyTaskTemplate {
+  id: number;
+  name: string;
+  icon: string | null;
+  skillId: number;
+  skill: DailySkillRef;
+  fixedXp: number;
+  effortLevel: number;
+  durationMinutes: number;
+  sortOrder: number;
+  createdByUser: boolean;
 }
 
 export interface DailyLogSummary {
@@ -90,7 +111,13 @@ export interface DailyLogDetail extends DailyLogSummary {
   snapshot: {
     board: Omit<
       DailyBoard,
-      'isSealed' | 'lastLogDate' | 'canCopyIncomplete' | 'incompleteInLastLog'
+      | 'isSealed'
+      | 'lastLogDate'
+      | 'canCopyIncomplete'
+      | 'incompleteInLastLog'
+      | 'activeLogDate'
+      | 'isEditable'
+      | 'readOnly'
     >;
     skillTree: SkillTree;
   };
@@ -100,6 +127,10 @@ export interface SlotFormModel {
   title: string;
   /** 0 = not selected */
   skillId: number;
+  /** 0 = no habit link */
+  habitId: number;
+  /** null = use formula XP */
+  fixedXp: number | null;
   effortLevel: number;
   durationMinutes: number;
   /** When true, durationMinutes is driven by customDurationMinutes */

@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CreateActivityDto } from './dto/create-activity.dto';
 import { SkillsService } from './skills.service';
@@ -21,6 +22,17 @@ export class SkillsController {
   @Get('tree')
   findGrouped() {
     return this.skillsService.findGrouped();
+  }
+
+  @Get('level-ups')
+  listLevelUps(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.skillsService.listLevelUps(
+      page ? Number(page) : 1,
+      pageSize ? Number(pageSize) : 20,
+    );
   }
 
   @Get(':id')

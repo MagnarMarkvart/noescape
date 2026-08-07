@@ -104,6 +104,10 @@
               <span class="xp-fill" [style.width.%]="skill.progress.percent"></span>
             </div>
 
+            <a class="guide-link" [routerLink]="['/status', skill.id, 'guide']">
+              Guide →
+            </a>
+
             <form class="log-form" (submit)="$event.preventDefault(); logXp()">
               <label>
                 XP

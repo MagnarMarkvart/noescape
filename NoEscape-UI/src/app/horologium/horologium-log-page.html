@@ -1,0 +1,42 @@
+<section class="log-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Archive</p>
+      <h1>Horo Log</h1>
+      <p class="lede">{{ total() }} sessions · page {{ page() + 1 }} / {{ pageCount() }}</p>
+    </div>
+    <a routerLink="/horologium" class="back">← Horologium</a>
+  </header>
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (items().length === 0) {
+    <p class="muted">No sessions yet.</p>
+  } @else {
+    <ul class="session-log">
+      @for (row of items(); track row.id) {
+        <li>
+          <div class="log-top">
+            <strong>{{ row.date }}</strong>
+            <span class="xp-chip">+{{ row.xpAwarded | number }} XP</span>
+          </div>
+          <p class="log-meta">
+            <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
+            {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
+          </p>
+        </li>
+      }
+    </ul>
+
+    <div class="pager">
+      <button type="button" [disabled]="page() === 0" (click)="prev()">‹ Prev</button>
+      <button
+        type="button"
+        [disabled]="page() + 1 >= pageCount()"
+        (click)="next()"
+      >
+        Next ›
+      </button>
+    </div>
+  }
+</section>

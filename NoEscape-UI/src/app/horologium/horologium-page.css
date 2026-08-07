@@ -22,7 +22,7 @@
     linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 45%, #221c12 100%);
 }
 
-.quest-shell {
+.horologium-shell {
   padding: 0.85rem 1rem 2rem;
 }
 
@@ -80,19 +80,64 @@
 }
 
 .ring {
+  position: relative;
   width: min(18rem, 78vw);
   aspect-ratio: 1;
   border-radius: 50%;
-  padding: 0.7rem;
   border: 1px solid var(--rs-border-bright);
   box-shadow:
     0 0 0 4px rgba(26, 20, 8, 0.65),
     inset 0 0 24px rgba(0, 0, 0, 0.45);
+  background: #1a1610;
+}
+
+.ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.ring-track,
+.ring-progress {
+  fill: none;
+  stroke-width: 6.5;
+}
+
+.ring-track {
+  stroke: #2a2418;
+}
+
+.ring-progress {
+  stroke: var(--rs-accent);
+  stroke-linecap: round;
+  stroke-dasharray: 339.292;
+  stroke-dashoffset: 339.292;
+  transition: stroke 0.45s ease;
+}
+
+.ring[data-phase='work'] .ring-progress {
+  stroke: var(--rs-accent);
+}
+
+.ring[data-phase='rest'] .ring-progress {
+  stroke: var(--rs-rest);
+}
+
+.ring[data-phase='complete'] .ring-progress {
+  stroke: #8fbc7a;
+}
+
+.ring[data-phase='idle'] .ring-progress {
+  stroke: #8a7340;
+  opacity: 0.55;
 }
 
 .ring-core {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 9%;
   border-radius: 50%;
   display: grid;
   place-content: center;
@@ -113,16 +158,120 @@
   color: var(--rs-muted);
 }
 
-.quest-shell[data-phase='work'] .phase-tag {
+.horologium-shell[data-phase='work'] .phase-tag {
   color: var(--rs-accent);
 }
 
-.quest-shell[data-phase='rest'] .phase-tag {
+.horologium-shell[data-phase='rest'] .phase-tag {
   color: var(--rs-rest);
 }
 
-.quest-shell[data-phase='complete'] .phase-tag {
+.horologium-shell[data-phase='complete'] .phase-tag {
   color: #8fbc7a;
+}
+
+.toast {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.85rem;
+  border: 1px solid var(--rs-border-bright);
+  background: rgba(47, 143, 58, 0.18);
+}
+
+.xp-preview {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0.65rem 0.75rem;
+  display: grid;
+  gap: 0.4rem;
+  border: 1px solid rgba(138, 115, 64, 0.55);
+  background: rgba(20, 16, 10, 0.45);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+
+.xp-preview li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.xp-label {
+  color: var(--rs-muted);
+  letter-spacing: 0.02em;
+}
+
+.xp-value {
+  color: var(--rs-accent);
+  white-space: nowrap;
+}
+
+.xp-preview .xp-total .xp-value {
+  color: #8fbc7a;
+}
+
+.xp-preview .xp-value.muted {
+  color: var(--rs-muted);
+  font-size: 0.82rem;
+}
+
+.side-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.log-panel {
+  padding: 1rem;
+  border: 1px solid var(--rs-border);
+  background:
+    linear-gradient(180deg, rgba(74, 61, 40, 0.55), rgba(30, 24, 14, 0.72));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.log-empty {
+  margin: 0;
+}
+
+.session-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+  max-height: 18rem;
+  overflow: auto;
+}
+
+.session-log li {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(20, 16, 10, 0.45);
+}
+
+.log-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-family: var(--font-display);
+}
+
+.xp-chip {
+  color: #8fbc7a;
+  font-size: 0.85rem;
+}
+
+.log-meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--rs-muted);
+}
+
+.muted {
+  color: var(--rs-muted);
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  font-weight: 400;
 }
 
 .clock {
@@ -132,6 +281,7 @@
   letter-spacing: 0.04em;
   color: var(--rs-text);
   line-height: 1;
+  transition: opacity 0.15s ease;
 }
 
 .session-meta {
@@ -192,6 +342,22 @@
   text-transform: uppercase;
   font-size: 1rem;
   color: var(--rs-accent);
+}
+
+.horo-log-link {
+  color: var(--rs-muted);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-family: var(--font-display);
+}
+
+.horo-log-link:hover {
+  color: var(--rs-accent);
+}
+
+.log-foot {
+  margin: 0.65rem 0 0;
+  font-size: 0.78rem;
 }
 
 .lock-flag {
@@ -300,13 +466,17 @@ button:focus-visible {
 }
 
 .toggle-row {
-  margin: 0;
+  margin: 0 0 1rem;
   padding: 0;
   border: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
   align-items: center;
+}
+
+.mode-row {
+  margin-bottom: 1rem;
 }
 
 .sr-only {

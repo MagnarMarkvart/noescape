@@ -1,0 +1,131 @@
+<section class="prog-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Ledger</p>
+      <h1>Habit progression</h1>
+      <p class="sub">
+        Every habit that has ever existed —
+        {{ activeCount() }} active · {{ archivedCount() }} archived
+      </p>
+    </div>
+    <a routerLink="/habitus" class="back">← Habitus</a>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  @if (error()) {
+    <p class="state error">{{ error() }}</p>
+  } @else if (habits().length === 0) {
+    <p class="state">No habits recorded yet.</p>
+  } @else {
+    <div class="layout">
+      <ul class="habit-cards">
+        @for (h of habits(); track h.id) {
+          <li>
+            <button
+              type="button"
+              class="card"
+              [class.selected]="selected()?.id === h.id"
+              [class.archived]="h.archived"
+              (click)="select(h)"
+            >
+              <span class="icon" aria-hidden="true">{{ h.icon || '◆' }}</span>
+              <span class="body">
+                <strong>{{ h.name }}</strong>
+                <small>
+                  @if (h.archived) {
+                    Archived
+                  } @else {
+                    Active
+                  }
+                  · {{ h.totalCompletions }} logs · best {{ h.bestStreak }}
+                </small>
+                <small class="range">
+                  @if (h.firstLog) {
+                    {{ h.firstLog }} → {{ h.lastLog }}
+                  } @else {
+                    No logs yet
+                  }
+                </small>
+              </span>
+              @if (!h.active) {
+                <span class="badge">Archived</span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+
+      <section class="detail">
+        @if (selected(); as h) {
+          <div class="detail-head">
+            <h2>
+              <span aria-hidden="true">{{ h.icon }}</span>
+              {{ h.name }}
+            </h2>
+            <dl class="stats">
+              <div>
+                <dt>Total logs</dt>
+                <dd>{{ h.totalCompletions }}</dd>
+              </div>
+              <div>
+                <dt>Best streak</dt>
+                <dd>{{ h.bestStreak }}</dd>
+              </div>
+              <div>
+                <dt>Current</dt>
+                <dd>{{ h.archived ? '—' : h.currentStreak }}</dd>
+              </div>
+              <div>
+                <dt>Cadence</dt>
+                <dd>
+                  {{
+                    h.cadence === 'DAILY'
+                      ? 'Daily'
+                      : 'Every ' + h.everyNDays + 'd'
+                  }}
+                </dd>
+              </div>
+            </dl>
+            @if (h.skill) {
+              <p class="skill-link">
+                Linked skill: {{ h.skill.icon }} {{ h.skill.name }}
+                (Lv {{ h.skill.level }})
+              </p>
+            }
+            @if (h.archived) {
+              <button type="button" class="restore" (click)="unarchive(h)">
+                Restore to Habitus
+              </button>
+            }
+          </div>
+
+          <div class="cal-nav">
+            <button type="button" (click)="shiftMonth(-1)">‹</button>
+            <span>{{ monthLabel() }}</span>
+            <button type="button" (click)="shiftMonth(1)">›</button>
+          </div>
+
+          @if (month(); as m) {
+            <div class="month-grid" role="grid">
+              @for (day of m.days; track day.date) {
+                <div
+                  class="day"
+                  [class.done]="day.completed"
+                  [attr.title]="day.date"
+                >
+                  {{ day.date.slice(-2) }}
+                </div>
+              }
+            </div>
+            <p class="month-count">{{ m.completedCount }} days this month</p>
+          }
+        } @else {
+          <p class="state">Select a habit to inspect its history.</p>
+        }
+      </section>
+    </div>
+  }
+</section>

@@ -15,15 +15,20 @@ import {
   required,
   submit,
 } from '@angular/forms/signals';
+import { RouterLink } from '@angular/router';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import {
   DailyBoard,
   DailyTaskSlot,
+  DailyTaskTemplate,
   DailyTier,
   SlotFormModel,
   TaskImportance,
 } from './daily.model';
+import { HabitsService, HabitView } from '../habits/habits.service';
+import { TimedToast } from '../shared/timed-toast';
+import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import { DailiesService } from './dailies.service';
 
 export const DURATION_PRESETS = Array.from({ length: 16 }, (_, i) => 15 * (i + 1));
@@ -31,7 +36,7 @@ export const EFFORT_LEVELS = Array.from({ length: 10 }, (_, i) => i + 1);
 
 @Component({
   selector: 'app-dailies-page',
-  imports: [DecimalPipe, FormField],
+  imports: [DecimalPipe, FormField, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dailies-page.html',
   styleUrl: './dailies-page.css',
@@ -39,6 +44,12 @@ export const EFFORT_LEVELS = Array.from({ length: 10 }, (_, i) => i + 1);
 export class DailiesPage implements OnInit {
   private readonly dailiesService = inject(DailiesService);
   private readonly skillsService = inject(SkillsService);
+  private readonly habitsService = inject(HabitsService);
+  private readonly xpFeedback = inject(XpFeedbackService);
+
+  protected readonly habits = signal<HabitView[]>([]);
+  protected readonly templates = signal<DailyTaskTemplate[]>([]);
+  private readonly timed = new TimedToast();
 
   protected readonly durationPresets = DURATION_PRESETS;
   protected readonly effortLevels = EFFORT_LEVELS;
@@ -48,7 +59,7 @@ export class DailiesPage implements OnInit {
   protected readonly selectedDate = signal(this.todayIso());
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
-  protected readonly toast = signal<string | null>(null);
+  protected readonly toast = this.timed.value;
   protected readonly editingKey = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly completingId = signal<number | null>(null);
@@ -111,11 +122,35 @@ export class DailiesPage implements OnInit {
   });
 
   ngOnInit(): void {
-    this.skillsService.getTree().subscribe({
+    const cachedTree = this.skillsService.peekTree();
+    if (cachedTree) {
+      this.skillTree.set(cachedTree);
+    }
+    this.skillsService.getTree(!cachedTree).subscribe({
       next: (tree) => this.skillTree.set(tree),
-      error: () => this.error.set('Could not load skills.'),
+      error: () => {
+        if (!this.skillTree()) {
+          this.error.set('Could not load skills.');
+        }
+      },
     });
-    this.loadBoard(this.selectedDate());
+    this.habitsService.list().subscribe({
+      next: (rows) => this.habits.set(rows),
+      error: () => this.habits.set([]),
+    });
+    this.dailiesService.listTemplates().subscribe({
+      next: (rows) => this.templates.set(rows),
+      error: () => this.templates.set([]),
+    });
+
+    const cachedBoard = this.dailiesService.peekBoard(this.selectedDate());
+    if (cachedBoard) {
+      this.applyBoard(cachedBoard);
+      this.loading.set(false);
+      this.loadBoard(this.selectedDate(), false, true);
+      return;
+    }
+    this.loadBoard(this.selectedDate(), true, true);
   }
 
   protected slotKey(importance: TaskImportance, slotIndex: number): string {
@@ -127,6 +162,9 @@ export class DailiesPage implements OnInit {
   }
 
   protected toggleSetup(force?: boolean): void {
+    if (this.board()?.readOnly) {
+      return;
+    }
     const next = force ?? !this.setupOpen();
     this.setupOpen.set(next);
     this.setupPinned = next;
@@ -160,7 +198,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected startEdit(slot: DailyTaskSlot): void {
-    if (slot.completed || this.board()?.isSealed) {
+    if (slot.completed || this.board()?.readOnly) {
       return;
     }
     this.setupOpen.set(true);
@@ -169,6 +207,8 @@ export class DailiesPage implements OnInit {
     this.slotModel.set({
       title: slot.title,
       skillId: slot.skillId ?? 0,
+      habitId: slot.habitId ?? 0,
+      fixedXp: slot.fixedXp ?? null,
       effortLevel: slot.effortLevel,
       durationMinutes: custom ? 45 : slot.durationMinutes,
       customDuration: custom,
@@ -179,7 +219,7 @@ export class DailiesPage implements OnInit {
     this.editingKey.set(this.slotKey(slot.importance, slot.slotIndex));
     this.postponePickerOpen.set(false);
     this.postponeDate.set(this.offsetIso(1));
-    this.toast.set(null);
+    this.timed.set(null);
   }
 
   protected cancelEdit(): void {
@@ -201,6 +241,25 @@ export class DailiesPage implements OnInit {
 
   protected selectSkill(skillId: number): void {
     this.slotForm.skillId().value.set(skillId);
+    this.slotModel.update((m) => ({ ...m, fixedXp: null }));
+  }
+
+  protected applyTemplate(templateId: number): void {
+    const t = this.templates().find((row) => row.id === templateId);
+    if (!t) {
+      return;
+    }
+    this.slotModel.update((m) => ({
+      ...m,
+      title: t.name,
+      skillId: t.skillId,
+      fixedXp: t.fixedXp,
+      effortLevel: t.effortLevel,
+      durationMinutes: t.durationMinutes,
+      customDuration: !DURATION_PRESETS.includes(t.durationMinutes),
+      customDurationMinutes: t.durationMinutes,
+    }));
+    this.selectedCategory.set(t.skill.category);
   }
 
   protected selectEffort(level: number): void {
@@ -230,7 +289,7 @@ export class DailiesPage implements OnInit {
         : model.durationMinutes;
 
       if (!model.title.trim() || model.skillId < 1) {
-        this.toast.set('Title and skill are required.');
+        this.timed.set('Title and skill are required.');
         return;
       }
 
@@ -242,6 +301,8 @@ export class DailiesPage implements OnInit {
           slotIndex: slot.slotIndex,
           title: model.title.trim(),
           skillId: model.skillId,
+          habitId: model.habitId > 0 ? model.habitId : null,
+          fixedXp: model.fixedXp,
           effortLevel: model.effortLevel,
           durationMinutes: duration,
         })
@@ -250,71 +311,71 @@ export class DailiesPage implements OnInit {
             this.saving.set(false);
             this.cancelEdit();
             this.setupPinned = false;
-            this.toast.set('Task saved.');
+            this.timed.set('Task saved.');
             this.loadBoard(this.selectedDate(), false);
           },
           error: (err: { error?: { message?: string | string[] } }) => {
             this.saving.set(false);
-            this.toast.set(this.readError(err, 'Failed to save task'));
+            this.timed.set(this.readError(err, 'Failed to save task'));
           },
         });
     });
   }
 
   protected clearSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || slot.completed || this.board()?.isSealed) {
+    if (!slot.id || slot.completed || this.board()?.readOnly) {
       return;
     }
     this.dailiesService.clearSlot(slot.id).subscribe({
       next: () => {
-        this.toast.set('Slot cleared.');
+        this.timed.set('Slot cleared.');
         if (this.isEditing(slot)) {
           this.cancelEdit();
         }
         this.loadBoard(this.selectedDate(), false);
       },
       error: (err: { error?: { message?: string | string[] } }) => {
-        this.toast.set(this.readError(err, 'Failed to clear slot'));
+        this.timed.set(this.readError(err, 'Failed to clear slot'));
       },
     });
   }
 
   protected completeSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || slot.completed || this.board()?.isSealed) {
+    if (!slot.id || slot.completed || this.board()?.readOnly) {
       return;
     }
     this.completingId.set(slot.id);
     this.dailiesService.complete(slot.id).subscribe({
       next: (result) => {
         this.completingId.set(null);
-        const msg = result.award.leveledUp
-          ? `+${result.award.activity.xpGained} XP — ${result.award.skill.name} leveled to ${result.award.skill.level}!`
-          : `+${result.award.activity.xpGained} XP to ${result.award.skill.name}.`;
-        this.toast.set(msg);
-        this.loadBoard(this.selectedDate(), false);
+        this.skillsService.invalidateTree();
+        this.xpFeedback.publishAward(result.award);
+        this.loadBoard(this.selectedDate(), false, true);
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.completingId.set(null);
-        this.toast.set(this.readError(err, 'Failed to complete task'));
+        this.timed.set(this.readError(err, 'Failed to complete task'));
       },
     });
   }
 
   protected uncompleteSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || !slot.completed || this.board()?.isSealed) {
+    if (!slot.id || !slot.completed || this.board()?.readOnly) {
       return;
     }
     this.uncompletingId.set(slot.id);
     this.dailiesService.uncomplete(slot.id).subscribe({
       next: (result) => {
         this.uncompletingId.set(null);
-        const removed = result.reversal?.xpRemoved ?? slot.xpAwarded ?? 0;
-        this.toast.set(`Completion undone (−${removed} XP).`);
-        this.loadBoard(this.selectedDate(), false);
+        if (result.reversal) {
+          this.skillsService.invalidateTree();
+          this.xpFeedback.publishReversal(result.reversal);
+        }
+        this.loadBoard(this.selectedDate(), false, true);
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.uncompletingId.set(null);
-        this.toast.set(this.readError(err, 'Failed to undo completion'));
+        this.timed.set(this.readError(err, 'Failed to undo completion'));
       },
     });
   }
@@ -337,7 +398,7 @@ export class DailiesPage implements OnInit {
 
   private postponeTo(targetDate: string): void {
     const slot = this.editingSlot();
-    if (!slot?.id || slot.completed || this.board()?.isSealed) {
+    if (!slot?.id || slot.completed || this.board()?.readOnly) {
       return;
     }
     this.postponingId.set(slot.id);
@@ -348,11 +409,11 @@ export class DailiesPage implements OnInit {
         this.cancelEdit();
         this.setupPinned = false;
         this.applyBoard(result.board);
-        this.toast.set(`Moved to ${result.toDate}.`);
+        this.timed.set(`Moved to ${result.toDate}.`);
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.postponingId.set(null);
-        this.toast.set(this.readError(err, 'Postpone failed'));
+        this.timed.set(this.readError(err, 'Postpone failed'));
       },
     });
   }
@@ -363,7 +424,7 @@ export class DailiesPage implements OnInit {
         this.board.set(board);
         this.setupOpen.set(true);
         this.setupPinned = true;
-        this.toast.set('Regular slot added.');
+        this.timed.set('Regular slot added.');
         const empty = board.tiers
           .find((t) => t.importance === 'REGULAR')
           ?.slots.find((s) => s.isEmpty);
@@ -372,7 +433,7 @@ export class DailiesPage implements OnInit {
         }
       },
       error: (err: { error?: { message?: string | string[] } }) => {
-        this.toast.set(this.readError(err, 'Could not add Regular slot'));
+        this.timed.set(this.readError(err, 'Could not add Regular slot'));
       },
     });
   }
@@ -381,12 +442,12 @@ export class DailiesPage implements OnInit {
     this.dailiesService.copyIncomplete(this.selectedDate()).subscribe({
       next: (result) => {
         this.applyBoard(result.board);
-        this.toast.set(
+        this.timed.set(
           `Copied ${result.copied} incomplete dailies from ${result.sourceDate}.`,
         );
       },
       error: (err: { error?: { message?: string | string[] } }) => {
-        this.toast.set(this.readError(err, 'Copy failed'));
+        this.timed.set(this.readError(err, 'Copy failed'));
       },
     });
   }
@@ -396,7 +457,7 @@ export class DailiesPage implements OnInit {
     const wasRequired = this.board()?.sealRequired ?? false;
     this.dailiesService.sealDay(sealing).subscribe({
       next: () => {
-        this.toast.set(`Sealed ${sealing}.`);
+        this.timed.set(`Sealed ${sealing}.`);
         if (wasRequired) {
           this.goToday();
         } else {
@@ -404,7 +465,7 @@ export class DailiesPage implements OnInit {
         }
       },
       error: (err: { error?: { message?: string | string[] } }) => {
-        this.toast.set(this.readError(err, 'Seal failed'));
+        this.timed.set(this.readError(err, 'Seal failed'));
       },
     });
   }
@@ -422,14 +483,25 @@ export class DailiesPage implements OnInit {
     this.cancelEdit();
     this.setupPinned = false;
     this.selectedDate.set(date);
-    this.loadBoard(date);
+    const cached = this.dailiesService.peekBoard(date);
+    if (cached) {
+      this.applyBoard(cached);
+      this.loading.set(false);
+      this.loadBoard(date, false, true);
+      return;
+    }
+    this.loadBoard(date, true, true);
   }
 
-  private loadBoard(date: string, showLoading = true): void {
+  private loadBoard(
+    date: string,
+    showLoading = true,
+    force = false,
+  ): void {
     if (showLoading) {
       this.loading.set(true);
     }
-    this.dailiesService.getBoard(date).subscribe({
+    this.dailiesService.getBoard(date, force).subscribe({
       next: (board) => {
         this.applyBoard(board);
         this.loading.set(false);
@@ -437,16 +509,41 @@ export class DailiesPage implements OnInit {
       },
       error: () => {
         this.loading.set(false);
-        this.error.set(
-          'Could not reach the Dailies server. Is the backend running?',
-        );
+        if (!this.board()) {
+          this.error.set(
+            'Could not reach the Dailies server. Is the backend running?',
+          );
+        }
       },
     });
   }
 
-  private applyBoard(board: DailyBoard): void {
+  private applyBoard(raw: DailyBoard): void {
+    const isEditable =
+      raw.isEditable ?? (!raw.isSealed && !raw.sealRequired);
+    const board: DailyBoard = {
+      ...raw,
+      isEditable,
+      readOnly: raw.readOnly ?? !isEditable,
+    };
     this.board.set(board);
     this.selectedDate.set(board.date);
+
+    // Past / non-today days always land on Tasks (history is read-only).
+    if (!this.isTodaySelected(board.date)) {
+      this.setupOpen.set(false);
+      this.setupPinned = false;
+      this.cancelEdit();
+      return;
+    }
+
+    if (board.readOnly) {
+      this.setupOpen.set(false);
+      this.setupPinned = false;
+      this.cancelEdit();
+      return;
+    }
+
     if (board.filledCount === 0) {
       this.setupOpen.set(true);
       this.setupPinned = false;
@@ -458,10 +555,50 @@ export class DailiesPage implements OnInit {
     }
   }
 
+  private isTodaySelected(date: string): boolean {
+    return date === this.todayIso();
+  }
+
+  protected onHabitSelect(event: Event): void {
+    const raw = (event.target as HTMLSelectElement).value;
+    this.applyHabit(Number(raw) || 0);
+  }
+
+  protected onTemplateSelect(event: Event): void {
+    const raw = (event.target as HTMLSelectElement).value;
+    if (!raw) {
+      return;
+    }
+    this.applyTemplate(Number(raw));
+    (event.target as HTMLSelectElement).value = '';
+  }
+
+  protected applyHabit(habitId: number): void {
+    const habit = this.habits().find((h) => h.id === habitId);
+    this.slotForm.habitId().value.set(habitId);
+    if (!habit) {
+      return;
+    }
+    if (!this.slotModel().title.trim()) {
+      this.slotForm.title().value.set(habit.name);
+    }
+    if (habit.skillId) {
+      this.slotForm.skillId().value.set(habit.skillId);
+      const cat = this.skillTree()?.categories.find((c) =>
+        c.skills.some((s) => s.id === habit.skillId),
+      );
+      if (cat) {
+        this.selectedCategory.set(cat.category);
+      }
+    }
+  }
+
   private blankModel(): SlotFormModel {
     return {
       title: '',
       skillId: 0,
+      habitId: 0,
+      fixedXp: null,
       effortLevel: 5,
       durationMinutes: 45,
       customDuration: false,

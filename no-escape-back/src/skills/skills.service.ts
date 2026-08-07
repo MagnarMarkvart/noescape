@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RewardsService } from '../rewards/rewards.service';
 import {
   levelFromXp,
   MAX_SKILL_LEVEL,
@@ -26,7 +27,10 @@ const CATEGORY_META: Record<
 
 @Injectable()
 export class SkillsService implements OnModuleInit {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rewardsService: RewardsService,
+  ) {}
 
   async onModuleInit() {
     const count = await this.prisma.skill.count();
@@ -35,7 +39,33 @@ export class SkillsService implements OnModuleInit {
       console.warn(
         'No skills found. Run: npm run prisma:seed --prefix no-escape-back',
       );
+      return;
     }
+    // Keep stored levels aligned with the OSRS XP table after formula changes.
+    await this.syncLevelsFromXp();
+  }
+
+  /** Recompute skill.level from skill.xp using the current XP curve. */
+  private async syncLevelsFromXp(): Promise<void> {
+    const skills = await this.prisma.skill.findMany({
+      select: { id: true, xp: true, level: true },
+    });
+    const updates = skills
+      .map((skill) => ({
+        id: skill.id,
+        level: levelFromXp(skill.xp),
+        prev: skill.level,
+      }))
+      .filter((row) => row.level !== row.prev);
+
+    await Promise.all(
+      updates.map((row) =>
+        this.prisma.skill.update({
+          where: { id: row.id },
+          data: { level: row.level },
+        }),
+      ),
+    );
   }
 
   private enrich(skill: {
@@ -49,14 +79,16 @@ export class SkillsService implements OnModuleInit {
     xpSources: string;
     sortOrder: number;
   }) {
-    const progress = xpProgress(skill.xp, skill.level);
+    const level = levelFromXp(skill.xp);
+    const progress = xpProgress(skill.xp, level);
     return {
       ...skill,
+      level,
       maxLevel: MAX_SKILL_LEVEL,
       xpToNext:
-        skill.level >= MAX_SKILL_LEVEL
+        level >= MAX_SKILL_LEVEL
           ? 0
-          : Math.max(0, xpForLevel(skill.level + 1) - skill.xp),
+          : Math.max(0, xpForLevel(level + 1) - skill.xp),
       progress,
     };
   }
@@ -133,62 +165,143 @@ export class SkillsService implements OnModuleInit {
       throw new BadRequestException('Skill is already maxed at level 99');
     }
 
-    const newXp = skill.xp + Math.floor(input.xpGained);
+    const gained = Math.floor(input.xpGained);
+    const previousLevel = skill.level;
+    const previousXp = skill.xp;
+    const previousProgress = xpProgress(previousXp, previousLevel);
+    const newXp = previousXp + gained;
     const newLevel = Math.min(MAX_SKILL_LEVEL, levelFromXp(newXp));
+    const levelsGained = newLevel - previousLevel;
+    const leveledUp = levelsGained > 0;
 
-    const [activity, updated] = await this.prisma.$transaction([
-      this.prisma.activity.create({
+    const result = await this.prisma.$transaction(async (tx) => {
+      const activity = await tx.activity.create({
         data: {
           skillId,
-          xpGained: Math.floor(input.xpGained),
+          xpGained: gained,
           duration: input.duration,
           note: input.note,
         },
-      }),
-      this.prisma.skill.update({
+      });
+      const updated = await tx.skill.update({
         where: { id: skillId },
         data: {
           xp: newXp,
           level: newLevel,
         },
+      });
+      let levelUpEvent = null;
+      if (leveledUp) {
+        levelUpEvent = await tx.levelUpEvent.create({
+          data: {
+            skillId,
+            fromLevel: previousLevel,
+            toLevel: newLevel,
+            levelsGained,
+          },
+        });
+      }
+      return { activity, updated, levelUpEvent };
+    });
+
+    const newUnlocks = leveledUp
+      ? await this.rewardsService.checkUnlocks(skillId, newLevel)
+      : [];
+
+    return {
+      activity: result.activity,
+      skill: this.enrich(result.updated),
+      leveledUp,
+      levelsGained,
+      previousLevel,
+      previousXp,
+      previousProgress,
+      levelUpEvent: result.levelUpEvent,
+      newUnlocks,
+    };
+  }
+
+  async listLevelUps(page = 1, pageSize = 20) {
+    const safePage = Math.max(1, Math.round(page) || 1);
+    const safeSize = Math.min(50, Math.max(1, Math.round(pageSize) || 20));
+    const skip = (safePage - 1) * safeSize;
+
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.levelUpEvent.count(),
+      this.prisma.levelUpEvent.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: safeSize,
+        include: {
+          skill: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              icon: true,
+              category: true,
+              level: true,
+            },
+          },
+        },
       }),
     ]);
 
+    const totalPages = Math.max(1, Math.ceil(total / safeSize));
     return {
-      activity,
-      skill: this.enrich(updated),
-      leveledUp: newLevel > skill.level,
-      levelsGained: newLevel - skill.level,
+      items,
+      page: safePage,
+      pageSize: safeSize,
+      total,
+      totalPages,
+      hasNext: safePage < totalPages,
+      hasPrev: safePage > 1,
     };
   }
 
   /** Reverse a previously awarded XP packet (misclick undo). */
-  async reverseXp(skillId: number, activityId: number, xpGained: number) {
+  async reverseXp(
+    skillId: number,
+    xpGained: number,
+    activityId?: number | null,
+  ) {
     const skill = await this.prisma.skill.findUnique({ where: { id: skillId } });
     if (!skill) {
       throw new NotFoundException(`Skill #${skillId} not found`);
     }
 
-    const newXp = Math.max(0, skill.xp - Math.floor(xpGained));
+    const removed = Math.floor(xpGained);
+    const previousLevel = skill.level;
+    const previousXp = skill.xp;
+    const previousProgress = xpProgress(previousXp, previousLevel);
+    const newXp = Math.max(0, previousXp - removed);
     const newLevel = levelFromXp(newXp);
+    const levelsLost = previousLevel - newLevel;
+    const leveledDown = levelsLost > 0;
 
-    const [, updated] = await this.prisma.$transaction([
-      this.prisma.activity.deleteMany({
-        where: { id: activityId, skillId },
-      }),
-      this.prisma.skill.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (activityId != null) {
+        await tx.activity.deleteMany({
+          where: { id: activityId, skillId },
+        });
+      }
+      return tx.skill.update({
         where: { id: skillId },
         data: {
           xp: newXp,
           level: newLevel,
         },
-      }),
-    ]);
+      });
+    });
 
     return {
       skill: this.enrich(updated),
-      xpRemoved: Math.floor(xpGained),
-      leveledDown: newLevel < skill.level,
+      xpRemoved: removed,
+      leveledDown,
+      levelsLost,
+      previousLevel,
+      previousXp,
+      previousProgress,
     };
   }
 }

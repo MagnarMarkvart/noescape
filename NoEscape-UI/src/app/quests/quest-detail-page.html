@@ -1,0 +1,120 @@
+<section
+  class="quest-slide"
+  [style.background-image]="coverBg()"
+  aria-live="polite"
+>
+  <div class="veil" aria-hidden="true"></div>
+
+  <a class="close" routerLink="/quests" aria-label="Back to quests">✕</a>
+
+  @if (loading()) {
+    <p class="state">Unfurling the scroll…</p>
+  } @else if (error() && !quest()) {
+    <p class="state error">{{ error() }}</p>
+  } @else if (quest(); as q) {
+    <div class="slide-inner">
+      <header class="hero">
+        <p class="kicker">{{ q.tier }} · Quest Briefing</p>
+        <h1>{{ q.name }}</h1>
+        <p class="lede">{{ q.summary }}</p>
+        @if (error()) {
+          <p class="inline-error" role="status">{{ error() }}</p>
+        }
+      </header>
+
+      <div class="panels">
+        <article class="panel">
+          <h2>Requirements</h2>
+          @if (q.requirements.length) {
+            <ul>
+              @for (r of q.requirements; track r.label) {
+                <li [class.met]="r.met" [class.unmet]="!r.met">
+                  <span class="mark">{{ r.met ? '✓' : '✗' }}</span>
+                  {{ r.label }}
+                  <span class="detail">{{ r.detail }}</span>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="open">No requirements — open to all.</p>
+          }
+        </article>
+
+        <article class="panel">
+          <h2>Rewards</h2>
+          @if (q.rewards) {
+            <ul>
+              @if (q.rewards.title) {
+                <li>Title: <em>{{ q.rewards.title }}</em></li>
+              }
+              @for (f of q.rewards.features ?? []; track f) {
+                <li>Feature: {{ featureLabel(f) }}</li>
+              }
+              @for (p of q.rewards.permissionKeys ?? []; track p) {
+                <li>Unlock: {{ p }}</li>
+              }
+              @if (q.xpPlan.completionBonus) {
+                @for (entry of q.xpPlan.completionBonus | keyvalue; track entry.key) {
+                  <li>+{{ entry.value }} {{ entry.key }} XP</li>
+                }
+              }
+            </ul>
+          } @else {
+            <p class="open">Glory alone.</p>
+          }
+        </article>
+
+        <article class="panel">
+          <h2>Tasks</h2>
+          <ul>
+            @for (t of tasks(); track t) {
+              <li>{{ t }}</li>
+            }
+          </ul>
+          @if (q.xpPlan.dayXp.length) {
+            <p class="xp-row">
+              Daily XP: {{ q.xpPlan.dayXp.join(' · ') }}
+            </p>
+          }
+        </article>
+
+        <article class="panel">
+          <h2>Timeframe</h2>
+          <p class="timeframe">{{ timeframe() }}</p>
+          <p class="kind">{{ kindLabel(q.kind) }}</p>
+        </article>
+      </div>
+
+      <p class="brief">{{ q.description }}</p>
+
+      <footer class="actions">
+        @if (q.availability === 'active') {
+          <button type="button" class="cta" (click)="continueRun()">
+            Continue quest
+          </button>
+        } @else if (q.availability === 'locked') {
+          <p class="locked-note">Requirements not met</p>
+        } @else if (q.availability === 'completed') {
+          <button
+            type="button"
+            class="cta"
+            [disabled]="starting()"
+            (click)="start()"
+          >
+            {{ starting() ? '…' : 'Run again' }}
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="cta"
+            [disabled]="starting()"
+            (click)="start()"
+          >
+            {{ starting() ? '…' : 'Begin quest' }}
+          </button>
+        }
+        <a routerLink="/quests" class="ghost">Return to catalog</a>
+      </footer>
+    </div>
+  }
+</section>

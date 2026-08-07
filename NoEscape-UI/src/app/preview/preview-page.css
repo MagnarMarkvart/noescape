@@ -1,0 +1,94 @@
+:host {
+  --rs-bg: #2b2518;
+  --rs-panel: #3a3120;
+  --rs-panel-2: #4a3d28;
+  --rs-border: #8a7340;
+  --rs-text: #f0e6c8;
+  --rs-muted: #b8a878;
+  --rs-accent: #d4a84b;
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
+  --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  display: block;
+  min-height: 100dvh;
+  color: var(--rs-text);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(ellipse at 25% 0%, rgba(212, 168, 75, 0.14), transparent 48%),
+    linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 45%, #221c12 100%);
+}
+
+.preview-shell {
+  padding: 0.85rem 1rem 2rem;
+  max-width: 36rem;
+}
+
+.toolbar {
+  margin-bottom: 1.25rem;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.brand-block h1 {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  letter-spacing: 0.06em;
+  color: var(--rs-accent);
+}
+
+.hint {
+  margin: 0.55rem 0 0;
+  color: var(--rs-muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  max-width: 32rem;
+}
+
+.actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.btn {
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  font-size: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--rs-border);
+  background: linear-gradient(180deg, var(--rs-panel-2), var(--rs-panel));
+  color: var(--rs-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.btn:hover {
+  border-color: #c6a85a;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--rs-accent);
+  outline-offset: 2px;
+}
+
+.btn.gain {
+  border-color: #4a7a42;
+}
+
+.btn.up {
+  border-color: #c6a85a;
+}
+
+.btn.loss {
+  border-color: #8a5048;
+}
+
+.btn.down {
+  border-color: #c45c4a;
+}
