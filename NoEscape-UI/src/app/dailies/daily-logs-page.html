@@ -1,0 +1,104 @@
+<section class="logs-shell">
+  @if (loading()) {
+    <p class="state-msg" role="status">Loading…</p>
+  } @else if (error()) {
+    <p class="state-msg error" role="alert">{{ error() }}</p>
+  } @else if (logs().length === 0) {
+    <p class="state-msg">—</p>
+  } @else {
+    <div class="logs-layout">
+      <aside class="log-list" aria-label="Sealed days">
+        @for (log of logs(); track log.id) {
+          <button
+            type="button"
+            class="log-item"
+            [class.active]="selected()?.date === log.date"
+            (click)="openLog(log.date)"
+          >
+            <span class="log-date">{{ log.date }}</span>
+            <span class="log-meta">
+              {{ log.completedCount }}/{{ log.filledCount }} · {{ log.earnedXp | number }} XP
+            </span>
+            <span class="mini-bar" aria-hidden="true">
+              <span [style.width.%]="completionRate(log)"></span>
+            </span>
+          </button>
+        }
+      </aside>
+
+      @if (selected(); as log) {
+        <article class="log-detail">
+          <header class="detail-head">
+            <h2>{{ log.date }}</h2>
+            <div class="detail-stats">
+              <div>
+                <span class="muted">Done</span>
+                <strong>{{ log.completedCount }}/{{ log.filledCount }}</strong>
+              </div>
+              <div>
+                <span class="muted">XP</span>
+                <strong>{{ log.earnedXp | number }}</strong>
+              </div>
+              <div>
+                <span class="muted">Total Lv</span>
+                <strong>{{ log.snapshot.skillTree.totalLevel }}</strong>
+              </div>
+            </div>
+          </header>
+
+          <section class="skill-snapshot" aria-label="Skill tree snapshot">
+            <div class="snap-cats">
+              @for (cat of log.snapshot.skillTree.categories; track cat.category) {
+                <div class="snap-cat">
+                  <p class="snap-cat-title">
+                    <span aria-hidden="true">{{ cat.icon }}</span> {{ cat.label }}
+                    <span class="muted">Lv {{ cat.totalLevel }}</span>
+                  </p>
+                  <ul>
+                    @for (skill of cat.skills; track skill.id) {
+                      <li>
+                        <span aria-hidden="true">{{ skill.icon }}</span>
+                        {{ skill.name }}
+                        <strong>{{ skill.level }}</strong>
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+            </div>
+          </section>
+
+          <section class="quest-snapshot" aria-label="Daily quests">
+            @for (tier of log.snapshot.board.tiers; track tier.importance) {
+              <div class="tier-block">
+                <h4>{{ tier.label }}</h4>
+                <ul>
+                  @for (slot of tier.slots; track slot.slotIndex) {
+                    @if (slot.isFilled) {
+                      <li [class.done]="slot.completed" [class.missed]="!slot.completed">
+                        <div>
+                          <strong>{{ slot.title }}</strong>
+                          <span class="muted">
+                            {{ slot.skill?.icon }} {{ slot.skill?.name }} · E{{ slot.effortLevel }} ·
+                            {{ slot.durationMinutes }}m
+                          </span>
+                        </div>
+                        <span class="result">
+                          @if (slot.completed) {
+                            +{{ slot.xpAwarded | number }} XP
+                          } @else {
+                            Missed
+                          }
+                        </span>
+                      </li>
+                    }
+                  }
+                </ul>
+              </div>
+            }
+          </section>
+        </article>
+      }
+    </div>
+  }
+</section>

@@ -113,6 +113,17 @@ export class SkillsService implements OnModuleInit {
       throw new BadRequestException('xpGained must be a positive number');
     }
 
+    return this.awardXp(skillId, {
+      xpGained: Math.floor(dto.xpGained),
+      duration: dto.duration,
+      note: dto.note,
+    });
+  }
+
+  async awardXp(
+    skillId: number,
+    input: { xpGained: number; duration?: number; note?: string },
+  ) {
     const skill = await this.prisma.skill.findUnique({ where: { id: skillId } });
     if (!skill) {
       throw new NotFoundException(`Skill #${skillId} not found`);
@@ -122,16 +133,16 @@ export class SkillsService implements OnModuleInit {
       throw new BadRequestException('Skill is already maxed at level 99');
     }
 
-    const newXp = skill.xp + Math.floor(dto.xpGained);
+    const newXp = skill.xp + Math.floor(input.xpGained);
     const newLevel = Math.min(MAX_SKILL_LEVEL, levelFromXp(newXp));
 
     const [activity, updated] = await this.prisma.$transaction([
       this.prisma.activity.create({
         data: {
           skillId,
-          xpGained: Math.floor(dto.xpGained),
-          duration: dto.duration,
-          note: dto.note,
+          xpGained: Math.floor(input.xpGained),
+          duration: input.duration,
+          note: input.note,
         },
       }),
       this.prisma.skill.update({
@@ -148,6 +159,36 @@ export class SkillsService implements OnModuleInit {
       skill: this.enrich(updated),
       leveledUp: newLevel > skill.level,
       levelsGained: newLevel - skill.level,
+    };
+  }
+
+  /** Reverse a previously awarded XP packet (misclick undo). */
+  async reverseXp(skillId: number, activityId: number, xpGained: number) {
+    const skill = await this.prisma.skill.findUnique({ where: { id: skillId } });
+    if (!skill) {
+      throw new NotFoundException(`Skill #${skillId} not found`);
+    }
+
+    const newXp = Math.max(0, skill.xp - Math.floor(xpGained));
+    const newLevel = levelFromXp(newXp);
+
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.activity.deleteMany({
+        where: { id: activityId, skillId },
+      }),
+      this.prisma.skill.update({
+        where: { id: skillId },
+        data: {
+          xp: newXp,
+          level: newLevel,
+        },
+      }),
+    ]);
+
+    return {
+      skill: this.enrich(updated),
+      xpRemoved: Math.floor(xpGained),
+      leveledDown: newLevel < skill.level,
     };
   }
 }

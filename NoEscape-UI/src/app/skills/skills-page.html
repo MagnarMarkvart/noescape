@@ -1,25 +1,17 @@
 <section class="status-shell">
-  <header class="status-header">
-    <div class="brand-block">
-      <p class="eyebrow">No Escape</p>
-      <h1>Status</h1>
-      <p class="tagline">Your life skills. Train them. Max them. No escape.</p>
+  <div class="toolbar" aria-label="Overview">
+    <div class="stat">
+      <span class="stat-label">Total</span>
+      <span class="stat-value">{{ totalLevel() }}</span>
     </div>
-
-    <div class="level-panel" aria-label="Overall levels">
-      <div class="stat">
-        <span class="stat-label">Total Level</span>
-        <span class="stat-value">{{ totalLevel() }}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Avg Level</span>
-        <span class="stat-value">{{ averageLevel() }}</span>
-      </div>
+    <div class="stat">
+      <span class="stat-label">Avg</span>
+      <span class="stat-value">{{ averageLevel() }}</span>
     </div>
-  </header>
+  </div>
 
   @if (loading()) {
-    <p class="state-msg" role="status">Loading skills…</p>
+    <p class="state-msg" role="status">Loading…</p>
   } @else if (error()) {
     <p class="state-msg error" role="alert">{{ error() }}</p>
   } @else if (tree(); as skillTree) {
@@ -32,7 +24,7 @@
                 <span aria-hidden="true">{{ category.icon }}</span>
                 {{ category.label }}
               </h2>
-              <span class="category-total">Lvl {{ category.totalLevel }}</span>
+              <span class="category-total">Lv {{ category.totalLevel }}</span>
             </div>
 
             <ul class="skill-grid">
@@ -77,9 +69,7 @@
                 <h2>{{ skill.name }}</h2>
                 <p class="detail-cat">{{ skill.category }}</p>
               </div>
-              <button type="button" class="close-btn" (click)="closeDetail()" aria-label="Close skill details">
-                ✕
-              </button>
+              <button type="button" class="close-btn" (click)="closeDetail()" aria-label="Close">✕</button>
             </div>
 
             <div class="detail-levels">
@@ -92,10 +82,10 @@
                 <strong>{{ skill.xp | number }}</strong>
               </div>
               <div>
-                <span class="muted">To next</span>
+                <span class="muted">Next</span>
                 <strong>
                   @if (skill.level >= skill.maxLevel) {
-                    Maxed
+                    Max
                   } @else {
                     {{ skill.xpToNext | number }}
                   }
@@ -113,39 +103,21 @@
             >
               <span class="xp-fill" [style.width.%]="skill.progress.percent"></span>
             </div>
-            <p class="progress-label">{{ skill.progress.percent }}% to next level</p>
 
-            <p class="xp-sources">
-              <span class="muted">XP sources</span>
-              {{ skill.xpSources }}
-            </p>
-
-            <form class="log-form" (ngSubmit)="logXp()">
+            <form class="log-form" (submit)="$event.preventDefault(); logXp()">
               <label>
-                XP to log
-                <input
-                  type="number"
-                  name="xpAmount"
-                  min="1"
-                  [(ngModel)]="xpAmount"
-                  required
-                />
+                XP
+                <input type="number" [formField]="activityForm.xpAmount" />
               </label>
               <label>
-                Note (optional)
-                <input
-                  type="text"
-                  name="activityNote"
-                  [(ngModel)]="activityNote"
-                  placeholder="e.g. Gym session"
-                />
+                Note
+                <input type="text" [formField]="activityForm.note" />
               </label>
-              <button type="submit" [disabled]="logging() || skill.level >= skill.maxLevel">
-                @if (logging()) {
-                  Logging…
-                } @else {
-                  Log activity
-                }
+              <button
+                type="submit"
+                [disabled]="logging() || skill.level >= skill.maxLevel || activityForm().invalid()"
+              >
+                {{ logging() ? '…' : 'Log' }}
               </button>
             </form>
 
@@ -155,7 +127,7 @@
           </div>
         } @else {
           <div class="detail-empty">
-            <p>Select a skill to inspect levels and log XP.</p>
+            <p>—</p>
           </div>
         }
       </aside>

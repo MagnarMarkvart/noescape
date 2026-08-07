@@ -7,13 +7,13 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { form, FormField, min, required, submit } from '@angular/forms/signals';
 import { Skill, SkillTree } from './skill.model';
 import { SkillsService } from './skills.service';
 
 @Component({
   selector: 'app-skills-page',
-  imports: [FormsModule, DecimalPipe],
+  imports: [DecimalPipe, FormField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './skills-page.html',
   styleUrl: './skills-page.css',
@@ -28,8 +28,14 @@ export class SkillsPage implements OnInit {
   protected readonly toast = signal<string | null>(null);
   protected readonly logging = signal(false);
 
-  protected xpAmount = 100;
-  protected activityNote = '';
+  protected readonly activityModel = signal({
+    xpAmount: 100,
+    note: '',
+  });
+  protected readonly activityForm = form(this.activityModel, (p) => {
+    required(p.xpAmount);
+    min(p.xpAmount, 1, { message: 'XP must be at least 1' });
+  });
 
   protected readonly totalLevel = computed(() => this.tree()?.totalLevel ?? 0);
   protected readonly averageLevel = computed(() => this.tree()?.averageLevel ?? 1);
@@ -49,35 +55,38 @@ export class SkillsPage implements OnInit {
 
   protected logXp(): void {
     const skill = this.selected();
-    if (!skill || this.xpAmount <= 0) {
+    if (!skill) {
       return;
     }
 
-    this.logging.set(true);
-    this.skillsService
-      .logActivity(skill.id, this.xpAmount, this.activityNote || undefined)
-      .subscribe({
-        next: (result) => {
-          this.selected.set(result.skill);
-          this.activityNote = '';
-          this.toast.set(
-            result.leveledUp
-              ? `${result.skill.name} leveled up! Now level ${result.skill.level}.`
-              : `+${result.activity.xpGained} XP to ${result.skill.name}.`,
-          );
-          this.loadTree(false);
-          this.logging.set(false);
-        },
-        error: (err: { error?: { message?: string | string[] } }) => {
-          const message = err.error?.message;
-          this.toast.set(
-            Array.isArray(message)
-              ? message.join(', ')
-              : (message ?? 'Failed to log XP'),
-          );
-          this.logging.set(false);
-        },
-      });
+    void submit(this.activityForm, async () => {
+      const { xpAmount, note } = this.activityModel();
+      this.logging.set(true);
+      this.skillsService
+        .logActivity(skill.id, xpAmount, note.trim() || undefined)
+        .subscribe({
+          next: (result) => {
+            this.selected.set(result.skill);
+            this.activityModel.update((m) => ({ ...m, note: '' }));
+            this.toast.set(
+              result.leveledUp
+                ? `${result.skill.name} leveled up! Now level ${result.skill.level}.`
+                : `+${result.activity.xpGained} XP to ${result.skill.name}.`,
+            );
+            this.loadTree(false);
+            this.logging.set(false);
+          },
+          error: (err: { error?: { message?: string | string[] } }) => {
+            const message = err.error?.message;
+            this.toast.set(
+              Array.isArray(message)
+                ? message.join(', ')
+                : (message ?? 'Failed to log XP'),
+            );
+            this.logging.set(false);
+          },
+        });
+    });
   }
 
   private loadTree(showLoading = true): void {
@@ -101,7 +110,9 @@ export class SkillsPage implements OnInit {
       },
       error: () => {
         this.loading.set(false);
-        this.error.set('Could not reach the Status server. Is the backend running?');
+        this.error.set(
+          'Could not reach the Status server. Is the backend running?',
+        );
       },
     });
   }

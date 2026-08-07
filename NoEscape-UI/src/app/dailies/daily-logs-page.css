@@ -1,0 +1,231 @@
+:host {
+  --rs-bg: #2b2518;
+  --rs-panel: #3a3120;
+  --rs-panel-2: #4a3d28;
+  --rs-border: #8a7340;
+  --rs-border-bright: #c6a85a;
+  --rs-text: #f0e6c8;
+  --rs-muted: #b8a878;
+  --rs-xp: #2f8f3a;
+  --rs-xp-track: #1a1610;
+  --rs-accent: #d4a84b;
+  --rs-danger: #c45c4a;
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
+  --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  display: block;
+  min-height: 100dvh;
+  color: var(--rs-text);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(ellipse at 80% 0%, rgba(143, 188, 122, 0.1), transparent 40%),
+    linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 45%, #221c12 100%);
+}
+
+.logs-shell {
+  padding: 0.85rem 1rem 2rem;
+}
+
+.muted {
+  color: var(--rs-muted);
+}
+
+.state-msg {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(30, 24, 14, 0.7);
+}
+
+.state-msg.error {
+  border-color: var(--rs-danger);
+}
+
+.logs-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 16rem) 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 800px) {
+  .logs-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.log-list {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+}
+
+.log-item {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.7rem 0.75rem;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  background: rgba(30, 24, 14, 0.55);
+  border: 1px solid var(--rs-border);
+  font-family: var(--font-body);
+}
+
+.log-item.active,
+.log-item:hover,
+.log-item:focus-visible {
+  border-color: var(--rs-accent);
+  outline: none;
+}
+
+.log-date {
+  font-family: var(--font-display);
+  color: var(--rs-accent);
+}
+
+.log-meta {
+  font-size: 0.8rem;
+  color: var(--rs-muted);
+}
+
+.mini-bar {
+  display: block;
+  height: 0.3rem;
+  background: var(--rs-xp-track);
+  border: 1px solid #5a4a2c;
+  overflow: hidden;
+}
+
+.mini-bar span {
+  display: block;
+  height: 100%;
+  background: var(--rs-xp);
+}
+
+.log-detail {
+  padding: 1rem;
+  border: 1px solid var(--rs-border);
+  background: linear-gradient(180deg, var(--rs-panel-2), var(--rs-panel));
+}
+
+.detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  align-items: start;
+}
+
+.detail-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--rs-accent);
+}
+
+.detail-stats {
+  display: flex;
+  gap: 1rem;
+}
+
+.detail-stats .muted,
+.snap-cat-title .muted {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.detail-stats strong {
+  font-family: var(--font-display);
+  color: var(--rs-accent);
+  font-size: 1.2rem;
+}
+
+.snap-cats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1.4rem;
+}
+
+.snap-cat {
+  padding: 0.65rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(20, 16, 10, 0.4);
+}
+
+.snap-cat-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.9rem;
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.snap-cat ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.snap-cat li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.tier-block {
+  margin-bottom: 0.9rem;
+}
+
+.tier-block h4 {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-display);
+  color: var(--rs-accent);
+}
+
+.tier-block ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.tier-block li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(20, 16, 10, 0.35);
+}
+
+.tier-block li.done {
+  border-color: #4d7a45;
+}
+
+.tier-block li.missed {
+  border-color: color-mix(in srgb, var(--rs-danger) 55%, var(--rs-border));
+}
+
+.tier-block .muted {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+}
+
+.result {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  color: var(--rs-accent);
+}
+
+.missed .result {
+  color: #ffd0c8;
+}

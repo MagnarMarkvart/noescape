@@ -23,48 +23,13 @@
 }
 
 .status-shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem 3rem;
+  padding: 0.85rem 1rem 2rem;
 }
 
-.status-header {
+.toolbar {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 1.25rem;
-  margin-bottom: 1.75rem;
-  padding-bottom: 1.25rem;
-  border-bottom: 2px solid var(--rs-border);
-}
-
-.brand-block h1 {
-  margin: 0.15rem 0;
-  font-family: var(--font-display);
-  font-size: clamp(2.4rem, 5vw, 3.5rem);
-  letter-spacing: 0.04em;
-  color: var(--rs-accent);
-  text-shadow: 0 2px 0 #1a1408;
-}
-
-.eyebrow {
-  margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: var(--rs-muted);
-}
-
-.tagline {
-  margin: 0.35rem 0 0;
-  color: var(--rs-muted);
-  max-width: 28rem;
-}
-
-.level-panel {
-  display: flex;
-  gap: 0.75rem;
-  align-items: stretch;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
 }
 
 .stat {

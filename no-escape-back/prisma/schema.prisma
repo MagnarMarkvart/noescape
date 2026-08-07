@@ -11,16 +11,17 @@ datasource db {
 }
 
 model Skill {
-  id         Int        @id @default(autoincrement())
+  id         Int         @id @default(autoincrement())
   name       String
-  slug       String     @unique
+  slug       String      @unique
   category   String
-  level      Int        @default(1)
-  xp         Int        @default(0)
+  level      Int         @default(1)
+  xp         Int         @default(0)
   icon       String?
   xpSources  String
-  sortOrder  Int        @default(0)
+  sortOrder  Int         @default(0)
   activities Activity[]
+  dailyTasks DailyTask[]
 }
 
 model Activity {
@@ -31,4 +32,37 @@ model Activity {
   duration Int?
   note     String?
   loggedAt DateTime @default(now())
+}
+
+model DailyTask {
+  id              Int       @id @default(autoincrement())
+  date            String
+  importance      String
+  slotIndex       Int
+  title           String    @default("")
+  skillId         Int?
+  skill           Skill?    @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  effortLevel     Int       @default(5)
+  durationMinutes Int       @default(45)
+  completed       Boolean   @default(false)
+  xpAwarded       Int?
+  activityId      Int?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([date, importance, slotIndex])
+  @@index([date])
+}
+
+/// Immutable day archive — full board + skill tree at seal time.
+model DailyLog {
+  id             Int      @id @default(autoincrement())
+  date           String   @unique
+  sealedAt       DateTime @default(now())
+  filledCount    Int
+  completedCount Int
+  earnedXp       Int
+  projectedXp    Int
+  snapshotJson   String
 }
