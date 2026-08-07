@@ -1,0 +1,34 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Skill {
+  id         Int        @id @default(autoincrement())
+  name       String
+  slug       String     @unique
+  category   String
+  level      Int        @default(1)
+  xp         Int        @default(0)
+  icon       String?
+  xpSources  String
+  sortOrder  Int        @default(0)
+  activities Activity[]
+}
+
+model Activity {
+  id       Int      @id @default(autoincrement())
+  skillId  Int
+  skill    Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  xpGained Int
+  duration Int?
+  note     String?
+  loggedAt DateTime @default(now())
+}
