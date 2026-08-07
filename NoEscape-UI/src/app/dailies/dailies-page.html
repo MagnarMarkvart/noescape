@@ -1,11 +1,20 @@
-<section class="dailies-shell" [class.setup-collapsed]="!setupOpen()">
+<section class="dailies-shell">
   <div class="toolbar">
     <div class="date-nav" aria-label="Day navigation">
       <button type="button" class="ghost icon" (click)="shiftDate(-1)" aria-label="Previous day">‹</button>
-      <span class="date-label">{{ selectedDate() }}</span>
+      <input
+        class="date-input"
+        type="date"
+        [value]="selectedDate()"
+        (change)="onDatePicked($event)"
+        aria-label="Pick date"
+      />
       <button type="button" class="ghost icon" (click)="shiftDate(1)" aria-label="Next day">›</button>
       @if (!isToday()) {
         <button type="button" class="ghost" (click)="goToday()">Today</button>
+      }
+      @if (!isTomorrow()) {
+        <button type="button" class="ghost" (click)="goTomorrow()">Tomorrow</button>
       }
     </div>
 
@@ -20,10 +29,12 @@
         @if (current.sealRequired) {
           <span class="seal-flag">Seal required</span>
         }
+        @if (current.filledCount > 0) {
+          <button type="button" class="ghost" (click)="toggleSetup()">
+            {{ setupOpen() ? 'Tasks' : 'Setup' }}
+          </button>
+        }
       }
-      <button type="button" class="ghost" (click)="toggleSetup()">
-        {{ setupOpen() ? 'Hide setup' : 'Setup' }}
-      </button>
     </div>
   </div>
 
@@ -53,194 +64,202 @@
       }
     </div>
 
-    @if (current.filledCount > 0) {
-      <div
-        class="day-progress"
-        role="progressbar"
-        [attr.aria-valuenow]="progressPercent()"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        aria-label="Daily completion"
-      >
-        <span class="day-progress-fill" [style.width.%]="progressPercent()"></span>
-      </div>
-    }
+    @if (setupOpen()) {
+      <section class="setup-pane" aria-label="Daily setup">
+        <header class="pane-head">
+          <h2>Setup</h2>
+        </header>
 
-    <div class="split-layout">
-      @if (setupOpen()) {
-        <aside class="setup-pane" aria-label="Daily setup">
-          <div class="tiers setup-tiers">
-            @for (tier of current.tiers; track tier.importance) {
-              <section
-                class="tier"
-                [class.most-important]="tier.importance === 'MOST_IMPORTANT'"
-                [class.important]="tier.importance === 'IMPORTANT'"
-                [class.regular]="tier.importance === 'REGULAR'"
-              >
-                <div class="tier-head">
-                  <h3>{{ tier.label }}</h3>
-                  <span class="tier-meta">{{ tier.filled }}/{{ tier.capacity }}</span>
-                </div>
+        <div class="tiers setup-tiers">
+          @for (tier of current.tiers; track tier.importance) {
+            <section
+              class="tier"
+              [class.most-important]="tier.importance === 'MOST_IMPORTANT'"
+              [class.important]="tier.importance === 'IMPORTANT'"
+              [class.regular]="tier.importance === 'REGULAR'"
+            >
+              <div class="tier-head">
+                <h3>{{ tier.label }}</h3>
+                <span class="tier-meta">{{ tier.filled }}/{{ tier.capacity }}</span>
+              </div>
 
-                <ul class="slot-list">
-                  @for (slot of tier.slots; track slot.slotIndex) {
-                    <li class="slot" [class.editing]="isEditing(slot)" [class.filled]="slot.isFilled">
-                      @if (isEditing(slot)) {
-                        <form class="slot-form" (submit)="$event.preventDefault(); saveSlot()">
-                          <label class="title-field">
-                            Title
-                            <input type="text" [formField]="slotForm.title" placeholder="Quest" />
-                          </label>
+              <ul class="slot-list">
+                @for (slot of tier.slots; track slot.slotIndex) {
+                  <li class="slot" [class.editing]="isEditing(slot)" [class.filled]="slot.isFilled">
+                    @if (isEditing(slot)) {
+                      <form class="slot-form" (submit)="$event.preventDefault(); saveSlot()">
+                        <label class="title-field">
+                          Title
+                          <input type="text" [formField]="slotForm.title" placeholder="Quest" />
+                        </label>
 
+                        <fieldset class="picker-block">
+                          <legend>Skill</legend>
+                          <div class="icon-grid parents" role="listbox" aria-label="Parent skills">
+                            @for (cat of categories(); track cat.category) {
+                              <button
+                                type="button"
+                                class="pick-tile"
+                                role="option"
+                                [class.selected]="selectedCategory() === cat.category"
+                                [attr.aria-selected]="selectedCategory() === cat.category"
+                                (click)="selectCategory(cat.category)"
+                              >
+                                <span class="pick-icon" aria-hidden="true">{{ cat.icon }}</span>
+                                <span class="pick-label">{{ cat.label }}</span>
+                              </button>
+                            }
+                          </div>
+                        </fieldset>
+
+                        @if (selectedCategory()) {
                           <fieldset class="picker-block">
-                            <legend>Skill</legend>
-                            <div class="icon-grid parents" role="listbox" aria-label="Parent skills">
-                              @for (cat of categories(); track cat.category) {
+                            <legend>Subskill</legend>
+                            <div class="icon-grid subs" role="listbox" aria-label="Subskills">
+                              @for (skill of subskills(); track skill.id) {
                                 <button
                                   type="button"
                                   class="pick-tile"
                                   role="option"
-                                  [class.selected]="selectedCategory() === cat.category"
-                                  [attr.aria-selected]="selectedCategory() === cat.category"
-                                  (click)="selectCategory(cat.category)"
+                                  [class.selected]="slotModel().skillId === skill.id"
+                                  [attr.aria-selected]="slotModel().skillId === skill.id"
+                                  (click)="selectSkill(skill.id)"
                                 >
-                                  <span class="pick-icon" aria-hidden="true">{{ cat.icon }}</span>
-                                  <span class="pick-label">{{ cat.label }}</span>
+                                  <span class="pick-icon" aria-hidden="true">{{ skill.icon }}</span>
+                                  <span class="pick-label">{{ skill.name }}</span>
+                                  <span class="pick-meta">Lv {{ skill.level }}</span>
                                 </button>
                               }
                             </div>
                           </fieldset>
+                        }
 
-                          @if (selectedCategory()) {
-                            <fieldset class="picker-block">
-                              <legend>Subskill</legend>
-                              <div class="icon-grid subs" role="listbox" aria-label="Subskills">
-                                @for (skill of subskills(); track skill.id) {
-                                  <button
-                                    type="button"
-                                    class="pick-tile"
-                                    role="option"
-                                    [class.selected]="slotModel().skillId === skill.id"
-                                    [attr.aria-selected]="slotModel().skillId === skill.id"
-                                    (click)="selectSkill(skill.id)"
-                                  >
-                                    <span class="pick-icon" aria-hidden="true">{{ skill.icon }}</span>
-                                    <span class="pick-label">{{ skill.name }}</span>
-                                    <span class="pick-meta">Lv {{ skill.level }}</span>
-                                  </button>
-                                }
-                              </div>
-                            </fieldset>
-                          }
-
-                          <fieldset class="picker-block">
-                            <legend>Effort</legend>
-                            <div class="icon-grid effort" role="listbox" aria-label="Effort level">
-                              @for (level of effortLevels; track level) {
-                                <button
-                                  type="button"
-                                  class="pick-tile compact"
-                                  role="option"
-                                  [class.selected]="slotModel().effortLevel === level"
-                                  [attr.aria-selected]="slotModel().effortLevel === level"
-                                  (click)="selectEffort(level)"
-                                >
-                                  {{ level }}
-                                </button>
-                              }
-                            </div>
-                          </fieldset>
-
-                          <fieldset class="picker-block">
-                            <legend>Duration</legend>
-                            <div class="icon-grid duration" role="listbox" aria-label="Duration">
-                              @for (mins of durationPresets; track mins) {
-                                <button
-                                  type="button"
-                                  class="pick-tile compact"
-                                  role="option"
-                                  [class.selected]="!slotModel().customDuration && slotModel().durationMinutes === mins"
-                                  [attr.aria-selected]="!slotModel().customDuration && slotModel().durationMinutes === mins"
-                                  (click)="selectDurationPreset(mins)"
-                                >
-                                  {{ formatDuration(mins) }}
-                                </button>
-                              }
+                        <fieldset class="picker-block">
+                          <legend>Effort</legend>
+                          <div class="icon-grid effort" role="listbox" aria-label="Effort level">
+                            @for (level of effortLevels; track level) {
                               <button
                                 type="button"
                                 class="pick-tile compact"
                                 role="option"
-                                [class.selected]="slotModel().customDuration"
-                                [attr.aria-selected]="slotModel().customDuration"
-                                (click)="enableCustomDuration()"
+                                [class.selected]="slotModel().effortLevel === level"
+                                [attr.aria-selected]="slotModel().effortLevel === level"
+                                (click)="selectEffort(level)"
                               >
-                                Custom
+                                {{ level }}
                               </button>
-                            </div>
-                            @if (slotModel().customDuration) {
-                              <label class="custom-duration">
-                                Minutes
-                                <input type="number" [formField]="slotForm.customDurationMinutes" />
-                              </label>
                             }
-                          </fieldset>
-
-                          <div class="form-actions">
-                            <button type="submit" [disabled]="saving() || slotForm().invalid()">Save</button>
-                            <button type="button" class="ghost" (click)="cancelEdit()">Cancel</button>
                           </div>
-                        </form>
-                      } @else if (slot.isEmpty) {
-                        <button
-                          type="button"
-                          class="empty-slot"
-                          [disabled]="current.isSealed"
-                          (click)="startEdit(slot)"
-                        >
-                          <span class="empty-mark">+</span>
-                          <span>{{ tier.label }} #{{ slot.slotIndex + 1 }}</span>
-                        </button>
-                      } @else {
-                        <button
-                          type="button"
-                          class="filled-chip"
-                          (click)="startEdit(slot)"
-                          [disabled]="slot.completed || current.isSealed"
-                        >
-                          <span aria-hidden="true">{{ slot.skill?.icon }}</span>
-                          <span class="filled-chip-text">
-                            <strong>{{ slot.title }}</strong>
-                            <span class="muted">{{ slot.skill?.name }} · E{{ slot.effortLevel }} · {{ formatDuration(slot.durationMinutes) }}</span>
-                          </span>
-                        </button>
-                      }
-                    </li>
-                  }
-                </ul>
+                        </fieldset>
 
-                @if (tier.importance === 'REGULAR' && current.canAddRegular) {
-                  <button type="button" class="ghost add-regular" (click)="addRegularSlot()">
-                    + Regular
-                  </button>
+                        <fieldset class="picker-block">
+                          <legend>Duration</legend>
+                          <div class="icon-grid duration" role="listbox" aria-label="Duration">
+                            @for (mins of durationPresets; track mins) {
+                              <button
+                                type="button"
+                                class="pick-tile compact"
+                                role="option"
+                                [class.selected]="!slotModel().customDuration && slotModel().durationMinutes === mins"
+                                [attr.aria-selected]="!slotModel().customDuration && slotModel().durationMinutes === mins"
+                                (click)="selectDurationPreset(mins)"
+                              >
+                                {{ formatDuration(mins) }}
+                              </button>
+                            }
+                            <button
+                              type="button"
+                              class="pick-tile compact custom-tile"
+                              role="option"
+                              [class.selected]="slotModel().customDuration"
+                              [attr.aria-selected]="slotModel().customDuration"
+                              (click)="enableCustomDuration()"
+                              aria-label="Custom duration"
+                              title="Custom"
+                            >
+                              <span aria-hidden="true">✎</span>
+                            </button>
+                          </div>
+                          @if (slotModel().customDuration) {
+                            <label class="custom-duration">
+                              Minutes
+                              <input type="number" [formField]="slotForm.customDurationMinutes" />
+                            </label>
+                          }
+                        </fieldset>
+
+                        <div class="form-actions">
+                          <button type="submit" [disabled]="saving() || slotForm().invalid()">Save</button>
+                          <button type="button" class="ghost" (click)="cancelEdit()">Cancel</button>
+                          @if (canPostponeEdit()) {
+                            <div class="postpone-group">
+                              <button
+                                type="button"
+                                class="ghost"
+                                [disabled]="postponingId() === editingSlot()?.id"
+                                (click)="postponeTomorrow()"
+                              >
+                                Tomorrow
+                              </button>
+                              @if (postponePickerOpen()) {
+                                <input
+                                  class="postpone-date"
+                                  type="date"
+                                  [value]="postponeDate()"
+                                  (change)="onPostponeDatePicked($event)"
+                                  aria-label="Postpone to date"
+                                />
+                              } @else {
+                                <button type="button" class="ghost" (click)="openPostponePicker()">
+                                  Date…
+                                </button>
+                              }
+                            </div>
+                          }
+                        </div>
+                      </form>
+                    } @else if (slot.isEmpty) {
+                      <button
+                        type="button"
+                        class="empty-slot"
+                        [disabled]="current.isSealed"
+                        (click)="startEdit(slot)"
+                      >
+                        <span class="empty-mark">+</span>
+                        <span>{{ tier.label }} #{{ slot.slotIndex + 1 }}</span>
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="filled-chip"
+                        (click)="startEdit(slot)"
+                        [disabled]="slot.completed || current.isSealed"
+                      >
+                        <span aria-hidden="true">{{ slot.skill?.icon }}</span>
+                        <span class="filled-chip-text">
+                          <strong>{{ slot.title }}</strong>
+                          <span class="muted">{{ slot.skill?.name }} · E{{ slot.effortLevel }} · {{ formatDuration(slot.durationMinutes) }}</span>
+                        </span>
+                      </button>
+                    }
+                  </li>
                 }
-              </section>
-            }
-          </div>
-        </aside>
-      } @else {
-        <aside class="setup-collapsed-rail">
-          <button type="button" class="ghost reopen-setup" (click)="toggleSetup(true)">Setup</button>
-        </aside>
-      }
+              </ul>
 
+              @if (tier.importance === 'REGULAR' && current.canAddRegular) {
+                <button type="button" class="ghost add-regular" (click)="addRegularSlot()">
+                  + Regular
+                </button>
+              }
+            </section>
+          }
+        </div>
+      </section>
+    } @else {
       <section class="board-pane" aria-label="Configured dailies">
         @if (filledSlots().length === 0) {
           <div class="board-empty">
-            @if (!setupOpen()) {
-              <button type="button" (click)="toggleSetup(true)">Setup</button>
-            } @else {
-              <span class="muted">—</span>
-            }
+            <button type="button" (click)="toggleSetup(true)">Setup</button>
           </div>
         } @else {
           <div class="board-tiers">
@@ -303,7 +322,6 @@
                                     {{ completingId() === slot.id ? '…' : 'Complete' }}
                                   </button>
                                   <button type="button" class="ghost" (click)="startEdit(slot)">Edit</button>
-                                  <button type="button" class="ghost danger" (click)="clearSlot(slot)">Clear</button>
                                 } @else {
                                   <span class="done-stamp">Done</span>
                                   <button
@@ -319,6 +337,18 @@
                                 <span class="done-stamp">{{ slot.completed ? 'Done' : 'Sealed' }}</span>
                               }
                             </div>
+
+                            @if (!current.isSealed && !slot.completed) {
+                              <button
+                                type="button"
+                                class="icon-clear"
+                                (click)="clearSlot(slot)"
+                                aria-label="Remove task"
+                                title="Remove"
+                              >
+                                ×
+                              </button>
+                            }
                           </article>
                         </li>
                       }
@@ -330,6 +360,6 @@
           </div>
         }
       </section>
-    </div>
+    }
   }
 </section>

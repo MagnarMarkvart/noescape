@@ -87,10 +87,16 @@ export class DailiesService {
 
   async getBoard(date?: string) {
     const requestedDate = this.normalizeDate(date);
+    const today = this.localToday();
     const pendingSealDate =
       await this.findOldestPendingSealBefore(requestedDate);
-    // Unsealed prior days must be sealed manually before working ahead.
-    const day = pendingSealDate ?? requestedDate;
+
+    // Past/today work is gated by unsealed prior days; future planning is allowed.
+    const sealRequired = Boolean(
+      pendingSealDate && requestedDate <= today,
+    );
+    const day =
+      sealRequired && pendingSealDate ? pendingSealDate : requestedDate;
 
     const board = await this.buildBoard(day);
     const sealed = await this.prisma.dailyLog.findUnique({ where: { date: day } });
@@ -100,12 +106,18 @@ export class DailiesService {
     });
 
     let incompleteInLastLog = 0;
+    let copyableCount = 0;
     if (lastLog) {
       const snap = this.parseSnapshot(lastLog.snapshotJson);
-      incompleteInLastLog = this.collectIncomplete(snap).length;
+      const incomplete = this.collectIncomplete(snap);
+      incompleteInLastLog = incomplete.length;
+      copyableCount = incomplete.filter((task) => {
+        const slot = board.tiers
+          .find((tier) => tier.importance === task.importance)
+          ?.slots.find((s) => s.slotIndex === task.slotIndex);
+        return !slot?.isFilled;
+      }).length;
     }
-
-    const sealRequired = Boolean(pendingSealDate);
 
     return {
       ...board,
@@ -115,8 +127,7 @@ export class DailiesService {
       sealRequired,
       isSealed: Boolean(sealed),
       lastLogDate: lastLog?.date ?? null,
-      canCopyIncomplete:
-        incompleteInLastLog > 0 && !sealed && !sealRequired,
+      canCopyIncomplete: copyableCount > 0 && !sealed && !sealRequired,
       incompleteInLastLog,
       isBaseFilled: this.isBaseBoardFilled(board),
       canAddRegular:
@@ -462,6 +473,94 @@ export class DailiesService {
     };
   }
 
+  async postpone(id: number, targetDateRaw: string) {
+    const task = await this.prisma.dailyTask.findUnique({
+      where: { id },
+      include: { skill: { select: this.skillSelect() } },
+    });
+    if (!task) {
+      throw new NotFoundException(`Daily task #${id} not found`);
+    }
+    if (task.completed) {
+      throw new BadRequestException('Completed tasks cannot be postponed');
+    }
+    if (!task.title.trim() || !task.skillId) {
+      throw new BadRequestException('Only filled tasks can be postponed');
+    }
+
+    await this.assertMutableDay(task.date);
+    const targetDate = this.normalizeDate(targetDateRaw);
+    if (targetDate === task.date) {
+      throw new BadRequestException('Pick a different date');
+    }
+    await this.assertMutableDay(targetDate);
+
+    const importance = task.importance as TaskImportance;
+    const targetBoard = await this.buildBoard(targetDate);
+    const tier = targetBoard.tiers.find((t) => t.importance === importance);
+    if (!tier) {
+      throw new BadRequestException('Invalid importance');
+    }
+
+    let slotIndex = task.slotIndex;
+    const preferred = tier.slots.find((s) => s.slotIndex === slotIndex);
+    if (preferred?.isFilled) {
+      const free = tier.slots.find((s) => s.isEmpty);
+      if (free) {
+        slotIndex = free.slotIndex;
+      } else if (importance === 'REGULAR') {
+        slotIndex = tier.capacity;
+        if (slotIndex >= DAILY_SLOT_MAXIMUMS.REGULAR) {
+          throw new BadRequestException('No free Regular slots on target date');
+        }
+      } else {
+        throw new BadRequestException('No free slot on target date');
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.dailyTask.delete({ where: { id: task.id } });
+      await tx.dailyTask.upsert({
+        where: {
+          date_importance_slotIndex: {
+            date: targetDate,
+            importance,
+            slotIndex,
+          },
+        },
+        create: {
+          date: targetDate,
+          importance,
+          slotIndex,
+          title: task.title,
+          skillId: task.skillId,
+          effortLevel: task.effortLevel,
+          durationMinutes: task.durationMinutes,
+          completed: false,
+          xpAwarded: null,
+          activityId: null,
+          completedAt: null,
+        },
+        update: {
+          title: task.title,
+          skillId: task.skillId,
+          effortLevel: task.effortLevel,
+          durationMinutes: task.durationMinutes,
+          completed: false,
+          xpAwarded: null,
+          activityId: null,
+          completedAt: null,
+        },
+      });
+    });
+
+    return {
+      fromDate: task.date,
+      toDate: targetDate,
+      board: await this.getBoard(task.date),
+    };
+  }
+
   /** Oldest prior day that still has filled tasks and is not sealed. */
   private async findOldestPendingSealBefore(day: string): Promise<string | null> {
     const distinct = await this.prisma.dailyTask.findMany({
@@ -586,6 +685,11 @@ export class DailiesService {
 
   private async assertMutableDay(day: string) {
     await this.assertNotSealed(day);
+    const today = this.localToday();
+    // Future planning is allowed even if a past day still needs sealing.
+    if (day > today) {
+      return;
+    }
     const pending = await this.findOldestPendingSealBefore(day);
     if (pending && pending !== day) {
       throw new BadRequestException(`Seal ${pending} before continuing`);

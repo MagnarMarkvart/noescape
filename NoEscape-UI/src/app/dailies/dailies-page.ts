@@ -53,6 +53,9 @@ export class DailiesPage implements OnInit {
   protected readonly saving = signal(false);
   protected readonly completingId = signal<number | null>(null);
   protected readonly uncompletingId = signal<number | null>(null);
+  protected readonly postponingId = signal<number | null>(null);
+  protected readonly postponePickerOpen = signal(false);
+  protected readonly postponeDate = signal(this.todayIso());
   protected readonly selectedCategory = signal<string>('');
   protected readonly editingSlot = signal<DailyTaskSlot | null>(null);
   protected readonly setupOpen = signal(true);
@@ -82,17 +85,18 @@ export class DailiesPage implements OnInit {
     );
   });
 
-  protected readonly progressPercent = computed(() => {
-    const current = this.board();
-    if (!current || current.filledCount === 0) {
-      return 0;
-    }
-    return Math.round((current.completedCount / current.filledCount) * 100);
-  });
-
   protected readonly isToday = computed(
     () => this.selectedDate() === this.todayIso(),
   );
+
+  protected readonly isTomorrow = computed(
+    () => this.selectedDate() === this.offsetIso(1, this.todayIso()),
+  );
+
+  protected readonly canPostponeEdit = computed(() => {
+    const slot = this.editingSlot();
+    return Boolean(slot?.id && slot.isFilled && !slot.completed);
+  });
 
   protected readonly filledSlots = computed(() => {
     const current = this.board();
@@ -144,6 +148,17 @@ export class DailiesPage implements OnInit {
     this.setDate(this.todayIso());
   }
 
+  protected goTomorrow(): void {
+    this.setDate(this.offsetIso(1, this.todayIso()));
+  }
+
+  protected onDatePicked(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    if (value) {
+      this.setDate(value);
+    }
+  }
+
   protected startEdit(slot: DailyTaskSlot): void {
     if (slot.completed || this.board()?.isSealed) {
       return;
@@ -162,6 +177,8 @@ export class DailiesPage implements OnInit {
     this.selectedCategory.set(slot.skill?.category ?? '');
     this.editingSlot.set(slot);
     this.editingKey.set(this.slotKey(slot.importance, slot.slotIndex));
+    this.postponePickerOpen.set(false);
+    this.postponeDate.set(this.offsetIso(1));
     this.toast.set(null);
   }
 
@@ -170,6 +187,7 @@ export class DailiesPage implements OnInit {
     this.editingSlot.set(null);
     this.selectedCategory.set('');
     this.slotModel.set(this.blankModel());
+    this.postponePickerOpen.set(false);
   }
 
   protected selectCategory(category: string): void {
@@ -231,6 +249,7 @@ export class DailiesPage implements OnInit {
           next: () => {
             this.saving.set(false);
             this.cancelEdit();
+            this.setupPinned = false;
             this.toast.set('Task saved.');
             this.loadBoard(this.selectedDate(), false);
           },
@@ -252,7 +271,6 @@ export class DailiesPage implements OnInit {
         if (this.isEditing(slot)) {
           this.cancelEdit();
         }
-        this.setupOpen.set(true);
         this.loadBoard(this.selectedDate(), false);
       },
       error: (err: { error?: { message?: string | string[] } }) => {
@@ -297,6 +315,44 @@ export class DailiesPage implements OnInit {
       error: (err: { error?: { message?: string | string[] } }) => {
         this.uncompletingId.set(null);
         this.toast.set(this.readError(err, 'Failed to undo completion'));
+      },
+    });
+  }
+
+  protected postponeTomorrow(): void {
+    this.postponeTo(this.offsetIso(1));
+  }
+
+  protected openPostponePicker(): void {
+    this.postponePickerOpen.set(true);
+    this.postponeDate.set(this.offsetIso(1));
+  }
+
+  protected onPostponeDatePicked(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    if (value) {
+      this.postponeTo(value);
+    }
+  }
+
+  private postponeTo(targetDate: string): void {
+    const slot = this.editingSlot();
+    if (!slot?.id || slot.completed || this.board()?.isSealed) {
+      return;
+    }
+    this.postponingId.set(slot.id);
+    this.dailiesService.postpone(slot.id, targetDate).subscribe({
+      next: (result) => {
+        this.postponingId.set(null);
+        this.postponePickerOpen.set(false);
+        this.cancelEdit();
+        this.setupPinned = false;
+        this.applyBoard(result.board);
+        this.toast.set(`Moved to ${result.toDate}.`);
+      },
+      error: (err: { error?: { message?: string | string[] } }) => {
+        this.postponingId.set(null);
+        this.toast.set(this.readError(err, 'Postpone failed'));
       },
     });
   }
@@ -365,7 +421,6 @@ export class DailiesPage implements OnInit {
   private setDate(date: string): void {
     this.cancelEdit();
     this.setupPinned = false;
-    this.setupOpen.set(true);
     this.selectedDate.set(date);
     this.loadBoard(date);
   }
@@ -392,10 +447,14 @@ export class DailiesPage implements OnInit {
   private applyBoard(board: DailyBoard): void {
     this.board.set(board);
     this.selectedDate.set(board.date);
-    if (board.isBaseFilled && !this.setupPinned && !this.editingKey()) {
-      this.setupOpen.set(false);
-    } else if (!board.isBaseFilled && !this.setupPinned) {
+    if (board.filledCount === 0) {
       this.setupOpen.set(true);
+      this.setupPinned = false;
+      return;
+    }
+    // Any set tasks → Tasks view by default (unless pinned in Setup/edit).
+    if (!this.setupPinned && !this.editingKey()) {
+      this.setupOpen.set(false);
     }
   }
 
@@ -415,6 +474,15 @@ export class DailiesPage implements OnInit {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private offsetIso(days: number, from = this.selectedDate()): string {
+    const next = new Date(`${from}T12:00:00`);
+    next.setDate(next.getDate() + days);
+    const yyyy = next.getFullYear();
+    const mm = String(next.getMonth() + 1).padStart(2, '0');
+    const dd = String(next.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
 

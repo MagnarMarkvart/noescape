@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CopyIncompleteDto } from './dto/copy-incomplete.dto';
+import { PostponeDailyDto } from './dto/postpone-daily.dto';
 import { DailiesService } from './dailies.service';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
 
@@ -60,6 +61,14 @@ export class DailiesController {
   @Post(':id/uncomplete')
   uncomplete(@Param('id', ParseIntPipe) id: number) {
     return this.dailiesService.uncomplete(id);
+  }
+
+  @Post(':id/postpone')
+  postpone(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: PostponeDailyDto,
+  ) {
+    return this.dailiesService.postpone(id, dto.targetDate);
   }
 
   @Delete(':id')

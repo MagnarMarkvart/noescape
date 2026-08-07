@@ -54,37 +54,29 @@
   text-transform: uppercase;
 }
 
-.split-layout {
-  display: grid;
-  grid-template-columns: minmax(20rem, 26rem) minmax(0, 1fr);
-  gap: 1rem;
-  align-items: start;
-}
-
-.dailies-shell.setup-collapsed .split-layout {
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-@media (max-width: 960px) {
-  .split-layout,
-  .dailies-shell.setup-collapsed .split-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
 .setup-pane,
 .board-pane {
   min-width: 0;
+  margin-top: 0.85rem;
   padding: 0.9rem;
   border: 1px solid var(--rs-border);
   background: rgba(30, 24, 14, 0.45);
 }
 
-.setup-collapsed-rail {
-  padding-top: 0.25rem;
+.pane-head {
+  margin-bottom: 0.85rem;
 }
 
-.reopen-setup,
+.pane-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rs-accent);
+  text-align: center;
+}
+
 .add-regular {
   width: 100%;
 }
@@ -155,12 +147,19 @@
   align-items: center;
 }
 
-.date-label {
-  min-width: 7.5rem;
-  text-align: center;
-  font-family: var(--font-display);
+.date-input {
+  min-width: 9.5rem;
+  padding: 0.45rem 0.55rem;
   color: var(--rs-accent);
+  font-family: var(--font-display);
   letter-spacing: 0.04em;
+  background: rgba(20, 16, 10, 0.55);
+  border: 1px solid var(--rs-border);
+}
+
+.date-input:focus-visible {
+  outline: 2px solid var(--rs-accent);
+  outline-offset: 1px;
 }
 
 button.ghost.icon {
@@ -265,6 +264,7 @@ button.ghost.icon {
   display: flex;
   gap: 0.65rem;
   flex-wrap: wrap;
+  margin-bottom: 0.25rem;
 }
 
 .stat {
@@ -316,21 +316,6 @@ button.ghost.icon {
 
 .empty-banner strong {
   color: var(--rs-accent);
-}
-
-.day-progress {
-  height: 0.65rem;
-  margin-bottom: 0.85rem;
-  background: var(--rs-xp-track);
-  border: 1px solid #5a4a2c;
-  overflow: hidden;
-}
-
-.day-progress-fill {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, #1f6b28, var(--rs-xp));
-  transition: width 0.25s ease;
 }
 
 .tiers {
@@ -437,6 +422,7 @@ button.ghost.icon {
 
 .quest-card,
 .slot-form {
+  position: relative;
   padding: 1rem;
   background: linear-gradient(180deg, var(--rs-panel-2), var(--rs-panel));
   border: 1px solid var(--rs-border);
@@ -508,6 +494,44 @@ button.ghost.icon {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+  padding-right: 1.75rem;
+}
+
+.postpone-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.postpone-date {
+  padding: 0.4rem 0.5rem;
+  color: var(--rs-text);
+  background: var(--rs-xp-track);
+  border: 1px solid var(--rs-border);
+}
+
+.icon-clear {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0.45rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  line-height: 1;
+  font-size: 1.15rem;
+  font-family: var(--font-body);
+  color: var(--rs-muted);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.icon-clear:hover,
+.icon-clear:focus-visible {
+  color: #ffd0c8;
+  border-color: var(--rs-danger);
+  outline: none;
 }
 
 .slot-form {

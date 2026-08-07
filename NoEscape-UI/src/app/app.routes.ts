@@ -31,6 +31,12 @@ export const routes: Routes = [
     title: 'Quest Log — No Escape',
   },
   {
+    path: 'quest-timer',
+    loadComponent: () =>
+      import('./quest-timer/quest-timer-page').then((m) => m.QuestTimerPage),
+    title: 'Quest Timer — No Escape',
+  },
+  {
     path: '**',
     redirectTo: 'status',
   },

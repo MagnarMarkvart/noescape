@@ -72,4 +72,12 @@ export class DailiesService {
   clearSlot(id: number) {
     return this.http.delete<{ ok: boolean }>(`${this.baseUrl}/${id}`);
   }
+
+  postpone(id: number, targetDate: string) {
+    return this.http.post<{
+      fromDate: string;
+      toDate: string;
+      board: DailyBoard;
+    }>(`${this.baseUrl}/${id}/postpone`, { targetDate });
+  }
 }

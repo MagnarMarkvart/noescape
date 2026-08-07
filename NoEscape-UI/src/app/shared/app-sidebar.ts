@@ -37,6 +37,7 @@ import { filter, map, startWith } from 'rxjs';
           <a routerLink="/dailies/logs" routerLinkActive="active" class="sub">
             Quest Logs
           </a>
+          <a routerLink="/quest-timer" routerLinkActive="active">Quest Timer</a>
         </nav>
       }
     </aside>
@@ -162,6 +163,9 @@ export class AppSidebar {
     }
     if (path.startsWith('/dailies')) {
       return 'DAILIES';
+    }
+    if (path.startsWith('/quest-timer')) {
+      return 'TIMER';
     }
     return 'STATUS';
   });
