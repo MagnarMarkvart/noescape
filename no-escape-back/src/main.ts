@@ -19,18 +19,29 @@ async function bootstrap() {
   const distPath = join(process.cwd(), '..', 'NoEscape-UI', 'dist', 'NoEscape-UI', 'browser');
   if (existsSync(distPath)) {
     app.useStaticAssets(distPath);
-    // SPA fallback — serve index.html for any unmatched GET route
+    // SPA fallback — check raw Accept header because */* in browsers matches everything
     app.use((req: any, res: any, next: any) => {
-      if (req.method === 'GET' && !req.path.startsWith('/uploads') && !req.path.startsWith('/assets')) {
-        const indexFile = join(distPath, 'index.html');
-        if (existsSync(indexFile)) {
-          res.sendFile(indexFile);
+      if (req.method === 'GET' && !req.path.includes('.')) {
+        const accept: string = req.headers['accept'] || '';
+        // Browser navigation: Accept includes text/html
+        // API call (Angular HttpClient): Accept includes application/json
+        if (accept.includes('text/html') && !accept.includes('application/json')) {
+          res.sendFile(join(distPath, 'index.html'));
           return;
         }
       }
       next();
     });
   }
+
+  // /status → 301 redirect to /dashboard
+  app.use((req: any, res: any, next: any) => {
+    if (req.path === '/status' || req.path === '/status/') {
+      res.redirect(301, '/dashboard');
+      return;
+    }
+    next();
+  });
 
   app.enableCors({
     origin: [
