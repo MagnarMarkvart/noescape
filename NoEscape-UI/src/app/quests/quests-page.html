@@ -7,14 +7,16 @@
     <div class="toolbar-right">
       <a routerLink="/quests/forge" class="forge-btn">Forge new</a>
       <div class="filters" role="tablist">
-        @for (f of ['all', 'available', 'locked', 'active', 'completed']; track f) {
+        @for (f of boards; track f.id) {
           <button
             type="button"
             class="chip"
-            [class.selected]="filter() === f"
-            (click)="setFilter(f)"
+            role="tab"
+            [class.selected]="board() === f.id"
+            [attr.aria-selected]="board() === f.id"
+            (click)="setBoard(f.id)"
           >
-            {{ f }}
+            {{ f.label }}
           </button>
         }
       </div>
@@ -28,51 +30,155 @@
   <div class="list-col">
     @if (loading()) {
       <p class="state">Loading…</p>
-    } @else if (quests().length === 0) {
-      <p class="state">No quests in this filter.</p>
-    } @else {
-      <ul class="quest-list">
-        @for (q of quests(); track q.id) {
-          <li>
-            <button
-              type="button"
-              class="quest-card"
-              [class.locked]="q.availability === 'locked'"
-              [class.active]="q.availability === 'active'"
-              [class.completed]="q.availability === 'completed'"
-              (click)="open(q)"
-            >
-              @if (q.coverUrl) {
-                <span
-                  class="card-thumb"
-                  [style.background-image]="'url(' + q.coverUrl + ')'"
-                  aria-hidden="true"
-                ></span>
-              }
-              <span class="card-body">
+    } @else if (board() === 'today') {
+      @if (todayQuests().length === 0) {
+        <p class="state">Nothing due today. In-progress quests are waiting in the next tab.</p>
+      } @else {
+        <ul class="quest-list">
+          @for (q of todayQuests(); track q.id) {
+            <li>
+              <button type="button" class="quest-card active" (click)="open(q)">
+                @if (coverBg(q); as bg) {
+                  <span class="card-thumb" [style.background-image]="bg" aria-hidden="true"></span>
+                }
+                <span class="card-body">
+                  <div class="card-top">
+                    <strong>{{ q.name }}</strong>
+                    <span class="tier">Due today</span>
+                  </div>
+                  <p class="summary">{{ q.journeyLabel || q.summary }}</p>
+                  <div class="mini-bar" aria-hidden="true">
+                    <span [style.width.%]="q.progressPercent"></span>
+                  </div>
+                  <p class="avail">{{ q.progressPercent }}% · {{ q.week.logged }}/{{ q.week.expected }} this week</p>
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    } @else if (board() === 'progress') {
+      @if (inProgress().length === 0) {
+        <p class="state">No quests in progress.</p>
+      } @else {
+        <ul class="quest-list">
+          @for (q of inProgress(); track q.id) {
+            <li>
+              <button type="button" class="quest-card active" (click)="open(q)">
+                @if (coverBg(q); as bg) {
+                  <span class="card-thumb" [style.background-image]="bg" aria-hidden="true"></span>
+                }
+                <span class="card-body">
+                  <div class="card-top">
+                    <strong>{{ q.name }}</strong>
+                    <span class="tier">{{ q.tier }}</span>
+                  </div>
+                  <p class="summary">{{ q.summary }}</p>
+                  <div class="mini-bar" aria-hidden="true">
+                    <span [style.width.%]="q.progressPercent"></span>
+                  </div>
+                  <p class="avail">
+                    {{ q.progressPercent }}%
+                    @if (q.journeyDueToday) {
+                      · due today
+                    }
+                  </p>
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    } @else if (board() === 'schedule') {
+      @if (inProgress().length === 0) {
+        <p class="state">No active schedule. Start a quest to see the week.</p>
+      } @else {
+        <ul class="schedule-list">
+          @for (q of inProgress(); track q.id) {
+            <li>
+              <button type="button" class="schedule-card" (click)="open(q)">
                 <div class="card-top">
                   <strong>{{ q.name }}</strong>
-                  <span class="tier">{{ q.tier }}</span>
+                  <span class="tier">{{ q.week.logged }}/{{ q.week.expected }}</span>
                 </div>
-                <p class="summary">{{ q.summary }}</p>
-                @if (q.requirements.length) {
-                  <ul class="reqs">
-                    @for (r of q.requirements; track r.label) {
-                      <li [class.met]="r.met" [class.unmet]="!r.met">
-                        {{ r.met ? '✓' : '✗' }} {{ r.label }}
-                        <span class="detail">({{ r.detail }})</span>
-                      </li>
-                    }
-                  </ul>
-                } @else {
-                  <p class="open-tag">No requirements — open to all</p>
+                <p class="summary">{{ q.journeyLabel || q.summary }}</p>
+                <ul class="week-row" aria-label="This week">
+                  @for (d of q.week.dates; track d.date) {
+                    <li [class.logged]="d.logged" [class.today]="d.isToday">
+                      <span>{{ weekdayLabel(d.date) }}</span>
+                      <strong>{{ d.logged ? '✓' : '·' }}</strong>
+                    </li>
+                  }
+                </ul>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    } @else if (board() === 'ready') {
+      @if (notStarted().length === 0) {
+        <p class="state">No waiting quests. Forge one.</p>
+      } @else {
+        <ul class="quest-list">
+          @for (q of notStarted(); track q.id) {
+            <li>
+              <button
+                type="button"
+                class="quest-card"
+                [class.locked]="q.availability === 'locked'"
+                (click)="open(q)"
+              >
+                @if (coverBg(q); as bg) {
+                  <span class="card-thumb" [style.background-image]="bg" aria-hidden="true"></span>
                 }
-                <p class="avail">{{ q.availability }}</p>
-              </span>
-            </button>
-          </li>
-        }
-      </ul>
+                <span class="card-body">
+                  <div class="card-top">
+                    <strong>{{ q.name }}</strong>
+                    <span class="tier">{{ q.tier }}</span>
+                  </div>
+                  <p class="summary">{{ q.summary }}</p>
+                  @if (q.requirements.length) {
+                    <ul class="reqs">
+                      @for (r of q.requirements; track r.label) {
+                        <li [class.met]="r.met" [class.unmet]="!r.met">
+                          {{ r.met ? '✓' : '✗' }} {{ r.label }}
+                        </li>
+                      }
+                    </ul>
+                  } @else {
+                    <p class="open-tag">No requirements — open to all</p>
+                  }
+                  <p class="avail">{{ q.availability }}</p>
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    } @else {
+      @if (completed().length === 0) {
+        <p class="state">No completed quests yet.</p>
+      } @else {
+        <ul class="quest-list">
+          @for (q of completed(); track q.id) {
+            <li>
+              <button type="button" class="quest-card completed" (click)="open(q)">
+                @if (coverBg(q); as bg) {
+                  <span class="card-thumb" [style.background-image]="bg" aria-hidden="true"></span>
+                }
+                <span class="card-body">
+                  <div class="card-top">
+                    <strong>{{ q.name }}</strong>
+                    <span class="tier">{{ q.tier }}</span>
+                  </div>
+                  <p class="summary">{{ q.summary }}</p>
+                  <p class="avail">completed</p>
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
     }
   </div>
 </section>

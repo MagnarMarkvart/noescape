@@ -80,6 +80,8 @@ model DailyTask {
   fixedXp         Int?
   effortLevel     Int       @default(5)
   durationMinutes Int       @default(45)
+  /// Work time from Horologium (rest and pause excluded).
+  elapsedMs       BigInt    @default(0)
   completed       Boolean   @default(false)
   xpAwarded       Int?
   activityId      Int?
@@ -137,30 +139,61 @@ model LevelUpEvent {
   @@index([skillId])
 }
 
-/// Completed Horologium (deep-work) focus session — awards Focus XP.
+/// Horologium work log — Focus per block, Discipline on sessio complete.
 model HorologiumSession {
-  id              Int      @id @default(autoincrement())
-  date            String
-  workMinutes     Int
-  restMinutes     Int
-  iterations      Int
-  durationMinutes Int
-  presetId        String?
-  skillId         Int?
-  skill           Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
-  xpAwarded       Int
-  activityId      Int?
-  note            String?
-  completedAt     DateTime @default(now())
+  id                   Int      @id @default(autoincrement())
+  date                 String
+  workMinutes          Int
+  restMinutes          Int
+  iterations           Int
+  durationMinutes      Int
+  presetId             String?
+  skillId              Int?
+  skill                Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  xpAwarded            Int
+  activityId           Int?
+  note                 String?
+  completedAt          DateTime @default(now())
+  /// block | goal | abandon | task | task_early
+  outcome              String   @default("complete")
+  endedEarly           Boolean  @default(false)
+  elapsedMinutes       Int?
+  questRunId           Int?
+  taskLabel            String?
+  focusXpAwarded       Int      @default(0)
+  disciplineXpAwarded  Int      @default(0)
+  startedAt            DateTime?
+  watchName            String?
+  /// JSON array of { slug, name, icon, xp }
+  skillXpJson          String?
 
   @@index([date])
   @@index([completedAt])
+  @@index([questRunId])
+}
+
+/// Count-up project stopwatch — work time only, can span days.
+model HorologiumWatch {
+  id            Int       @id @default(autoincrement())
+  name          String
+  status        String    @default("ACTIVE")
+  elapsedMs     BigInt    @default(0)
+  running       Boolean   @default(false)
+  startedAt     DateTime  @default(now())
+  lastStartedAt DateTime?
+  archivedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
 }
 
 /// Singleton player profile (titles, informative status).
 model Character {
   id        Int      @id @default(1)
   title     String   @default("Peasant")
+  nickname  String   @default("")
+  timezone  String   @default("Europe/Tallinn")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -186,6 +219,18 @@ model Quest {
   skillSlug      String?
   durationDays   Int?
   kind           String     @default("GENERIC")
+  rules          String?
+  stakes         String?
+  howToWin       String?
+  destination    String?
+  journeyLabel   String?
+  journeyNote    String?
+  /// Days per week the journey check-in is expected (1–7).
+  commitmentLevel Int       @default(7)
+  /// Total XP awarded on completion, split by skillWeightsJson.
+  totalXp         Int       @default(0)
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10 when any skills are set.
+  skillWeightsJson String?
   skillReqsJson  String?
   unlockReqsJson String?
   questReqsJson  String?
@@ -195,19 +240,36 @@ model Quest {
   sortOrder      Int        @default(0)
   createdAt      DateTime   @default(now())
   runs           QuestRun[]
+  subtasks       QuestSubtask[]
+}
+
+model QuestSubtask {
+  id            Int                      @id @default(autoincrement())
+  questId       Int
+  quest         Quest                    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  title         String
+  sortOrder     Int                      @default(0)
+  /// When true, daily journey check-in stays locked until this subtask is done.
+  gatesJourney  Boolean                  @default(false)
+  completions   QuestSubtaskCompletion[]
+
+  @@index([questId])
 }
 
 model QuestRun {
-  id          Int           @id @default(autoincrement())
-  questId     Int
-  quest       Quest         @relation(fields: [questId], references: [id], onDelete: Cascade)
-  status      String        @default("ACTIVE")
-  streakCount Int           @default(0)
-  bestStreak  Int           @default(0)
-  startedAt   DateTime      @default(now())
-  completedAt DateTime?
-  lastLogDate String?
-  logs        QuestDayLog[]
+  id               Int                      @id @default(autoincrement())
+  questId          Int
+  quest            Quest                    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  status           String                   @default("ACTIVE")
+  streakCount      Int                      @default(0)
+  bestStreak       Int                      @default(0)
+  startedAt        DateTime                 @default(now())
+  completedAt      DateTime?
+  lastLogDate      String?
+  destinationDone  Boolean                  @default(false)
+  logs             QuestDayLog[]
+  journeyLogs      QuestJourneyLog[]
+  subtaskCompletions QuestSubtaskCompletion[]
 
   @@index([status])
   @@index([questId])
@@ -225,6 +287,33 @@ model QuestDayLog {
 
   @@unique([runId, date])
   @@index([date])
+}
+
+model QuestJourneyLog {
+  id        Int      @id @default(autoincrement())
+  runId     Int
+  run       QuestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  date      String
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([runId, date])
+  @@index([date])
+}
+
+model QuestSubtaskCompletion {
+  id          Int          @id @default(autoincrement())
+  runId       Int
+  run         QuestRun     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  subtaskId   Int
+  subtask     QuestSubtask @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  completedAt DateTime     @default(now())
+  /// False while Horologium is still tracking this subtask.
+  done        Boolean      @default(true)
+  elapsedMs   BigInt       @default(0)
+
+  @@unique([runId, subtaskId])
+  @@index([runId])
 }
 
 model Habit {

@@ -1,4 +1,4 @@
-<section class="horologium-shell" [attr.data-phase]="phase()">
+<section class="horologium-shell" [attr.data-phase]="phase()" [class.focus]="focusMode()">
   <header class="toolbar">
     <div class="brand-block">
       <p class="kicker">Deep work</p>
@@ -8,10 +8,17 @@
       <button
         type="button"
         class="ghost"
-        (click)="toggleMute()"
-        [attr.aria-pressed]="muted()"
+        (click)="enterScenery()"
       >
-        {{ muted() ? 'Unmute' : 'Mute' }}
+        Enter Scenery
+      </button>
+      <button
+        type="button"
+        class="ghost"
+        (click)="toggleJinglesMute()"
+        [attr.aria-pressed]="jinglesMuted()"
+      >
+        {{ jinglesMuted() ? 'Chimes off' : 'Mute chimes' }}
       </button>
     </div>
   </header>
@@ -21,9 +28,10 @@
   }
 
   <div class="layout">
+    <div class="timer-stack">
     <section class="dial-panel" aria-live="polite">
       <div class="ring-wrap">
-        <div class="ring" [attr.data-phase]="phase()">
+        <div class="ring" [attr.data-phase]="phase()" [class.vigilia]="isVigilia()">
           <svg class="ring-svg" viewBox="0 0 120 120" aria-hidden="true">
             <circle class="ring-track" cx="60" cy="60" r="54" />
             <circle
@@ -35,15 +43,37 @@
             />
           </svg>
           <div class="ring-core">
-            <p class="phase-tag">{{ phaseLabel() }}</p>
-            <p class="clock">{{ remainingLabel() }}</p>
-            <p class="session-meta">{{ sessionLabel() }}</p>
+            @if (isVigilia()) {
+              <p class="phase-tag">Vigilia</p>
+              <p class="clock">{{ watchElapsedLabel() }}</p>
+              <p class="session-meta">{{ selectedWatch()?.name || 'No project' }}</p>
+            } @else {
+              <p class="phase-tag">{{ phaseLabel() }}</p>
+              <p class="clock">{{ remainingLabel() }}</p>
+              <p class="session-meta">{{ sessionLabel() }}</p>
+              @if (restCarryMs() > 0) {
+                <p class="session-meta carry">Next rest {{ nextRestLabel() }}</p>
+              }
+            }
           </div>
         </div>
       </div>
 
       <div class="controls">
-        @if (phase() === 'idle') {
+        @if (isVigilia()) {
+          @if (watchRunning()) {
+            <button type="button" class="primary" (click)="pause()">Pause</button>
+          } @else {
+            <button
+              type="button"
+              class="primary"
+              (click)="start()"
+              [disabled]="!selectedWatch()"
+            >
+              Start Vigilia
+            </button>
+          }
+        } @else if (phase() === 'idle') {
           <button type="button" class="primary" (click)="start()">
             {{ isTrack() ? 'Start Track' : 'Begin Sessio' }}
           </button>
@@ -51,33 +81,77 @@
           <button type="button" class="primary" (click)="reset()" [disabled]="awarding()">
             {{ awarding() ? 'Logging…' : 'New Sessio' }}
           </button>
+          @if (canCompleteTask()) {
+            <button
+              type="button"
+              class="ghost"
+              (click)="completeBoundTask()"
+              [disabled]="awarding()"
+            >
+              {{ taskLabel() }} done
+            </button>
+          }
         } @else {
           @if (running()) {
             <button type="button" class="primary" (click)="pause()">Pause</button>
           } @else {
             <button type="button" class="primary" (click)="resume()">Resume</button>
           }
-          <button type="button" class="ghost" (click)="skip()">Skip</button>
-          <button type="button" class="ghost" (click)="reset()">Stop</button>
+          @if (canSkipRest()) {
+            <button type="button" class="ghost" (click)="skipRest()" [disabled]="awarding()">
+              Skip rest
+            </button>
+          }
+          <button type="button" class="ghost" (click)="reset()" [disabled]="awarding()">Stop</button>
+          @if (canCompleteTask()) {
+            <button
+              type="button"
+              class="ghost"
+              (click)="completeBoundTask()"
+              [disabled]="awarding()"
+            >
+              {{ taskLabel() }} done
+            </button>
+          }
         }
       </div>
 
-      @if (preview(); as xp) {
+      <div class="focus-props">
+      @if (showWatchWidget()) {
+        @if (selectedWatch(); as watch) {
+          <aside class="watch-widget" aria-label="Project watch">
+            <div>
+              <p class="kicker">Vigilia</p>
+              <p class="watch-widget-name">{{ watch.name }}</p>
+            </div>
+            <p class="watch-live">{{ watchElapsedLabel() }}</p>
+            <button type="button" class="ghost chip" (click)="toggleWatchWidget()">
+              Hide
+            </button>
+          </aside>
+        }
+      } @else if (!isVigilia() && selectedWatch() && (isActive() || phase() === 'complete')) {
+        <button type="button" class="ghost chip widget-show" (click)="toggleWatchWidget()">
+          Show vigilia
+        </button>
+      }
+
+      @if (!isVigilia() && !focusMode() && preview(); as xp) {
         <ul class="xp-preview">
           @if (xp.mode === 'adhoc') {
             <li>
               <span class="xp-label">Each work block</span>
-              <span class="xp-value">~{{ xp.blockXp | number }} XP</span>
+              <span class="xp-value">~{{ xp.blockXp | number }} Focus</span>
             </li>
           } @else {
             <li>
               <span class="xp-label">Each work block</span>
-              <span class="xp-value">~{{ xp.blockXp | number }} XP</span>
+              <span class="xp-value">~{{ xp.blockXp | number }} Focus</span>
             </li>
             <li>
-              <span class="xp-label">Finish full goal (extra)</span>
-              @if (xp.goalBonusXp > 0) {
-                <span class="xp-value">+{{ xp.goalBonusXp | number }} XP</span>
+              <span class="xp-label">Finish sessio</span>
+              @if ((xp.disciplineIfCompleted ?? xp.goalBonusXp) > 0) {
+                <span class="xp-value">+{{ (xp.disciplineIfCompleted ?? xp.goalBonusXp) | number }} Discipline</span>
               } @else {
                 <span class="xp-value muted">none (work under 15m)</span>
               }
@@ -86,11 +160,47 @@
               <span class="xp-label">Total if finished</span>
               <span class="xp-value">{{ xp.totalIfCompleted | number }} XP</span>
             </li>
+            @if (!taskCompleted()) {
+              <li>
+                <span class="xp-label">Abandon (per unfinished split)</span>
+                <span class="xp-value penalty">−{{ xp.abandonPenaltyPerSplit | number }} Focus</span>
+              </li>
+            }
+            @if (isActive() && abandonPenaltyNow() > 0) {
+              <li class="xp-total">
+                <span class="xp-label">If you stop now</span>
+                <span class="xp-value penalty">−{{ abandonPenaltyNow() | number }} Focus</span>
+              </li>
+            }
+          }
+          @if (taskXpPreview(); as taskXp) {
+            <li>
+              <span class="xp-label">Daily copies session</span>
+              <span class="xp-value">{{ taskXp.focus | number }} Focus · {{ taskXp.discipline | number }} Discipline</span>
+            </li>
+            @if (taskXp.streak) {
+              <li>
+                <span class="xp-label">Clean log</span>
+                <span class="xp-value muted">own day XP</span>
+              </li>
+            }
+            @for (s of taskXp.specials; track s.name) {
+              <li>
+                <span class="xp-label">{{ s.name }} (daily)</span>
+                <span class="xp-value">+{{ s.xp | number }}</span>
+              </li>
+            }
+            @for (s of taskXp.perLap; track s.name) {
+              <li>
+                <span class="xp-label">{{ s.name }} / lap</span>
+                <span class="xp-value muted">~{{ s.xp | number }}</span>
+              </li>
+            }
           }
         </ul>
       }
 
-      @if (isActive() || phase() === 'complete') {
+      @if (!isVigilia() && (isActive() || phase() === 'complete')) {
         <dl class="live-stats">
           <div>
             <dt>Work</dt>
@@ -98,7 +208,7 @@
           </div>
           <div>
             <dt>Rest</dt>
-            <dd>{{ activeConfig().restMinutes }}m</dd>
+            <dd>{{ restStatLabel() }}</dd>
           </div>
           <div>
             <dt>{{ isTrack() ? 'Block' : 'Goal' }}</dt>
@@ -114,8 +224,45 @@
           </div>
         </dl>
       }
+      </div>
     </section>
 
+      @if (!focusMode()) {
+      <section class="log-panel" aria-label="Session log">
+        <header class="pane-head">
+          <h2>Acta</h2>
+          <a routerLink="/horologium/log" class="horo-log-link">Horo Log →</a>
+        </header>
+
+        @if (sessions().length === 0) {
+          <p class="log-empty muted">—</p>
+        } @else {
+          <ul class="session-log">
+            @for (row of sessions(); track row.id) {
+              <li>
+                <div class="log-top">
+                  <strong>{{ row.date }}</strong>
+                  <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
+                    {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
+                  </span>
+                </div>
+                @if (row.endedEarly) {
+                  <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
+                }
+                <p class="log-meta">
+                  <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
+                  {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
+                </p>
+              </li>
+            }
+          </ul>
+          <p class="log-foot muted">Showing last 3 · full archive in Horo Log</p>
+        }
+      </section>
+      }
+    </div>
+
+    @if (!focusMode()) {
     <div class="side-stack">
       <section class="setup-panel" [class.locked]="!canEdit()" aria-label="Session setup">
         <header class="pane-head">
@@ -130,22 +277,30 @@
           <button
             type="button"
             class="ghost chip"
-            [class.selected]="mode() === 'planned'"
-            (click)="setMode('planned')"
+            [class.selected]="setupKind() === 'planned'"
+            (click)="setSetupKind('planned')"
           >
             Sessio
           </button>
           <button
             type="button"
             class="ghost chip"
-            [class.selected]="mode() === 'adhoc'"
-            (click)="setMode('adhoc')"
+            [class.selected]="setupKind() === 'adhoc'"
+            (click)="setSetupKind('adhoc')"
           >
             Track
           </button>
+          <button
+            type="button"
+            class="ghost chip"
+            [class.selected]="isVigilia()"
+            (click)="setSetupKind('vigilia')"
+          >
+            Vigilia
+          </button>
         </fieldset>
 
-        @if (mode() === 'planned') {
+        @if (!isVigilia() && mode() === 'planned') {
           <fieldset class="picker-block" [disabled]="!canEdit()">
             <legend>Presets</legend>
             <div class="preset-grid" role="listbox" aria-label="Timer presets">
@@ -177,6 +332,7 @@
           </fieldset>
         }
 
+        @if (!isVigilia()) {
         <form class="custom-form" (submit)="$event.preventDefault()">
           <fieldset class="duration-fields" [disabled]="!canEdit()">
             <legend class="sr-only">Durations</legend>
@@ -207,57 +363,189 @@
               </label>
             }
           </fieldset>
-
-          @if (mode() === 'planned') {
-            <fieldset class="toggle-row" [disabled]="!canEdit()">
-              <legend>After final work</legend>
-              <button
-                type="button"
-                class="ghost chip"
-                [class.selected]="draft().restAfterLast"
-                (click)="setRestAfterLast(true)"
-              >
-                Rest
-              </button>
-              <button
-                type="button"
-                class="ghost chip"
-                [class.selected]="!draft().restAfterLast"
-                (click)="setRestAfterLast(false)"
-              >
-                End
-              </button>
-            </fieldset>
-          }
         </form>
-      </section>
+        }
 
-      <section class="log-panel" aria-label="Session log">
-        <header class="pane-head">
-          <h2>Acta</h2>
-          <a routerLink="/horologium/log" class="horo-log-link">Horo Log →</a>
-        </header>
-
-        @if (sessions().length === 0) {
-          <p class="log-empty muted">—</p>
-        } @else {
-          <ul class="session-log">
-            @for (row of sessions(); track row.id) {
-              <li>
-                <div class="log-top">
-                  <strong>{{ row.date }}</strong>
-                  <span class="xp-chip">+{{ row.xpAwarded | number }} XP</span>
-                </div>
-                <p class="log-meta">
-                  <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
-                  {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
-                </p>
-              </li>
+        @if (!isVigilia() && (dailies().length > 0 || boundDaily())) {
+        <fieldset class="task-bind" [disabled]="!canEdit()">
+          <legend>Task</legend>
+          <select
+            [value]="boundDailyId()"
+            (change)="selectDaily($any($event.target).value)"
+          >
+            <option value="">None — Focus &amp; Discipline only</option>
+            @for (d of dailies(); track bindKey(d)) {
+              <option [value]="bindKey(d)">
+                @switch (d.source) {
+                  @case ('daily') { Daily · {{ d.name }} }
+                  @case ('subtask') { Subtask · {{ d.journeyLabel || d.name }} }
+                  @default { Check-in · {{ d.journeyLabel || d.name }} }
+                }
+              </option>
             }
-          </ul>
-          <p class="log-foot muted">Showing last 3 · full archive in Horo Log</p>
+          </select>
+          @if (boundDaily(); as daily) {
+            <p class="muted">
+              @if (daily.source !== 'quest') {
+                <span class="watch-live">{{ taskElapsedLabel() }}</span>
+                tracked (work only)
+              }
+            </p>
+            <p class="muted">
+              @if (taskCompleted()) {
+                {{ daily.journeyLabel || daily.name }} marked done
+              } @else if (daily.source === 'daily') {
+                Completing grants this daily's XP. Finish early to keep session XP.
+              } @else {
+                Mini quest specials while this task is bound
+              }
+            </p>
+          }
+        </fieldset>
+        }
+
+        @if (isVigilia()) {
+        <fieldset class="task-bind" [disabled]="!canEdit()">
+          <legend>Vigilia</legend>
+          <select
+            [value]="selectedWatchId() ?? ''"
+            (change)="selectWatch($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (w of projectWatches(); track w.id) {
+              <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
+            }
+          </select>
+          <form class="watch-create" (submit)="$event.preventDefault(); createWatch()">
+            <input
+              type="text"
+              maxlength="80"
+              [value]="watchDraftName()"
+              (input)="setWatchDraftName($any($event.target).value)"
+              placeholder="New project"
+            />
+            <button type="submit" class="ghost chip" [disabled]="!watchDraftName().trim()">
+              Create
+            </button>
+          </form>
+          @if (selectedWatch(); as watch) {
+            <div class="watch-actions">
+              <button type="button" class="ghost chip" (click)="archiveWatch(watch.id)">
+                Archive
+              </button>
+            </div>
+            <p class="muted">{{ watchHint() }}</p>
+          }
+        </fieldset>
+        } @else if (projectWatches().length > 0) {
+        <fieldset class="task-bind" [disabled]="!canEdit()">
+          <legend>Vigilia</legend>
+          <select
+            [value]="selectedWatchId() ?? ''"
+            (change)="selectWatch($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (w of projectWatches(); track w.id) {
+              <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
+            }
+          </select>
+          @if (selectedWatch(); as watch) {
+            <div class="watch-actions">
+              <button
+                type="button"
+                class="ghost chip"
+                [class.selected]="watchWidgetVisible()"
+                (click)="toggleWatchWidget()"
+              >
+                {{ watchWidgetVisible() ? 'Widget on' : 'Widget off' }}
+              </button>
+            </div>
+            <p class="muted">{{ watchHint() }}</p>
+          }
+        </fieldset>
         }
       </section>
+
+      <section class="setup-panel scenery-pick" aria-label="Scenery">
+        <header class="pane-head">
+          <h2>Scenery</h2>
+        </header>
+        <div class="preset-grid" role="listbox" aria-label="Scenery loops">
+          @for (scene of scenery; track scene.id) {
+            <button
+              type="button"
+              class="pick-tile"
+              role="option"
+              [class.selected]="sceneryId() === scene.id"
+              [attr.aria-selected]="sceneryId() === scene.id"
+              (click)="selectScenery(scene.id)"
+            >
+              <span class="pick-label">{{ scene.name }}</span>
+            </button>
+          }
+        </div>
+        <button type="button" class="ghost chip" (click)="enterScenery()">
+          Enter Scenery
+        </button>
+      </section>
     </div>
+    }
   </div>
 </section>
+
+@if (sceneryOpen()) {
+  <app-horologium-scenery
+    [src]="selectedScene().src"
+    [name]="selectedScene().name"
+    [audio]="selectedScene().audio ?? ''"
+    [sceneId]="sceneryId()"
+    [taskLabel]="taskLabel()"
+    [canCompleteTask]="canCompleteTask()"
+    [dailies]="dailies()"
+    [boundDailyId]="boundDailyId()"
+    [canEdit]="canEdit()"
+    [setupKind]="setupKind()"
+    [widgetVisible]="watchWidgetVisible()"
+    [blockEscape]="sessionPrompt() !== null"
+    (closed)="exitScenery()"
+    (taskDone)="completeBoundTask()"
+    (started)="startFromScenery()"
+    (stopped)="reset()"
+    (sceneChange)="selectScenery($event)"
+    (dailyChange)="selectDaily($event)"
+    (setupKindChange)="setSetupKind($event)"
+  />
+}
+
+@if (sessionPrompt(); as prompt) {
+  <div class="confirm-layer" (click)="closePrompt()">
+    <div
+      class="confirm-card"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="horo-confirm-title"
+      aria-describedby="horo-confirm-body"
+      (click)="$event.stopPropagation()"
+    >
+      <p class="confirm-kicker">Horologium</p>
+      <h2 id="horo-confirm-title">{{ prompt.title }}</h2>
+      <p id="horo-confirm-body">{{ prompt.body }}</p>
+      @if (prompt.penalty > 0) {
+        <p class="confirm-penalty">−{{ prompt.penalty | number }} Focus XP</p>
+      }
+      <div class="confirm-actions">
+        <button type="button" class="ghost" (click)="secondaryPrompt()">
+          {{ prompt.cancelLabel }}
+        </button>
+        <button
+          type="button"
+          class="danger"
+          (click)="acceptPrompt()"
+          [disabled]="awarding()"
+        >
+          {{ prompt.confirmLabel }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

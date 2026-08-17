@@ -2,40 +2,307 @@
   <header class="toolbar">
     <div>
       <p class="kicker">Workshop</p>
-      <h1>Forge a quest</h1>
-      <p class="lede">Configure a custom IRL goal. It will appear in your catalogue.</p>
+      <h1>{{ isEdit() ? 'Amend quest' : 'Forge a quest' }}</h1>
+      <p class="lede">
+        @if (isEdit()) {
+          Changes apply even while the quest is in progress. Progress, timestamps, and missed days stay.
+        } @else {
+          Structure the path: prerequisites, a daily journey, subtasks, and a destination.
+        }
+      </p>
     </div>
-    <a routerLink="/quests" class="back">← Catalogue</a>
+    <a
+      class="back"
+      [routerLink]="isEdit() ? ['/quests', editId()] : '/quests'"
+    >← Catalogue</a>
   </header>
 
   @if (toast()) {
     <p class="toast" role="status">{{ toast() }}</p>
   }
 
-  <form class="forge-form" (submit)="$event.preventDefault(); createQuest()">
-    <label>
-      Name
-      <input type="text" [formField]="createForm.name" placeholder="Custodia Mentis" />
-    </label>
-    <label>
-      Summary
-      <input
-        type="text"
-        [formField]="createForm.summary"
-        placeholder="One-line pitch"
-      />
-    </label>
-    <label>
-      Description
-      <textarea
-        [formField]="createForm.description"
-        rows="8"
-        placeholder="Rules, stakes, how to win…"
-      ></textarea>
-    </label>
+  <form class="forge-form" (submit)="$event.preventDefault(); saveQuest()">
+    <fieldset>
+      <legend>Identity</legend>
+      <label>
+        Name
+        <input type="text" [formField]="createForm.name" placeholder="Forge the deep-work habit" />
+      </label>
+      <label>
+        Summary
+        <input
+          type="text"
+          [formField]="createForm.summary"
+          placeholder="One-line pitch"
+        />
+      </label>
+      <label>
+        Cover image
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" (change)="onCover($event)" />
+      </label>
+      @if (coverPreview(); as src) {
+        <div class="cover-row">
+          <span class="cover-preview" [style.background-image]="'url(' + src + ')'" aria-hidden="true"></span>
+          <button type="button" class="ghost-btn" (click)="clearCover()">Remove cover</button>
+        </div>
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Briefing</legend>
+      <label>
+        Rules
+        <textarea [formField]="createForm.rules" rows="3" placeholder="What is allowed, what is not…"></textarea>
+      </label>
+      <label>
+        Stakes
+        <textarea [formField]="createForm.stakes" rows="3" placeholder="Why this matters if you fail or succeed…"></textarea>
+      </label>
+      <label>
+        How to win
+        <textarea [formField]="createForm.howToWin" rows="3" placeholder="What “done” looks like in practice…"></textarea>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Prerequisites</legend>
+      <p class="hint">Level and quest gates before this can start.</p>
+      <div class="inline-add">
+        <label>
+          Skill
+          <select [value]="skillReqSlug()" (change)="setSkillReqSlug($event)">
+            <option value="">—</option>
+            @for (s of skills(); track s.slug) {
+              <option [value]="s.slug">{{ s.icon }} {{ s.name }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Level
+          <input
+            type="number"
+            min="1"
+            max="99"
+            [value]="skillReqLevel()"
+            (input)="setSkillReqLevel($event)"
+          />
+        </label>
+        <button type="button" class="ghost-btn" (click)="addSkillReq()">Add</button>
+      </div>
+      @if (skillReqs().length) {
+        <ul class="chip-list">
+          @for (r of skillReqs(); track r.slug) {
+            <li>
+              {{ skillName(r.slug) }} Lv {{ r.level }}
+              <button type="button" (click)="removeSkillReq(r.slug)" aria-label="Remove skill requirement">×</button>
+            </li>
+          }
+        </ul>
+      }
+      @if (catalogChoices().length) {
+        <p class="sublegend">Required quests</p>
+        <ul class="check-list">
+          @for (q of catalogChoices(); track q.id) {
+            <li>
+              <label>
+                <input
+                  type="checkbox"
+                  [checked]="questReqs().includes(q.slug)"
+                  (change)="toggleQuestReq(q.slug)"
+                />
+                {{ q.name }}
+              </label>
+            </li>
+          }
+        </ul>
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Journey</legend>
+      <p class="hint">
+        Continuous work that moves you toward the destination. Logged on the days your commitment expects.
+      </p>
+      <label>
+        Continuous activity
+        <input
+          type="text"
+          [formField]="createForm.journeyLabel"
+          placeholder="1h deepwork arendust"
+        />
+      </label>
+      <label>
+        Journey notes
+        <textarea
+          [formField]="createForm.journeyNote"
+          rows="2"
+          placeholder="What “showing up” means on a given day…"
+        ></textarea>
+      </label>
+      <label>
+        Commitment
+        <input
+          type="range"
+          min="1"
+          max="7"
+          [value]="createModel().commitmentLevel"
+          (input)="setCommitment($event)"
+        />
+        <span class="commit-label">{{ commitmentLabel(createModel().commitmentLevel) }}</span>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Subtasks</legend>
+      <p class="hint">
+        Each completed subtask fills the green progress bar. All of them = 90%.
+        Mark a subtask as a gate to lock the daily check-in until it is done.
+      </p>
+      <div class="inline-add">
+        <label class="grow">
+          Add subtask
+          <input
+            type="text"
+            [value]="subtaskDraft()"
+            (input)="setSubtaskDraft($event)"
+            (keydown.enter)="$event.preventDefault(); addSubtask()"
+            placeholder="Ship the first vertical slice"
+          />
+        </label>
+        <label class="gate-toggle">
+          <input
+            type="checkbox"
+            [checked]="gateDraft()"
+            (change)="setGateDraft($event)"
+          />
+          Gate
+        </label>
+        <button type="button" class="ghost-btn" (click)="addSubtask()">Add</button>
+      </div>
+      @if (subtasks().length) {
+        <ol class="subtask-list">
+          @for (t of subtasks(); track t.id ?? $index) {
+            <li>
+              <span>{{ t.title }}</span>
+              <label class="gate-toggle">
+                <input
+                  type="checkbox"
+                  [checked]="t.gatesJourney"
+                  (change)="toggleGate($index)"
+                />
+                Gate
+              </label>
+              <button type="button" (click)="removeSubtask($index)" aria-label="Remove subtask">×</button>
+            </li>
+          }
+        </ol>
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Destination</legend>
+      <p class="hint">What must be true to mark the quest complete (the last 10%).</p>
+      <label>
+        Destination
+        <textarea
+          [formField]="createForm.destination"
+          rows="3"
+          placeholder="Feature is live in production and used for a week."
+        ></textarea>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Skill integration</legend>
+      <p class="hint">
+        0, 1, or many skills. Weight is always {{ weightTotal }} points, split at creation.
+        10k XP with Cooking 7 and Order 3 → 7k Cooking, 3k Order.
+      </p>
+      <label>
+        Total completion XP
+        <input
+          type="number"
+          min="0"
+          step="100"
+          [value]="createModel().totalXp"
+          (input)="setTotalXp($event)"
+        />
+      </label>
+      <div class="inline-add">
+        <label class="grow">
+          Add skill
+          <select [value]="skillPick()" (change)="setSkillPick($event)">
+            <option value="">— none —</option>
+            @for (s of availableSkills(); track s.slug) {
+              <option [value]="s.slug">{{ s.icon }} {{ s.name }}</option>
+            }
+          </select>
+        </label>
+        <button type="button" class="ghost-btn" (click)="addSkillShare()">Add</button>
+      </div>
+      @if (skillWeights().length === 0) {
+        <p class="hint">No skills — completion awards no skill XP.</p>
+      } @else {
+        <ul class="weight-list">
+          @for (share of xpShares(); track share.slug) {
+            <li>
+              <span class="weight-name">{{ skillName(share.slug) }}</span>
+              <span class="weight-controls">
+                <button
+                  type="button"
+                  (click)="bumpWeight(share.slug, -1)"
+                  [disabled]="share.weight <= 1"
+                  aria-label="Decrease weight"
+                >
+                  −
+                </button>
+                <strong>{{ share.weight }}/{{ weightTotal }}</strong>
+                <button
+                  type="button"
+                  (click)="bumpWeight(share.slug, 1)"
+                  [disabled]="weightRemaining() <= 0"
+                  aria-label="Increase weight"
+                >
+                  +
+                </button>
+              </span>
+              <span class="weight-xp">{{ share.xp | number }} XP</span>
+              <button
+                type="button"
+                class="ghost-btn"
+                (click)="removeSkillShare(share.slug)"
+                aria-label="Remove skill"
+              >
+                ×
+              </button>
+            </li>
+          }
+        </ul>
+        <p class="commit-label" [class.warn]="!weightsValid()">
+          @if (weightsValid()) {
+            All {{ weightTotal }} points assigned
+          } @else {
+            {{ weightRemaining() }} point{{ weightRemaining() === 1 ? '' : 's' }} left to assign
+          }
+        </p>
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Rewards</legend>
+      <label>
+        Title on completion
+        <input type="text" [formField]="createForm.titleReward" placeholder="Optional character title" />
+      </label>
+    </fieldset>
+
     <div class="actions">
-      <button type="submit" class="primary" [disabled]="creating()">
-        {{ creating() ? 'Forging…' : 'Forge quest' }}
+      <button type="submit" class="primary" [disabled]="saving() || loading() || !weightsValid()">
+        @if (saving()) {
+          {{ isEdit() ? 'Saving…' : 'Forging…' }}
+        } @else {
+          {{ isEdit() ? 'Save changes' : 'Forge quest' }}
+        }
       </button>
       <a routerLink="/quests" class="ghost">Cancel</a>
     </div>

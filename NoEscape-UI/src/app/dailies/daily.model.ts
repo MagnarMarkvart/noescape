@@ -23,6 +23,7 @@ export interface DailyTaskSlot {
   fixedXp?: number | null;
   effortLevel: number;
   durationMinutes: number;
+  elapsedMs?: number;
   completed: boolean;
   xpAwarded: number | null;
   completedAt: string | null;

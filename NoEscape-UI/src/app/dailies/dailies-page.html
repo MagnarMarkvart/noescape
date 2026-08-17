@@ -21,19 +21,22 @@
     <div class="toolbar-actions">
       <a class="ghost linkish" routerLink="/dailies/defaults">Defaults</a>
       @if (board(); as current) {
-        @if (current.canCopyIncomplete) {
+        @if (current.canCopyIncomplete && canMutate()) {
           <button type="button" (click)="copyIncomplete()">Carry Over</button>
         }
-        @if (current.isEditable && current.filledCount > 0) {
+        @if (canMutate() && current.filledCount > 0) {
           <button type="button" (click)="sealDay()">Seal</button>
         }
         @if (current.sealRequired) {
           <span class="seal-flag">Seal required</span>
         }
-        @if (current.readOnly) {
-          <span class="seal-flag">Read only</span>
+        @if (isPast() && !canMutate()) {
+          <button type="button" (click)="unlockHistory()">Edit</button>
         }
-        @if (current.isEditable && current.filledCount > 0) {
+        @if (isPast() && historyUnlocked()) {
+          <button type="button" class="ghost" (click)="lockHistory()">Done</button>
+        }
+        @if (canMutate() && current.filledCount > 0) {
           <button type="button" class="ghost" (click)="toggleSetup()">
             {{ setupOpen() ? 'Tasks' : 'Setup' }}
           </button>
@@ -60,12 +63,12 @@
         <span class="stat-label">XP</span>
         <span class="stat-value">{{ current.earnedXp | number }}</span>
       </div>
-      @if (current.isSealed) {
+      @if (current.isSealed && !canMutate()) {
         <div class="stat sealed">
           <span class="stat-label">Status</span>
           <span class="stat-value">Sealed</span>
         </div>
-      } @else if (current.readOnly) {
+      } @else if (isPast() && !canMutate()) {
         <div class="stat sealed">
           <span class="stat-label">Status</span>
           <span class="stat-value">History</span>
@@ -268,7 +271,7 @@
                       <button
                         type="button"
                         class="empty-slot"
-                        [disabled]="current.readOnly"
+                        [disabled]="!canMutate()"
                         (click)="startEdit(slot)"
                       >
                         <span class="empty-mark">+</span>
@@ -279,7 +282,7 @@
                         type="button"
                         class="filled-chip"
                         (click)="startEdit(slot)"
-                        [disabled]="slot.completed || current.readOnly"
+                        [disabled]="slot.completed || !canMutate()"
                       >
                         <span aria-hidden="true">{{ slot.skill?.icon }}</span>
                         <span class="filled-chip-text">
@@ -292,7 +295,7 @@
                 }
               </ul>
 
-              @if (tier.importance === 'REGULAR' && current.canAddRegular) {
+              @if (tier.importance === 'REGULAR' && current.canAddRegular && canMutate()) {
                 <button type="button" class="ghost add-regular" (click)="addRegularSlot()">
                   + Regular
                 </button>
@@ -305,7 +308,7 @@
       <section class="board-pane" aria-label="Configured dailies">
         @if (filledSlots().length === 0) {
           <div class="board-empty">
-            @if (current.isEditable) {
+            @if (canMutate()) {
               <button type="button" (click)="toggleSetup(true)">Setup</button>
             } @else {
               <span class="muted">No tasks logged.</span>
@@ -358,10 +361,14 @@
                                 <dt>Duration</dt>
                                 <dd>{{ formatDuration(slot.durationMinutes) }}</dd>
                               </div>
+                              <div>
+                                <dt>Tracked</dt>
+                                <dd>{{ formatElapsed(slot.elapsedMs) }}</dd>
+                              </div>
                             </dl>
 
                             <div class="quest-actions">
-                              @if (current.isEditable) {
+                              @if (canMutate()) {
                                 @if (!slot.completed) {
                                   <button
                                     type="button"
@@ -388,7 +395,7 @@
                               }
                             </div>
 
-                            @if (current.isEditable && !slot.completed) {
+                            @if (canMutate() && !slot.completed) {
                               <button
                                 type="button"
                                 class="icon-clear"

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Quest" ADD COLUMN "totalXp" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "Quest" ADD COLUMN "skillWeightsJson" TEXT;

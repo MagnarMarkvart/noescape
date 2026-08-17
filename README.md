@@ -8,13 +8,14 @@ Life RPG — real-world skills, RuneScape-shaped progression, daily quest log.
 npm install
 npm install --prefix no-escape-back
 npm install --prefix NoEscape-UI
-npm run db:migrate --prefix no-escape-back   # if needed
+cp no-escape-back/.env.example no-escape-back/.env
+npm run db:migrate
 npm run db:seed
 npm run dev
 ```
 
 - Backend: `http://localhost:3000`
-- UI Status: `http://localhost:4200/status`
+- UI Dashboard: `http://localhost:4200/status`
 - UI Dailies: `http://localhost:4200/dailies`
 
 ---

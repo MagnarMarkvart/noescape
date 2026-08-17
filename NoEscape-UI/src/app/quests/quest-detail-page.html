@@ -6,6 +6,9 @@
   <div class="veil" aria-hidden="true"></div>
 
   <a class="close" routerLink="/quests" aria-label="Back to quests">✕</a>
+  @if (quest(); as qHead) {
+    <a class="edit-link" [routerLink]="['/quests', qHead.id, 'edit']">Edit</a>
+  }
 
   @if (loading()) {
     <p class="state">Unfurling the scroll…</p>
@@ -17,6 +20,12 @@
         <p class="kicker">{{ q.tier }} · Quest Briefing</p>
         <h1>{{ q.name }}</h1>
         <p class="lede">{{ q.summary }}</p>
+        <div class="progress-block" aria-label="Quest progress">
+          <div class="progress-track">
+            <div class="progress-fill" [style.width.%]="q.progressPercent"></div>
+          </div>
+          <p class="progress-label">{{ q.progressPercent }}% complete</p>
+        </div>
         @if (error()) {
           <p class="inline-error" role="status">{{ error() }}</p>
         }
@@ -24,7 +33,7 @@
 
       <div class="panels">
         <article class="panel">
-          <h2>Requirements</h2>
+          <h2>Prerequisites</h2>
           @if (q.requirements.length) {
             <ul>
               @for (r of q.requirements; track r.label) {
@@ -42,21 +51,31 @@
 
         <article class="panel">
           <h2>Rewards</h2>
-          @if (q.rewards) {
+          @if (q.rewards || q.skillShares.length || q.xpPlan.completionBonus || q.unlocksQuests.length) {
             <ul>
-              @if (q.rewards.title) {
-                <li>Title: <em>{{ q.rewards.title }}</em></li>
+              @if (q.rewards?.title) {
+                <li>Title: <em>{{ q.rewards!.title }}</em></li>
               }
-              @for (f of q.rewards.features ?? []; track f) {
+              @for (f of q.rewards?.features ?? []; track f) {
                 <li>Feature: {{ featureLabel(f) }}</li>
               }
-              @for (p of q.rewards.permissionKeys ?? []; track p) {
+              @for (p of q.rewards?.permissionKeys ?? []; track p) {
                 <li>Unlock: {{ p }}</li>
               }
-              @if (q.xpPlan.completionBonus) {
+              @if (q.skillShares.length) {
+                @for (s of q.skillShares; track s.slug) {
+                  <li>
+                    {{ s.name }} {{ s.weight }}/10
+                    <span class="detail">+{{ s.xp }} XP</span>
+                  </li>
+                }
+              } @else if (q.xpPlan.completionBonus) {
                 @for (entry of q.xpPlan.completionBonus | keyvalue; track entry.key) {
                   <li>+{{ entry.value }} {{ entry.key }} XP</li>
                 }
+              }
+              @for (u of q.unlocksQuests; track u.id) {
+                <li>Unlocks quest: <em>{{ u.name }}</em></li>
               }
             </ul>
           } @else {
@@ -65,27 +84,109 @@
         </article>
 
         <article class="panel">
-          <h2>Tasks</h2>
+          <h2>Journey</h2>
+          @if (q.journeyLabel) {
+            <p class="timeframe">{{ q.journeyLabel }}</p>
+          }
+          @if (q.journeyNote) {
+            <p class="open">{{ q.journeyNote }}</p>
+          }
+          <p class="kind">{{ timeframe() }}</p>
+        </article>
+
+        <article class="panel">
+          <h2>Destination</h2>
+          <p class="timeframe">{{ q.destination || 'Mark the destination when the path is walked.' }}</p>
+          <p class="kind">{{ kindLabel(q.kind) }}</p>
+        </article>
+      </div>
+
+      <div class="brief-grid">
+        @if (q.rules) {
+          <article class="brief-card">
+            <h2>Rules</h2>
+            <p>{{ q.rules }}</p>
+          </article>
+        }
+        @if (q.stakes) {
+          <article class="brief-card">
+            <h2>Stakes</h2>
+            <p>{{ q.stakes }}</p>
+          </article>
+        }
+        @if (q.howToWin) {
+          <article class="brief-card">
+            <h2>How to win</h2>
+            <p>{{ q.howToWin }}</p>
+          </article>
+        }
+        @if (!q.rules && !q.stakes && !q.howToWin && q.description) {
+          <p class="brief">{{ q.description }}</p>
+        }
+      </div>
+
+      <article class="panel subtasks-panel">
+        <h2>Subtasks</h2>
+        @if (q.subtasks.length) {
+          <ul>
+            @for (t of q.subtasks; track t.id) {
+              <li [class.met]="t.completed">
+                <span class="mark">{{ t.completed ? '✓' : '○' }}</span>
+                {{ t.title }}
+                @if (t.gatesJourney) {
+                  <span class="gate-flag">Gate</span>
+                }
+                @if (t.elapsedMs) {
+                  <span class="detail">{{ elapsedLabel(t.elapsedMs) }} tracked</span>
+                }
+                @if (t.completed && t.completedAtLabel) {
+                  <span class="detail">
+                    #{{ t.completionOrder }} · {{ t.completedAtLabel }}
+                  </span>
+                }
+              </li>
+            }
+          </ul>
+          <p class="xp-row">All subtasks fill the bar to 90%. Destination is the last 10%.</p>
+        } @else {
           <ul>
             @for (t of tasks(); track t) {
               <li>{{ t }}</li>
             }
           </ul>
-          @if (q.xpPlan.dayXp.length) {
-            <p class="xp-row">
-              Daily XP: {{ q.xpPlan.dayXp.join(' · ') }}
-            </p>
+        }
+      </article>
+
+      @if (q.chronicle.length || q.run) {
+        <article class="panel chronicle-panel">
+          <h2>Chronicle</h2>
+          @if (q.run?.startedAtLabel) {
+            <p class="open">Started {{ q.run!.startedAtLabel }}</p>
+          }
+          @if (q.run?.completedAtLabel) {
+            <p class="open">Completed {{ q.run!.completedAtLabel }}</p>
+          }
+          @if (q.missedDays.length) {
+            <p class="kind">{{ q.missedDays.length }} missed day{{ q.missedDays.length === 1 ? '' : 's' }}</p>
+          }
+          @if (q.chronicle.length) {
+            <ul class="chronicle">
+              @for (ev of q.chronicle; track ev.at + ev.kind + ev.title) {
+                <li [class]="ev.kind">
+                  <span class="detail">{{ ev.atLabel }}</span>
+                  <strong>{{ chronicleKindLabel(ev.kind) }}</strong>
+                  {{ ev.title }}
+                  @if (ev.order) {
+                    <span class="detail">#{{ ev.order }}</span>
+                  }
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="open">No events yet.</p>
           }
         </article>
-
-        <article class="panel">
-          <h2>Timeframe</h2>
-          <p class="timeframe">{{ timeframe() }}</p>
-          <p class="kind">{{ kindLabel(q.kind) }}</p>
-        </article>
-      </div>
-
-      <p class="brief">{{ q.description }}</p>
+      }
 
       <footer class="actions">
         @if (q.availability === 'active') {

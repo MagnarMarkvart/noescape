@@ -2,7 +2,11 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
 import { tap } from 'rxjs';
 import { API_BASE_URL } from '../core/api.config';
-import { ActiveQuestSummary, QuestView } from './quest.model';
+import {
+  ActiveQuestSummary,
+  CreateQuestPayload,
+  QuestView,
+} from './quest.model';
 
 @Injectable({ providedIn: 'root' })
 export class QuestsService {
@@ -28,14 +32,12 @@ export class QuestsService {
     return this.http.get<QuestView>(`${this.baseUrl}/${id}`);
   }
 
-  create(body: {
-    name: string;
-    summary?: string;
-    description?: string;
-    tier?: string;
-    skillSlug?: string;
-  }) {
+  create(body: CreateQuestPayload) {
     return this.http.post<QuestView>(this.baseUrl, body);
+  }
+
+  update(id: number, body: CreateQuestPayload) {
+    return this.http.patch<QuestView>(`${this.baseUrl}/${id}`, body);
   }
 
   start(id: number) {
@@ -54,6 +56,45 @@ export class QuestsService {
         awards: import('../skills/skill.model').LogActivityResponse[];
         quest: QuestView;
       }>(`${this.baseUrl}/runs/${runId}/log`, { result, note })
+      .pipe(tap(() => void this.refreshActive().subscribe()));
+  }
+
+  logJourney(runId: number, body: { date?: string; note?: string; done?: boolean }) {
+    return this.http
+      .post<{ logged: boolean; date: string; quest: QuestView }>(
+        `${this.baseUrl}/runs/${runId}/journey`,
+        body,
+      )
+      .pipe(tap(() => void this.refreshActive().subscribe()));
+  }
+
+  toggleSubtask(runId: number, subtaskId: number, completed: boolean) {
+    return this.http
+      .post<QuestView>(`${this.baseUrl}/runs/${runId}/subtasks/${subtaskId}`, {
+        completed,
+      })
+      .pipe(tap(() => void this.refreshActive().subscribe()));
+  }
+
+  patchSubtaskElapsed(runId: number, subtaskId: number, elapsedMs: number) {
+    return this.http.patch<{
+      runId: number;
+      subtaskId: number;
+      elapsedMs: number;
+      done: boolean;
+    }>(`${this.baseUrl}/runs/${runId}/subtasks/${subtaskId}/elapsed`, {
+      elapsedMs,
+    });
+  }
+
+  completeDestination(runId: number) {
+    return this.http
+      .post<{
+        completed: boolean;
+        unlocked: string[];
+        awards: import('../skills/skill.model').LogActivityResponse[];
+        quest: QuestView;
+      }>(`${this.baseUrl}/runs/${runId}/destination`, {})
       .pipe(tap(() => void this.refreshActive().subscribe()));
   }
 }

@@ -7,7 +7,6 @@ import { LogActivityResponse, XpReversalResponse } from '../skills/skill.model';
 import {
   DailyBoard,
   DailyLogDetail,
-  DailyLogSummary,
   DailyTaskSlot,
   DailyTaskTemplate,
   UpsertDailyTaskPayload,
@@ -63,16 +62,6 @@ export class DailiesService {
     this.board$.clear();
   }
 
-  listLogs() {
-    return this.http.get<DailyLogSummary[]>(`${this.baseUrl}/logs`);
-  }
-
-  getLog(date: string) {
-    return this.http.get<DailyLogDetail>(
-      `${this.baseUrl}/logs/${encodeURIComponent(date)}`,
-    );
-  }
-
   sealDay(date?: string) {
     return this.http
       .post<DailyLogDetail>(`${this.baseUrl}/seal`, { date })
@@ -99,6 +88,25 @@ export class DailiesService {
     return this.http
       .put<DailyTaskSlot>(`${this.baseUrl}/slots`, payload)
       .pipe(tap((slot) => this.invalidateBoard(slot.date)));
+  }
+
+  patchElapsed(id: number, elapsedMs: number) {
+    return this.http
+      .patch<DailyTaskSlot>(`${this.baseUrl}/${id}/elapsed`, { elapsedMs })
+      .pipe(tap((slot) => this.patchCachedElapsed(slot)));
+  }
+
+  private patchCachedElapsed(slot: DailyTaskSlot): void {
+    const board = this.boardCache.get(slot.date);
+    if (!board) {
+      return;
+    }
+    for (const tier of board.tiers) {
+      const index = tier.slots.findIndex((s) => s.id === slot.id);
+      if (index >= 0) {
+        tier.slots[index] = { ...tier.slots[index], elapsedMs: slot.elapsedMs };
+      }
+    }
   }
 
   complete(id: number) {

@@ -9,6 +9,9 @@
       }
     </div>
     <div class="head-actions">
+      @if (quest(); as q) {
+        <a [routerLink]="['/quests', q.id, 'edit']" class="ghost-btn">Edit</a>
+      }
       <button type="button" class="ghost-btn" (click)="openBriefing()">
         Briefing
       </button>
@@ -23,20 +26,49 @@
   @if (loading()) {
     <p class="state">Loading run…</p>
   } @else if (quest(); as q) {
-    <div class="run-grid">
-      <div class="streak-card">
-        <p class="label">Streak</p>
-        <p class="streak-num">
-          {{ q.run?.streakCount ?? 0 }}
-          @if (q.durationDays) {
-            <span class="of">/ {{ q.durationDays }}</span>
-          }
-        </p>
-        <p class="best">Best {{ q.run?.bestStreak ?? 0 }}</p>
-        @if (q.run?.lastLogDate) {
-          <p class="last">Last log: {{ q.run!.lastLogDate }}</p>
-        }
+    <div class="progress-block" aria-label="Quest progress">
+      <div class="progress-track">
+        <div class="progress-fill" [style.width.%]="q.progressPercent"></div>
       </div>
+      <p class="progress-label">
+        {{ q.progressPercent }}%
+        @if (q.kind !== 'STREAK_LOG') {
+          · {{ q.week.logged }}/{{ q.week.expected }} this week
+        }
+      </p>
+    </div>
+
+    <div class="run-grid">
+      @if (q.kind === 'STREAK_LOG') {
+        <div class="streak-card">
+          <p class="label">Streak</p>
+          <p class="streak-num">
+            {{ q.run?.streakCount ?? 0 }}
+            @if (q.durationDays) {
+              <span class="of">/ {{ q.durationDays }}</span>
+            }
+          </p>
+          <p class="best">Best {{ q.run?.bestStreak ?? 0 }}</p>
+          @if (q.run?.lastLogDate) {
+            <p class="last">Last log: {{ q.run!.lastLogDate }}</p>
+          }
+        </div>
+      } @else {
+        <div class="streak-card">
+          <p class="label">Journey</p>
+          <p class="streak-num journey-label">{{ q.journeyLabel || 'Show up' }}</p>
+          <p class="best">{{ q.commitmentLevel === 7 ? 'Every day' : q.commitmentLevel + '× / week' }}</p>
+          <p class="last">
+            @if (!q.journeyUnlocked) {
+              Locked until gate subtasks are done
+            } @else if (q.journeyDueToday) {
+              Due today
+            } @else {
+              Today is covered
+            }
+          </p>
+        </div>
+      }
 
       @if (q.kind === 'STREAK_LOG' && q.run?.status === 'ACTIVE') {
         <div class="log-panel">
@@ -61,24 +93,127 @@
             </button>
           </div>
         </div>
+      } @else if (q.run?.status === 'ACTIVE') {
+        <div class="log-panel">
+          <h2>Continuous activity</h2>
+          <p class="hint">
+            @if (!q.journeyUnlocked) {
+              Finish the gate subtask{{ lockedGates().length === 1 ? '' : 's' }}
+              first:
+              {{ lockedGates().map((t) => t.title).join(', ') || 'gate' }}.
+            } @else {
+              {{ q.journeyNote || 'Mark that you did the journey work today.' }}
+            }
+          </p>
+          <button
+            type="button"
+            class="journey-check"
+            [class.done]="loggedToday()"
+            [disabled]="logging() || !q.canLogJourney"
+            (click)="logJourney(!loggedToday())"
+          >
+            <span class="mark" aria-hidden="true">{{ loggedToday() ? '✓' : '○' }}</span>
+            <span>{{ q.journeyLabel || 'Today’s journey' }}</span>
+            <span class="meta">
+              @if (!q.canLogJourney) {
+                Locked
+              } @else if (loggedToday()) {
+                Done today
+              } @else {
+                Mark today done
+              }
+            </span>
+          </button>
+        </div>
+      }
+
+      @if (q.subtasks.length) {
+        <div class="log-panel subtasks">
+          <h2>Subtasks</h2>
+          <p class="hint">Checking these fills the green bar to 90%.</p>
+          <ul class="subtask-checks">
+            @for (t of q.subtasks; track t.id) {
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    [checked]="t.completed"
+                    [disabled]="logging() || q.run?.status !== 'ACTIVE'"
+                    (change)="toggleSubtask(t.id, !t.completed)"
+                  />
+                  <span>
+                    {{ t.title }}
+                    @if (t.gatesJourney) {
+                      <em class="gate-flag">Gate</em>
+                    }
+                    @if (t.elapsedMs) {
+                      <span class="sub-meta">{{ elapsedLabel(t.elapsedMs) }} tracked</span>
+                    }
+                    @if (t.completed && t.completedAtLabel) {
+                      <span class="sub-meta">
+                        #{{ t.completionOrder }} · {{ t.completedAtLabel }}
+                      </span>
+                    }
+                  </span>
+                </label>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (q.kind !== 'STREAK_LOG') {
+        <div class="log-panel destination">
+          <h2>Destination</h2>
+          <p class="hint">{{ q.destination || 'Mark the destination when the work is truly done.' }}</p>
+          @if (q.run?.destinationDone || q.availability === 'completed') {
+            <p class="open-tag">Destination reached.</p>
+          } @else {
+            <button
+              type="button"
+              class="primary"
+              [disabled]="logging() || !q.canCompleteDestination"
+              (click)="completeDestination()"
+            >
+              {{ q.canCompleteDestination ? 'Mark destination complete' : 'Finish subtasks first (90%)' }}
+            </button>
+          }
+        </div>
       }
 
       <div class="log-history">
         <h2>Chronicle</h2>
-        @if (q.run?.logs?.length) {
-          <ul>
-            @for (log of q.run!.logs; track log.id) {
-              <li [class.clean]="log.result === 'CLEAN'" [class.broken]="log.result === 'BROKEN'">
-                <span>{{ log.date }}</span>
-                <strong>{{ log.result }}</strong>
-                @if (log.xpAwarded) {
-                  <span class="xp">+{{ log.xpAwarded }}</span>
+        @if (q.run?.startedAtLabel) {
+            <p class="hint">Started {{ q.run!.startedAtLabel }}</p>
+        }
+        @if (q.kind !== 'STREAK_LOG') {
+          <ul class="week-row" aria-label="This week">
+            @for (d of q.week.dates; track d.date) {
+              <li [class.logged]="d.logged" [class.today]="d.isToday">
+                <span class="wd">{{ weekdayLabel(d.date) }}</span>
+                <strong>{{ d.logged ? '✓' : '·' }}</strong>
+              </li>
+            }
+          </ul>
+        }
+        @if (q.missedDays.length) {
+          <p class="missed-head">{{ q.missedDays.length }} day{{ q.missedDays.length === 1 ? '' : 's' }} missed</p>
+        }
+        @if (q.chronicle.length) {
+          <ul class="chronicle">
+            @for (ev of q.chronicle; track ev.at + ev.kind + ev.title) {
+              <li [class]="ev.kind">
+                <span class="when">{{ ev.atLabel }}</span>
+                <strong>{{ chronicleKindLabel(ev.kind) }}</strong>
+                <span>{{ ev.title }}</span>
+                @if (ev.order) {
+                  <span class="xp">#{{ ev.order }}</span>
                 }
               </li>
             }
           </ul>
         } @else {
-          <p class="state">No days logged yet.</p>
+          <p class="state">No chronicle yet.</p>
         }
       </div>
     </div>

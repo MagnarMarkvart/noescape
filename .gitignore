@@ -27,6 +27,10 @@ Thumbs.db
 *.db
 *.db-journal
 
+# User-uploaded quest covers
+no-escape-back/uploads/quests/*
+!no-escape-back/uploads/quests/.gitkeep
+
 # Prisma CLI agent skill scaffolding
 .agents/
 .claude/

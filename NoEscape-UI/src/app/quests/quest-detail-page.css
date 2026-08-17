@@ -12,15 +12,19 @@
   inset: 0;
   z-index: 80;
   display: block;
+  overflow: hidden;
   color: var(--ink);
   font-family: var(--font-body);
 }
 
 .quest-slide {
   position: relative;
-  min-height: 100dvh;
+  height: 100%;
   width: 100%;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background-color: #120e08;
   background-size: cover;
   background-position: center;
@@ -35,7 +39,7 @@
 }
 
 .veil {
-  position: absolute;
+  position: fixed;
   inset: 0;
   pointer-events: none;
   background:
@@ -60,6 +64,22 @@
   transition: border-color 0.2s ease, color 0.2s ease;
 }
 
+.edit-link {
+  position: fixed;
+  top: 1rem;
+  right: 3.8rem;
+  z-index: 2;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--gold-dim);
+  background: rgba(18, 14, 8, 0.72);
+  color: var(--muted);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+}
+
+.edit-link:hover,
 .close:hover {
   border-color: var(--gold);
   color: var(--gold);
@@ -69,9 +89,9 @@
   position: relative;
   z-index: 1;
   max-width: 72rem;
-  min-height: 100dvh;
+  min-height: 100%;
   margin: 0 auto;
-  padding: clamp(1.25rem, 4vw, 2.75rem);
+  padding: clamp(3.5rem, 8vw, 4.5rem) clamp(1.25rem, 4vw, 2.75rem) clamp(2rem, 5vw, 3rem);
   display: flex;
   flex-direction: column;
   gap: clamp(1.25rem, 3vw, 2rem);
@@ -106,6 +126,33 @@
   line-height: 1.45;
   color: var(--muted);
   max-width: 32rem;
+}
+
+.progress-block {
+  margin-top: 1rem;
+  max-width: 22rem;
+}
+
+.progress-track {
+  height: 0.55rem;
+  border: 1px solid rgba(143, 188, 122, 0.55);
+  background: rgba(8, 12, 6, 0.65);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #3d8f4a, #8fbc7a);
+  transition: width 0.35s ease;
+}
+
+.progress-label {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8fbc7a;
 }
 
 .inline-error {
@@ -218,6 +265,79 @@
   color: var(--muted);
   font-size: 0.95rem;
   animation: rise 0.7s 0.28s both cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.brief-grid {
+  display: grid;
+  gap: 0.75rem;
+  animation: rise 0.7s 0.28s both cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (min-width: 720px) {
+  .brief-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.brief-card {
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(168, 137, 62, 0.45);
+  background: rgba(12, 9, 5, 0.66);
+}
+
+.brief-card h2 {
+  margin: 0 0 0.45rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.brief-card p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--muted);
+  font-size: 0.92rem;
+  white-space: pre-wrap;
+}
+
+.subtasks-panel {
+  animation: rise 0.7s 0.3s both cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gate-flag {
+  margin-left: 0.45rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.chronicle-panel {
+  animation: rise 0.7s 0.32s both cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chronicle {
+  margin-top: 0.65rem;
+}
+
+.chronicle li {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.chronicle strong {
+  color: var(--gold);
+}
+
+.chronicle .missed strong,
+.chronicle .broken strong {
+  color: var(--danger);
+}
+
+.chronicle .progress strong {
+  color: var(--gold);
 }
 
 .actions {

@@ -99,7 +99,7 @@
                   type="button"
                   class="day"
                   [class.done]="day.completed"
-                  [class.today]="day.date === todayIso"
+                  [class.today]="day.date === todayIso()"
                   [class.future]="!canToggle(day.date)"
                   [disabled]="!canToggle(day.date) || busyDate() === day.date"
                   [attr.title]="

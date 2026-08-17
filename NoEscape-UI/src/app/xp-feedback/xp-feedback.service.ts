@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { SkillsService } from '../skills/skills.service';
 import {
   LEVEL_DOWN_MS,
   LEVEL_UP_JINGLE,
@@ -15,6 +16,7 @@ import { Skill } from '../skills/skill.model';
 
 @Injectable({ providedIn: 'root' })
 export class XpFeedbackService {
+  private readonly skills = inject(SkillsService);
   private readonly queue: XpFeedbackEvent[] = [];
   private busy = false;
   private timers: ReturnType<typeof setTimeout>[] = [];
@@ -67,6 +69,9 @@ export class XpFeedbackService {
       previousLevel,
       previousProgress,
     });
+    if (award.leveledUp) {
+      this.skills.noteLevelUp();
+    }
   }
 
   /** Convenience for reverse/uncomplete payloads. */

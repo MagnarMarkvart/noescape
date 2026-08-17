@@ -51,6 +51,12 @@
   line-height: 1.15;
 }
 
+.title-line {
+  margin: 0.2rem 0 0;
+  color: var(--rs-muted);
+  font-size: 0.9rem;
+}
+
 .vitals {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

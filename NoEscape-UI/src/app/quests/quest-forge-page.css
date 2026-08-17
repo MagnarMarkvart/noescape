@@ -18,7 +18,7 @@
 }
 
 .forge-shell {
-  max-width: 36rem;
+  max-width: 40rem;
   padding: 0.85rem 1rem 2rem;
 }
 
@@ -67,10 +67,25 @@
 
 .forge-form {
   display: grid;
-  gap: 0.85rem;
+  gap: 1rem;
+}
+
+.forge-form fieldset {
+  margin: 0;
   padding: 1rem;
   border: 1px solid var(--rs-border);
   background: rgba(30, 24, 14, 0.72);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.forge-form legend {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: var(--rs-accent);
+  padding: 0 0.35rem;
 }
 
 .forge-form label {
@@ -81,7 +96,8 @@
 }
 
 .forge-form input,
-.forge-form textarea {
+.forge-form textarea,
+.forge-form select {
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--rs-border);
   background: #1a1610;
@@ -89,12 +105,168 @@
   font: inherit;
 }
 
+.hint,
+.sublegend {
+  margin: 0;
+  color: var(--rs-muted);
+  font-size: 0.82rem;
+}
+
+.sublegend {
+  margin-top: 0.25rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cover-row {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.cover-preview {
+  width: 7rem;
+  height: 4.5rem;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--rs-border);
+}
+
+.inline-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: end;
+}
+
+.inline-add .grow {
+  flex: 1 1 12rem;
+}
+
+.ghost-btn {
+  font-family: var(--font-display);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-muted);
+  cursor: pointer;
+}
+
+.chip-list,
+.check-list,
+.subtask-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.chip-list li,
+.subtask-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(138, 115, 64, 0.45);
+  color: var(--rs-text);
+}
+
+.subtask-list li span {
+  flex: 1 1 auto;
+}
+
+.forge-form .gate-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--rs-muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chip-list button,
+.subtask-list button {
+  border: 0;
+  background: transparent;
+  color: var(--rs-muted);
+  cursor: pointer;
+}
+
+.check-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--rs-text);
+}
+
+.commit-label {
+  color: var(--rs-accent);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+
+.commit-label.warn {
+  color: #d4a070;
+}
+
+.weight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.weight-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid rgba(138, 115, 64, 0.45);
+}
+
+.weight-name {
+  color: var(--rs-text);
+}
+
+.weight-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-display);
+}
+
+.weight-controls button {
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-text);
+  cursor: pointer;
+}
+
+.weight-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.weight-xp {
+  color: #8fbc7a;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
-  margin-top: 0.35rem;
 }
 
 .primary {

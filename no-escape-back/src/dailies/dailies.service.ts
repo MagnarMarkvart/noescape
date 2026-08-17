@@ -6,6 +6,8 @@ import {
 import { HabitsService } from '../habits/habits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SkillsService } from '../skills/skills.service';
+import { TimeService } from '../time/time.service';
+import { formatElapsedShort } from '../time/zone';
 import {
   calculateDailyTaskXp,
   DAILY_SLOT_COUNTS,
@@ -40,6 +42,7 @@ type EnrichedTask = {
   fixedXp: number | null;
   effortLevel: number;
   durationMinutes: number;
+  elapsedMs: number;
   completed: boolean;
   xpAwarded: number | null;
   activityId: number | null;
@@ -86,6 +89,7 @@ export class DailiesService {
     private readonly prisma: PrismaService,
     private readonly skillsService: SkillsService,
     private readonly habitsService: HabitsService,
+    private readonly time: TimeService,
   ) {}
 
   async getBoard(date?: string) {
@@ -94,9 +98,9 @@ export class DailiesService {
     const pendingSealDate =
       await this.findOldestPendingSealBefore(requestedDate);
 
-    // Past/today work is gated by unsealed prior days; future planning is allowed.
+    // Landing on today still forces an unsealed prior day; picking a past date stays there.
     const sealRequired = Boolean(
-      pendingSealDate && requestedDate <= today,
+      pendingSealDate && requestedDate === today,
     );
     const day =
       sealRequired && pendingSealDate ? pendingSealDate : requestedDate;
@@ -123,8 +127,7 @@ export class DailiesService {
     }
 
     const activeLogDate = await this.resolveActiveLogDate(today);
-    const isEditable =
-      !sealed && (day === activeLogDate || day > today);
+    const isEditable = true;
 
     return {
       ...board,
@@ -243,6 +246,7 @@ export class DailiesService {
           skillId: task.skillId,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
+          elapsedMs: BigInt(Math.max(0, Math.round(Number(task.elapsedMs) || 0))),
           completed: false,
           xpAwarded: null,
           completedAt: null,
@@ -252,6 +256,7 @@ export class DailiesService {
           skillId: task.skillId,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
+          elapsedMs: BigInt(Math.max(0, Math.round(Number(task.elapsedMs) || 0))),
           completed: false,
           xpAwarded: null,
           completedAt: null,
@@ -468,10 +473,14 @@ export class DailiesService {
             durationMinutes: task.durationMinutes,
           });
 
+    const tracked = Number(task.elapsedMs ?? 0);
     const award = await this.skillsService.awardXp(task.skillId, {
       xpGained: xp,
       duration: task.durationMinutes,
-      note: `Daily: ${task.title}`,
+      note:
+        tracked > 0
+          ? `Daily: ${task.title} · tracked ${formatElapsedShort(tracked)}`
+          : `Daily: ${task.title}`,
     });
 
     const updated = await this.prisma.dailyTask.update({
@@ -540,6 +549,21 @@ export class DailiesService {
     };
   }
 
+  async setElapsed(id: number, elapsedMs: number) {
+    const task = await this.prisma.dailyTask.findUnique({ where: { id } });
+    if (!task) {
+      throw new NotFoundException(`Daily task #${id} not found`);
+    }
+    await this.assertMutableDay(task.date);
+    const ms = Math.max(0, Math.round(Number(elapsedMs) || 0));
+    const updated = await this.prisma.dailyTask.update({
+      where: { id },
+      data: { elapsedMs: BigInt(ms) },
+      include: { skill: { select: this.skillSelect() } },
+    });
+    return this.enrichTask(updated);
+  }
+
   async postpone(id: number, targetDateRaw: string) {
     const task = await this.prisma.dailyTask.findUnique({
       where: { id },
@@ -603,6 +627,7 @@ export class DailiesService {
           skillId: task.skillId,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
+          elapsedMs: task.elapsedMs ?? BigInt(0),
           completed: false,
           xpAwarded: null,
           activityId: null,
@@ -613,6 +638,7 @@ export class DailiesService {
           skillId: task.skillId,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
+          elapsedMs: task.elapsedMs ?? BigInt(0),
           completed: false,
           xpAwarded: null,
           activityId: null,
@@ -743,26 +769,10 @@ export class DailiesService {
     return JSON.parse(json) as LogSnapshot;
   }
 
-  private async assertNotSealed(day: string) {
+  private async assertMutableDay(day: string) {
     const sealed = await this.prisma.dailyLog.findUnique({ where: { date: day } });
     if (sealed) {
-      throw new BadRequestException(`Day ${day} is sealed in the logs`);
-    }
-  }
-
-  private async assertMutableDay(day: string) {
-    await this.assertNotSealed(day);
-    const today = this.localToday();
-    // Future planning stays open; history before the active log day is locked.
-    if (day > today) {
-      return;
-    }
-    const activeLogDate = await this.resolveActiveLogDate(today);
-    if (day !== activeLogDate) {
-      if (day < activeLogDate) {
-        throw new BadRequestException('Older days are read-only');
-      }
-      throw new BadRequestException(`Seal ${activeLogDate} before continuing`);
+      await this.prisma.dailyLog.delete({ where: { date: day } });
     }
   }
 
@@ -795,6 +805,7 @@ export class DailiesService {
     fixedXp?: number | null;
     effortLevel: number;
     durationMinutes: number;
+    elapsedMs?: bigint | number;
     completed: boolean;
     xpAwarded: number | null;
     activityId?: number | null;
@@ -815,6 +826,7 @@ export class DailiesService {
 
     return {
       ...task,
+      elapsedMs: Number(task.elapsedMs ?? 0),
       importance,
       habitId: task.habitId ?? null,
       fixedXp,
@@ -858,6 +870,7 @@ export class DailiesService {
       fixedXp: null,
       effortLevel: 5,
       durationMinutes: 45,
+      elapsedMs: 0,
       completed: false,
       xpAwarded: null,
       activityId: null,
@@ -921,13 +934,9 @@ export class DailiesService {
     return date;
   }
 
-  /** Calendar date in the server local timezone (not UTC). */
+  /** Calendar date in the player's timezone. */
   private localToday(): string {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return this.time.today();
   }
 
   private assertImportance(value: string): asserts value is TaskImportance {

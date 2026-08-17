@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -35,19 +36,64 @@ export class QuestsController {
       name: string;
       summary?: string;
       description?: string;
+      rules?: string;
+      stakes?: string;
+      howToWin?: string;
+      destination?: string;
+      journeyLabel?: string;
+      journeyNote?: string;
+      commitmentLevel?: number;
+      coverDataUrl?: string;
       tier?: string;
       skillSlug?: string;
       skillReqs?: { slug: string; level: number }[];
       unlockReqs?: string[];
       questReqs?: string[];
+      subtasks?: Array<string | { id?: number; title: string; gatesJourney?: boolean }>;
+      rewards?: {
+        title?: string;
+        features?: string[];
+        permissionKeys?: string[];
+      };
+      totalXp?: number;
+      skillWeights?: { slug: string; weight: number }[];
+      completionBonus?: Record<string, number>;
     },
   ) {
     return this.questsService.create(body);
   }
 
-  @Post(':id/start')
-  start(@Param('id', ParseIntPipe) id: number) {
-    return this.questsService.start(id);
+  @Patch(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: {
+      name: string;
+      summary?: string;
+      description?: string;
+      rules?: string;
+      stakes?: string;
+      howToWin?: string;
+      destination?: string;
+      journeyLabel?: string;
+      journeyNote?: string;
+      commitmentLevel?: number;
+      coverDataUrl?: string;
+      tier?: string;
+      skillSlug?: string;
+      skillReqs?: { slug: string; level: number }[];
+      questReqs?: string[];
+      subtasks?: Array<string | { id?: number; title: string; gatesJourney?: boolean }>;
+      rewards?: {
+        title?: string;
+        features?: string[];
+        permissionKeys?: string[];
+      };
+      totalXp?: number;
+      skillWeights?: { slug: string; weight: number }[];
+    },
+  ) {
+    return this.questsService.update(id, body);
   }
 
   @Post('runs/:runId/log')
@@ -56,5 +102,49 @@ export class QuestsController {
     @Body() body: { result: 'CLEAN' | 'BROKEN'; date?: string; note?: string },
   ) {
     return this.questsService.logDay(runId, body);
+  }
+
+  @Post('runs/:runId/journey')
+  logJourney(
+    @Param('runId', ParseIntPipe) runId: number,
+    @Body() body: { date?: string; note?: string; done?: boolean },
+  ) {
+    return this.questsService.logJourney(runId, body);
+  }
+
+  @Post('runs/:runId/subtasks/:subtaskId')
+  toggleSubtask(
+    @Param('runId', ParseIntPipe) runId: number,
+    @Param('subtaskId', ParseIntPipe) subtaskId: number,
+    @Body() body: { completed: boolean },
+  ) {
+    return this.questsService.toggleSubtask(
+      runId,
+      subtaskId,
+      Boolean(body?.completed),
+    );
+  }
+
+  @Patch('runs/:runId/subtasks/:subtaskId/elapsed')
+  addSubtaskElapsed(
+    @Param('runId', ParseIntPipe) runId: number,
+    @Param('subtaskId', ParseIntPipe) subtaskId: number,
+    @Body() body: { elapsedMs?: number },
+  ) {
+    return this.questsService.addSubtaskElapsed(
+      runId,
+      subtaskId,
+      Number(body?.elapsedMs) || 0,
+    );
+  }
+
+  @Post('runs/:runId/destination')
+  completeDestination(@Param('runId', ParseIntPipe) runId: number) {
+    return this.questsService.completeDestination(runId);
+  }
+
+  @Post(':id/start')
+  start(@Param('id', ParseIntPipe) id: number) {
+    return this.questsService.start(id);
   }
 }

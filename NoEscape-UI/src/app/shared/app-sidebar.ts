@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   isDevMode,
   OnInit,
@@ -12,6 +13,8 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/ro
 import { filter, map, startWith } from 'rxjs';
 import { CharacterService } from '../character/character.service';
 import { QuestsService } from '../quests/quests.service';
+import { SkillsService } from '../skills/skills.service';
+import { AppShellService } from './app-shell.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -39,7 +42,7 @@ import { QuestsService } from '../quests/quests.service';
             routerLinkActive="active"
             [routerLinkActiveOptions]="{ exact: true }"
           >
-            Status
+            Dashboard
           </a>
           <a routerLink="/character" routerLinkActive="active">Character</a>
           <a routerLink="/quests" routerLinkActive="active">Quests</a>
@@ -49,11 +52,10 @@ import { QuestsService } from '../quests/quests.service';
               <a
                 class="sub goal"
                 [routerLink]="['/quests', q.questId, 'run']"
+                routerLinkActive="active"
               >
                 {{ q.name }}
-                @if (q.durationDays) {
-                  <span class="streak">{{ q.streakCount }}/{{ q.durationDays }}</span>
-                }
+                <span class="streak">{{ q.progressPercent }}%</span>
               </a>
             }
           }
@@ -65,9 +67,6 @@ import { QuestsService } from '../quests/quests.service';
             >
               Habitus
             </a>
-            <a routerLink="/habitus/progression" routerLinkActive="active" class="sub">
-              Progression
-            </a>
           }
           <a
             routerLink="/dailies"
@@ -76,24 +75,16 @@ import { QuestsService } from '../quests/quests.service';
           >
             Dailies
           </a>
-          <a routerLink="/dailies/logs" routerLinkActive="active" class="sub">
-            Quest Logs
-          </a>
-          <a routerLink="/dailies/defaults" routerLinkActive="active" class="sub">
-            Defaults
-          </a>
-          <a
-            routerLink="/horologium"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: true }"
-          >
+          <a routerLink="/horologium" routerLinkActive="active">
             Horologium
           </a>
-          <a routerLink="/horologium/log" routerLinkActive="active" class="sub">
-            Horo Log
-          </a>
-          <a routerLink="/level-ups" routerLinkActive="active">Level Ups</a>
-          <a routerLink="/preview" routerLinkActive="active">Preview</a>
+          @if (hasLevelUps()) {
+            <a routerLink="/level-ups" routerLinkActive="active">Level Ups</a>
+          }
+          @if (isDev()) {
+            <a routerLink="/preview" routerLinkActive="active">Preview</a>
+          }
+          <a routerLink="/settings" routerLinkActive="active">Settings</a>
         </nav>
       }
     </aside>
@@ -225,10 +216,15 @@ export class AppSidebar implements OnInit {
   private readonly router = inject(Router);
   private readonly questsService = inject(QuestsService);
   private readonly characterService = inject(CharacterService);
+  private readonly skillsService = inject(SkillsService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly shell = inject(AppShellService);
 
-  protected readonly collapsed = signal(false);
+  protected readonly collapsed = this.shell.collapsed;
   protected readonly habitusUnlocked = signal(false);
   protected readonly activeQuests = this.questsService.activeQuests;
+  protected readonly hasLevelUps = this.skillsService.hasLevelUps;
+  protected readonly isDev = isDevMode;
 
   protected readonly showHabitus = computed(
     () => isDevMode() || this.habitusUnlocked(),
@@ -244,7 +240,9 @@ export class AppSidebar implements OnInit {
   );
 
   ngOnInit(): void {
+    this.shell.bindViewport((teardown) => this.destroyRef.onDestroy(teardown));
     void this.questsService.refreshActive().subscribe();
+    void this.skillsService.listLevelUps(1, 1).subscribe();
     this.characterService.getProfile().subscribe({
       next: (p) => this.habitusUnlocked.set(p.habitusUnlocked),
       error: () => this.habitusUnlocked.set(false),
@@ -265,9 +263,6 @@ export class AppSidebar implements OnInit {
     if (path.startsWith('/habitus')) {
       return 'HABITUS';
     }
-    if (path.startsWith('/dailies/logs')) {
-      return 'LOGS';
-    }
     if (path.startsWith('/dailies')) {
       return 'DAILIES';
     }
@@ -280,6 +275,9 @@ export class AppSidebar implements OnInit {
     if (path.startsWith('/preview')) {
       return 'PREVIEW';
     }
-    return 'STATUS';
+    if (path.startsWith('/settings')) {
+      return 'SETTINGS';
+    }
+    return 'DASHBOARD';
   });
 }

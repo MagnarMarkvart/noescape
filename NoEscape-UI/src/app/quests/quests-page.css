@@ -207,6 +207,66 @@
   color: var(--rs-muted);
 }
 
+.mini-bar {
+  margin-top: 0.55rem;
+  height: 0.4rem;
+  background: rgba(12, 16, 8, 0.7);
+  border: 1px solid rgba(143, 188, 122, 0.4);
+  overflow: hidden;
+}
+
+.mini-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2f8f3a, #8fbc7a);
+}
+
+.schedule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.schedule-card {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--rs-border-bright);
+  background: linear-gradient(180deg, var(--rs-panel-2), var(--rs-panel));
+  color: var(--rs-text);
+  cursor: pointer;
+}
+
+.week-row {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.week-row li {
+  display: grid;
+  place-items: center;
+  gap: 0.1rem;
+  padding: 0.3rem 0.1rem;
+  border: 1px solid rgba(138, 115, 64, 0.4);
+  color: var(--rs-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.week-row li.today {
+  border-color: var(--rs-border-bright);
+}
+
+.week-row li.logged {
+  color: #8fbc7a;
+}
+
 .state {
   color: var(--rs-muted);
 }

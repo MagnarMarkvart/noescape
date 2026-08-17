@@ -9,10 +9,12 @@ import { PrismaModule } from './prisma/prisma.module';
 import { QuestsModule } from './quests/quests.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { SkillsModule } from './skills/skills.module';
+import { TimeModule } from './time/time.module';
 
 @Module({
   imports: [
     PrismaModule,
+    TimeModule,
     SkillsModule,
     DailiesModule,
     HorologiumModule,

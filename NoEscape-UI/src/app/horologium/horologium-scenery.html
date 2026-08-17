@@ -1,0 +1,352 @@
+<div class="scenery" role="dialog" aria-label="Scenery view" aria-modal="true">
+  <video
+    #loop
+    class="loop"
+    [src]="src"
+    autoplay
+    muted
+    loop
+    playsinline
+    (loadeddata)="playLoop()"
+    [attr.aria-label]="name"
+  ></video>
+  <div class="veil" aria-hidden="true"></div>
+  @if (audioUrl()) {
+    <audio
+      #ambience
+      [src]="audioUrl()"
+      loop
+      autoplay
+      [muted]="ambienceMuted()"
+      (loadeddata)="playAmbience()"
+    ></audio>
+  }
+
+  <section class="session">
+    <p class="kicker">
+      @if (setupKind === 'vigilia') {
+        Vigilia
+      } @else if (mode() === 'adhoc') {
+        Track
+      } @else {
+        Sessio
+      }
+    </p>
+    @if (setupKind === 'vigilia') {
+      <p class="phase">{{ watchRunning() ? 'Running' : 'Paused' }}</p>
+      <p class="clock" aria-live="polite">{{ watchElapsedLabel() }}</p>
+      <p class="meta">{{ selectedWatch()?.name || 'No project' }}</p>
+    } @else {
+      <p class="phase">{{ statusLine() }}</p>
+      <p class="clock" aria-live="polite">{{ remainingLabel() }}</p>
+      <p class="meta">{{ sessionLabel() }}</p>
+      @if (restCarryMs() > 0) {
+        <p class="meta carry">Next rest {{ nextRestLabel() }}</p>
+      }
+      <dl>
+        <div>
+          <dt>Work</dt>
+          <dd>{{ config().workMinutes }}m</dd>
+        </div>
+        <div>
+          <dt>Rest</dt>
+          <dd>{{ restStatLabel() }}</dd>
+        </div>
+        <div>
+          <dt>{{ mode() === 'adhoc' ? 'Block' : 'Goal' }}</dt>
+          <dd class="stat-num">
+            @if (mode() === 'adhoc') {
+              {{ currentIteration() }}
+            } @else if (phase() === 'complete') {
+              {{ config().iterations }}/{{ config().iterations }}
+            } @else if (phase() === 'idle') {
+              {{ config().iterations }}
+            } @else {
+              {{ currentIteration() }}/{{ config().iterations }}
+            }
+          </dd>
+        </div>
+        @if (mode() !== 'adhoc') {
+          <div>
+            <dt>Done</dt>
+            <dd class="stat-num">{{ completedBlocks() }}</dd>
+          </div>
+        }
+      </dl>
+    }
+    @if (canEdit || setupKind === 'vigilia') {
+      <div class="setup" [hidden]="!canEdit">
+        <div class="chips">
+          <button
+            type="button"
+            class="exit slim"
+            [class.selected]="setupKind === 'planned'"
+            (click)="setSetupKind('planned')"
+          >
+            Sessio
+          </button>
+          <button
+            type="button"
+            class="exit slim"
+            [class.selected]="setupKind === 'adhoc'"
+            (click)="setSetupKind('adhoc')"
+          >
+            Track
+          </button>
+          <button
+            type="button"
+            class="exit slim"
+            [class.selected]="setupKind === 'vigilia'"
+            (click)="setSetupKind('vigilia')"
+          >
+            Vigilia
+          </button>
+        </div>
+        @if (setupKind === 'planned') {
+          <div class="chips">
+            @for (preset of presets; track preset.id) {
+              <button
+                type="button"
+                class="exit slim"
+                [class.selected]="timerPreset() === preset.id"
+                (click)="selectPreset(preset.id)"
+              >
+                {{ preset.label }}
+              </button>
+            }
+          </div>
+        }
+        @if (setupKind !== 'vigilia') {
+        <div class="fields">
+          <label>
+            Work
+            <input
+              type="number"
+              min="1"
+              max="180"
+              [value]="config().workMinutes"
+              (change)="setWork($any($event.target).value)"
+            />
+          </label>
+          <label>
+            Rest
+            <input
+              type="number"
+              min="1"
+              max="60"
+              [value]="config().restMinutes"
+              (change)="setRest($any($event.target).value)"
+            />
+          </label>
+          @if (mode() === 'planned') {
+            <label>
+              Laps
+              <input
+                type="number"
+                min="2"
+                max="20"
+                [value]="config().iterations"
+                (change)="setIterations($any($event.target).value)"
+              />
+            </label>
+          }
+        </div>
+        }
+        @if (setupKind !== 'vigilia' && (dailies.length > 0 || boundDailyId)) {
+        <label class="task">
+          Task
+          <select
+            [value]="boundDailyId"
+            (change)="pickDaily($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (d of dailies; track bindKey(d)) {
+              <option [value]="bindKey(d)">
+                @switch (d.source) {
+                  @case ('daily') { Daily · {{ d.name }} }
+                  @case ('subtask') { Subtask · {{ d.journeyLabel || d.name }} }
+                  @default { Check-in · {{ d.journeyLabel || d.name }} }
+                }
+              </option>
+            }
+          </select>
+        </label>
+        }
+        @if (setupKind === 'vigilia') {
+        <label class="task">
+          Vigilia
+          <select (change)="selectWatch($any($event.target).value)">
+            <option value="" [selected]="selectedWatchId() == null">None</option>
+            @for (w of projectWatches(); track w.id) {
+              <option [value]="w.id" [selected]="w.id === selectedWatchId()">
+                {{ w.name }} · {{ watchElapsed(w.id) }}
+              </option>
+            }
+          </select>
+        </label>
+        <form class="create" (submit)="$event.preventDefault(); createWatch()">
+          <input
+            type="text"
+            maxlength="80"
+            [value]="watchDraftName()"
+            (input)="setWatchDraftName($any($event.target).value)"
+            placeholder="New project"
+          />
+          <button type="submit" class="exit slim" [disabled]="!watchDraftName().trim()">
+            Create
+          </button>
+        </form>
+        } @else if (projectWatches().length > 0) {
+        <label class="task">
+          Vigilia
+          <select
+            [value]="selectedWatchId() ?? ''"
+            (change)="selectWatch($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (w of projectWatches(); track w.id) {
+              <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w.id) }}</option>
+            }
+          </select>
+        </label>
+        @if (selectedWatch()) {
+          <button
+            type="button"
+            class="exit slim"
+            [class.selected]="widgetVisible"
+            (click)="toggleWatchWidget()"
+          >
+            {{ widgetVisible ? 'Widget on' : 'Widget off' }}
+          </button>
+        }
+        }
+      </div>
+    } @else if (taskLabel) {
+      <p class="task-line">{{ taskLabel }}{{ canCompleteTask ? '' : ' · done' }}</p>
+    }
+
+    <div class="controls">
+      @if (setupKind === 'vigilia') {
+        @if (watchRunning()) {
+          <button type="button" class="exit primary" (click)="pause()">Pause</button>
+        } @else {
+          <button
+            type="button"
+            class="exit primary"
+            (click)="begin()"
+            [disabled]="!selectedWatch()"
+          >
+            Start Vigilia
+          </button>
+        }
+      } @else if (phase() === 'idle') {
+        <button type="button" class="exit primary" (click)="begin()">
+          {{ mode() === 'adhoc' ? 'Start Track' : 'Begin Sessio' }}
+        </button>
+      } @else if (phase() === 'complete') {
+        <button type="button" class="exit primary" (click)="stop()" [disabled]="awarding()">
+          {{ awarding() ? 'Logging…' : 'New Sessio' }}
+        </button>
+        @if (canCompleteTask) {
+          <button type="button" class="exit" (click)="markTaskDone()" [disabled]="awarding()">
+            {{ taskLabel || 'Task' }} done
+          </button>
+        }
+      } @else {
+        @if (running()) {
+          <button type="button" class="exit primary" (click)="pause()">Pause</button>
+        } @else {
+          <button type="button" class="exit primary" (click)="resume()">Resume</button>
+        }
+        @if (canSkipRest()) {
+          <button type="button" class="exit" (click)="skipRest()" [disabled]="awarding()">
+            Skip rest
+          </button>
+        }
+        <button type="button" class="exit" (click)="stop()" [disabled]="awarding()">Stop</button>
+        @if (canCompleteTask) {
+          <button type="button" class="exit" (click)="markTaskDone()" [disabled]="awarding()">
+            {{ taskLabel || 'Task' }} done
+          </button>
+        }
+      }
+    </div>
+  </section>
+
+  @if (setupKind !== 'vigilia' && widgetVisible && selectedWatch(); as watch) {
+    <aside class="watch-widget">
+      <div>
+        <p>Vigilia</p>
+        <strong>{{ watch.name }}</strong>
+      </div>
+      <span>{{ watchElapsedLabel() }}</span>
+      <button type="button" class="exit slim" (click)="toggleWatchWidget()">Hide</button>
+    </aside>
+  } @else if (setupKind !== 'vigilia' && selectedWatch() && !widgetVisible && phase() !== 'idle') {
+    <button type="button" class="exit slim watch-show" (click)="toggleWatchWidget()">
+      Show vigilia
+    </button>
+  }
+
+  <div class="sound-dock">
+    @if (soundOpen()) {
+      <div class="sound-panel" role="listbox" aria-label="Soundscape">
+        <header>
+          <p>Soundscape</p>
+          <button type="button" class="exit slim" (click)="toggleAmbienceMute()">
+            {{ ambienceMuted() ? 'Unmute bed' : 'Mute bed' }}
+          </button>
+        </header>
+        <button type="button" class="exit slim chime-toggle" (click)="toggleJinglesMute()">
+          {{ jinglesMuted() ? 'Chimes off' : 'Mute chimes' }}
+        </button>
+        <label class="vol">
+          Volume
+          <input
+            type="range"
+            min="0"
+            max="100"
+            [value]="bedVolume()"
+            (input)="setBedVolume($any($event.target).value)"
+          />
+        </label>
+        @for (scene of scenes; track scene.id) {
+          <button
+            type="button"
+            class="sound-pick"
+            role="option"
+            [class.selected]="scene.id === sceneId"
+            [attr.aria-selected]="scene.id === sceneId"
+            (click)="pickScene(scene.id)"
+          >
+            {{ scene.name }}
+          </button>
+        }
+      </div>
+    }
+    <button
+      type="button"
+      class="orb"
+      [class.open]="soundOpen()"
+      [attr.aria-expanded]="soundOpen()"
+      aria-haspopup="listbox"
+      [attr.aria-label]="'Soundscape: ' + name"
+      (click)="toggleSoundPanel()"
+    >
+      <video
+        class="orb-loop"
+        [src]="src"
+        autoplay
+        muted
+        loop
+        playsinline
+        (loadeddata)="playLoop()"
+        aria-hidden="true"
+      ></video>
+      <span class="orb-ring" aria-hidden="true"></span>
+    </button>
+    <p class="orb-label">{{ name }}</p>
+  </div>
+
+  <button type="button" class="exit leave" (click)="exit()">Exit Scenery</button>
+</div>

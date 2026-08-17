@@ -5,7 +5,8 @@
     <header class="char-bar">
       <div class="identity">
         <p class="kicker">Character</p>
-        <h1>{{ p.title }}</h1>
+        <h1>{{ p.nickname || 'Unnamed' }}</h1>
+        <p class="title-line">{{ p.title }}</p>
       </div>
       <dl class="vitals">
         <div>
@@ -26,6 +27,7 @@
         @if (p.habitusUnlocked) {
           <a routerLink="/habitus">Habitus</a>
         }
+        <a routerLink="/settings">Settings</a>
       </nav>
     </header>
 

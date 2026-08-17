@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { CharacterService } from '../character/character.service';
 import { TimedToast } from '../shared/timed-toast';
 import {
   HabitRangeLog,
@@ -25,6 +26,7 @@ export type HabitusViewMode = 'day' | 'week' | 'month';
 })
 export class HabitusPage implements OnInit {
   private readonly habitsService = inject(HabitsService);
+  private readonly character = inject(CharacterService);
   private readonly timed = new TimedToast();
 
   protected readonly habits = signal<HabitView[]>([]);
@@ -37,7 +39,7 @@ export class HabitusPage implements OnInit {
   /** Focus day (YYYY-MM-DD); week/month derive from this. */
   protected readonly anchor = signal(this.isoToday());
 
-  protected readonly todayIso = this.isoToday();
+  protected readonly todayIso = computed(() => this.character.todayIso());
 
   protected readonly periodLabel = computed(() => {
     const mode = this.viewMode();
@@ -110,7 +112,7 @@ export class HabitusPage implements OnInit {
   }
 
   protected canToggle(date: string): boolean {
-    return date <= this.todayIso;
+    return date <= this.todayIso();
   }
 
   protected toggleDay(date: string, completed: boolean): void {
@@ -142,8 +144,8 @@ export class HabitusPage implements OnInit {
     if (!h || this.busyDate()) {
       return;
     }
-    this.busyDate.set(this.todayIso);
-    this.habitsService.complete(h.id, this.todayIso).subscribe({
+    this.busyDate.set(this.todayIso());
+    this.habitsService.complete(h.id, this.todayIso()).subscribe({
       next: () => {
         this.busyDate.set(null);
         this.timed.set(`Logged ${h.name} · today`);
@@ -275,7 +277,7 @@ export class HabitusPage implements OnInit {
   }
 
   private isoToday(): string {
-    return this.toIso(new Date());
+    return this.character.todayIso();
   }
 
   private formatDay(iso: string): string {

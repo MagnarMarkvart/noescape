@@ -1,0 +1,47 @@
+<section class="settings-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Account</p>
+      <h1>Settings</h1>
+    </div>
+    <a routerLink="/character" class="back">← Character</a>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  @if (loading()) {
+    <p class="state">Loading…</p>
+  } @else {
+    <form class="settings-form" (submit)="$event.preventDefault(); save()">
+      <label>
+        Nickname
+        <input
+          type="text"
+          maxlength="40"
+          [value]="nickname()"
+          (input)="setNickname($event)"
+          placeholder="Shown on Character"
+        />
+      </label>
+      <label>
+        Timezone
+        <select
+          [value]="timezone()"
+          (change)="setTimezone($event)"
+        >
+          @for (z of zones(); track z) {
+            <option [value]="z">{{ z }}</option>
+          }
+        </select>
+      </label>
+      <p class="hint">
+        Calendar days for dailies, habits, and quests follow this zone.
+      </p>
+      <button type="submit" class="save" [disabled]="saving()">
+        {{ saving() ? 'Saving…' : 'Save' }}
+      </button>
+    </form>
+  }
+</section>

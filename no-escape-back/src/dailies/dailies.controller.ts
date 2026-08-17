@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -86,6 +87,14 @@ export class DailiesController {
   @Post(':id/uncomplete')
   uncomplete(@Param('id', ParseIntPipe) id: number) {
     return this.dailiesService.uncomplete(id);
+  }
+
+  @Patch(':id/elapsed')
+  setElapsed(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { elapsedMs?: number },
+  ) {
+    return this.dailiesService.setElapsed(id, Number(body?.elapsedMs) || 0);
   }
 
   @Post(':id/postpone')

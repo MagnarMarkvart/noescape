@@ -16,14 +16,29 @@
     <ul class="session-log">
       @for (row of items(); track row.id) {
         <li>
-          <div class="log-top">
-            <strong>{{ row.date }}</strong>
-            <span class="xp-chip">+{{ row.xpAwarded | number }} XP</span>
-          </div>
-          <p class="log-meta">
-            <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
-            {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
-          </p>
+          <button
+            type="button"
+            class="session-card"
+            (click)="open(row)"
+            [attr.aria-pressed]="selected()?.id === row.id"
+          >
+            <div class="log-top">
+              <strong>{{ row.date }}</strong>
+              <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
+                {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
+              </span>
+            </div>
+            <p class="log-when">
+              {{ clock(startIso(row)) }} – {{ clock(row.completedAt) }}
+            </p>
+            @if (row.endedEarly) {
+              <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
+            }
+            <p class="log-meta">
+              <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
+              {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
+            </p>
+          </button>
         </li>
       }
     </ul>
@@ -40,3 +55,95 @@
     </div>
   }
 </section>
+
+@if (selected(); as row) {
+  <div class="detail-layer" (click)="close()">
+    <article
+      class="detail-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="horo-detail-title"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="detail-head">
+        <div>
+          <p class="kicker">{{ outcomeLabel(row) }}</p>
+          <h2 id="horo-detail-title">{{ row.date }}</h2>
+        </div>
+        <button type="button" class="ghost" (click)="close()">Close</button>
+      </header>
+
+      <div class="timeline" aria-label="Session span">
+        <div>
+          <p class="when-label">Start</p>
+          <p class="when-clock">{{ clock(startIso(row)) }}</p>
+          <p class="when-date">{{ stamp(startIso(row)) }}</p>
+        </div>
+        <span class="timeline-rule" aria-hidden="true"></span>
+        <div>
+          <p class="when-label">End</p>
+          <p class="when-clock">{{ clock(row.completedAt) }}</p>
+          <p class="when-date">{{ stamp(row.completedAt) }}</p>
+        </div>
+      </div>
+
+      <dl class="facts">
+        <div>
+          <dt>Work blocks</dt>
+          <dd>{{ row.iterations }}</dd>
+        </div>
+        <div>
+          <dt>Total work</dt>
+          <dd>{{ minutesLabel(row.durationMinutes) }}</dd>
+        </div>
+        <div>
+          <dt>Rest length</dt>
+          <dd>{{ minutesLabel(row.restMinutes) }}</dd>
+        </div>
+        <div>
+          <dt>Rest total</dt>
+          <dd>{{ minutesLabel(restTotal(row)) }}</dd>
+        </div>
+      </dl>
+
+      @if (row.watchName) {
+        <section class="bind-row">
+          <p class="kicker">Vigilia</p>
+          <p class="bind-name">{{ row.watchName }}</p>
+        </section>
+      }
+
+      @if (row.taskLabel) {
+        <section class="bind-row">
+          <p class="kicker">Bound daily</p>
+          <p class="bind-name">{{ row.taskLabel }}</p>
+        </section>
+      }
+
+      <section class="xp-block" aria-label="XP by skill">
+        <p class="kicker">XP by skill</p>
+        @if (skillXp(row).length === 0) {
+          <p class="muted">No skill XP on this entry.</p>
+        } @else {
+          <ul class="xp-list">
+            @for (skill of skillXp(row); track skill.slug) {
+              <li [class.loss]="skill.xp < 0">
+                <span class="xp-skill">
+                  <span aria-hidden="true">{{ skill.icon || '•' }}</span>
+                  {{ skill.name }}
+                </span>
+                <span class="xp-amt">
+                  {{ skill.xp >= 0 ? '+' : '−' }}{{ (skill.xp < 0 ? -skill.xp : skill.xp) | number }}
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      @if (row.note) {
+        <p class="detail-note">{{ row.note }}</p>
+      }
+    </article>
+  </div>
+}

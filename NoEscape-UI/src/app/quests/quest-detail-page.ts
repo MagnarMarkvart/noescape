@@ -4,11 +4,19 @@ import {
   Component,
   computed,
   inject,
-  OnInit,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { QuestView, questTasks, questTimeframe } from './quest.model';
+import { API_BASE_URL } from '../core/api.config';
+import {
+  QuestView,
+  chronicleKindLabel,
+  questCoverBg,
+  questTasks,
+  questTimeframe,
+} from './quest.model';
+import { formatElapsedShort } from '../shared/time';
 import { QuestsService } from './quests.service';
 
 @Component({
@@ -19,10 +27,11 @@ import { QuestsService } from './quests.service';
   styleUrl: './quest-detail-page.css',
   host: { class: 'quest-slide-host' },
 })
-export class QuestDetailPage implements OnInit {
+export class QuestDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly questsService = inject(QuestsService);
+  private loadSeq = 0;
 
   protected readonly quest = signal<QuestView | null>(null);
   protected readonly loading = signal(true);
@@ -39,24 +48,44 @@ export class QuestDetailPage implements OnInit {
     return q ? questTimeframe(q) : '';
   });
 
-  protected readonly coverBg = computed(() => {
-    const url = this.quest()?.coverUrl;
-    return url ? `url('${url}')` : null;
-  });
+  protected readonly chronicleKindLabel = chronicleKindLabel;
 
-  ngOnInit(): void {
-    const id = Number(this.route.snapshot.paramMap.get('id'));
-    if (!Number.isFinite(id)) {
-      this.error.set('Quest not found');
-      this.loading.set(false);
-      return;
-    }
+  protected elapsedLabel(ms: number | null | undefined): string {
+    return formatElapsedShort(ms ?? 0);
+  }
+
+  protected readonly coverBg = computed(() =>
+    questCoverBg(this.quest()?.coverUrl ?? null, API_BASE_URL),
+  );
+
+  constructor() {
+    this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      const id = Number(params.get('id'));
+      if (!Number.isFinite(id)) {
+        this.error.set('Quest not found');
+        this.loading.set(false);
+        return;
+      }
+      this.load(id);
+    });
+  }
+
+  private load(id: number): void {
+    const seq = ++this.loadSeq;
+    this.loading.set(true);
+    this.error.set(null);
     this.questsService.getOne(id).subscribe({
       next: (q) => {
+        if (seq !== this.loadSeq) {
+          return;
+        }
         this.quest.set(q);
         this.loading.set(false);
       },
       error: () => {
+        if (seq !== this.loadSeq) {
+          return;
+        }
         this.error.set('Could not load quest');
         this.loading.set(false);
       },

@@ -1,11 +1,16 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TimeService } from '../time/time.service';
+import { DEFAULT_TZ, isValidTimeZone } from '../time/zone';
 
 export const FEATURE_HABITUS = 'feature:habitus';
 
 @Injectable()
 export class CharacterService implements OnModuleInit {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly time: TimeService,
+  ) {}
 
   async onModuleInit() {
     await this.prisma.character.upsert({
@@ -18,6 +23,7 @@ export class CharacterService implements OnModuleInit {
       update: {},
       create: { key: FEATURE_HABITUS, unlocked: false },
     });
+    await this.time.reload();
   }
 
   async getProfile() {
@@ -48,6 +54,8 @@ export class CharacterService implements OnModuleInit {
     return {
       character,
       title: character.title,
+      nickname: character.nickname,
+      timezone: character.timezone || DEFAULT_TZ,
       features: Object.fromEntries(
         features.map((f) => [f.key, f.unlocked]),
       ) as Record<string, boolean>,
@@ -59,6 +67,31 @@ export class CharacterService implements OnModuleInit {
       habitusUnlocked:
         features.find((f) => f.key === FEATURE_HABITUS)?.unlocked ?? false,
     };
+  }
+
+  async updateSettings(input: { nickname?: string; timezone?: string }) {
+    const data: { nickname?: string; timezone?: string } = {};
+    if (input.nickname !== undefined) {
+      data.nickname = String(input.nickname).trim().slice(0, 40);
+    }
+    if (input.timezone !== undefined) {
+      const tz = String(input.timezone).trim();
+      if (!isValidTimeZone(tz)) {
+        throw new BadRequestException('Unknown timezone');
+      }
+      data.timezone = tz;
+    }
+    if (Object.keys(data).length === 0) {
+      return this.getProfile();
+    }
+    await this.prisma.character.update({
+      where: { id: 1 },
+      data,
+    });
+    if (data.timezone) {
+      await this.time.reload();
+    }
+    return this.getProfile();
   }
 
   async setTitle(title: string) {

@@ -15,7 +15,7 @@ import {
   required,
   submit,
 } from '@angular/forms/signals';
-import { RouterLink } from '@angular/router';
+import { RouterLink, ActivatedRoute } from '@angular/router';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import {
@@ -29,6 +29,8 @@ import {
 import { HabitsService, HabitView } from '../habits/habits.service';
 import { TimedToast } from '../shared/timed-toast';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
+import { CharacterService } from '../character/character.service';
+import { formatElapsedShort } from '../shared/time';
 import { DailiesService } from './dailies.service';
 
 export const DURATION_PRESETS = Array.from({ length: 16 }, (_, i) => 15 * (i + 1));
@@ -46,6 +48,8 @@ export class DailiesPage implements OnInit {
   private readonly skillsService = inject(SkillsService);
   private readonly habitsService = inject(HabitsService);
   private readonly xpFeedback = inject(XpFeedbackService);
+  private readonly character = inject(CharacterService);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly habits = signal<HabitView[]>([]);
   protected readonly templates = signal<DailyTaskTemplate[]>([]);
@@ -70,6 +74,8 @@ export class DailiesPage implements OnInit {
   protected readonly selectedCategory = signal<string>('');
   protected readonly editingSlot = signal<DailyTaskSlot | null>(null);
   protected readonly setupOpen = signal(true);
+  /** Past days stay read-only until Edit is pressed. */
+  protected readonly historyUnlocked = signal(false);
   /** When true, skip auto-hide after the base 1/3/5 board is filled. */
   private setupPinned = false;
 
@@ -104,6 +110,21 @@ export class DailiesPage implements OnInit {
     () => this.selectedDate() === this.offsetIso(1, this.todayIso()),
   );
 
+  protected readonly isPast = computed(
+    () => this.selectedDate() < this.todayIso(),
+  );
+
+  protected readonly canMutate = computed(() => {
+    const board = this.board();
+    if (!board?.isEditable) {
+      return false;
+    }
+    if (board.sealRequired) {
+      return true;
+    }
+    return !this.isPast() || this.historyUnlocked();
+  });
+
   protected readonly canPostponeEdit = computed(() => {
     const slot = this.editingSlot();
     return Boolean(slot?.id && slot.isFilled && !slot.completed);
@@ -122,6 +143,10 @@ export class DailiesPage implements OnInit {
   });
 
   ngOnInit(): void {
+    const queryDate = this.route.snapshot.queryParamMap.get('date');
+    if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+      this.selectedDate.set(queryDate);
+    }
     const cachedTree = this.skillsService.peekTree();
     if (cachedTree) {
       this.skillTree.set(cachedTree);
@@ -162,7 +187,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected toggleSetup(force?: boolean): void {
-    if (this.board()?.readOnly) {
+    if (!this.canMutate()) {
       return;
     }
     const next = force ?? !this.setupOpen();
@@ -198,7 +223,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected startEdit(slot: DailyTaskSlot): void {
-    if (slot.completed || this.board()?.readOnly) {
+    if (slot.completed || !this.canMutate()) {
       return;
     }
     this.setupOpen.set(true);
@@ -323,7 +348,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected clearSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || slot.completed || this.board()?.readOnly) {
+    if (!slot.id || slot.completed || !this.canMutate()) {
       return;
     }
     this.dailiesService.clearSlot(slot.id).subscribe({
@@ -341,7 +366,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected completeSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || slot.completed || this.board()?.readOnly) {
+    if (!slot.id || slot.completed || !this.canMutate()) {
       return;
     }
     this.completingId.set(slot.id);
@@ -360,7 +385,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected uncompleteSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || !slot.completed || this.board()?.readOnly) {
+    if (!slot.id || !slot.completed || !this.canMutate()) {
       return;
     }
     this.uncompletingId.set(slot.id);
@@ -398,7 +423,7 @@ export class DailiesPage implements OnInit {
 
   private postponeTo(targetDate: string): void {
     const slot = this.editingSlot();
-    if (!slot?.id || slot.completed || this.board()?.readOnly) {
+    if (!slot?.id || slot.completed || !this.canMutate()) {
       return;
     }
     this.postponingId.set(slot.id);
@@ -416,6 +441,17 @@ export class DailiesPage implements OnInit {
         this.timed.set(this.readError(err, 'Postpone failed'));
       },
     });
+  }
+
+  protected unlockHistory(): void {
+    this.historyUnlocked.set(true);
+  }
+
+  protected lockHistory(): void {
+    this.historyUnlocked.set(false);
+    this.setupOpen.set(false);
+    this.setupPinned = false;
+    this.cancelEdit();
   }
 
   protected addRegularSlot(): void {
@@ -482,6 +518,7 @@ export class DailiesPage implements OnInit {
   private setDate(date: string): void {
     this.cancelEdit();
     this.setupPinned = false;
+    this.historyUnlocked.set(false);
     this.selectedDate.set(date);
     const cached = this.dailiesService.peekBoard(date);
     if (cached) {
@@ -519,8 +556,7 @@ export class DailiesPage implements OnInit {
   }
 
   private applyBoard(raw: DailyBoard): void {
-    const isEditable =
-      raw.isEditable ?? (!raw.isSealed && !raw.sealRequired);
+    const isEditable = raw.isEditable !== false;
     const board: DailyBoard = {
       ...raw,
       isEditable,
@@ -529,15 +565,18 @@ export class DailiesPage implements OnInit {
     this.board.set(board);
     this.selectedDate.set(board.date);
 
-    // Past / non-today days always land on Tasks (history is read-only).
     if (!this.isTodaySelected(board.date)) {
-      this.setupOpen.set(false);
-      this.setupPinned = false;
-      this.cancelEdit();
+      if (!this.historyUnlocked()) {
+        this.setupOpen.set(false);
+        this.setupPinned = false;
+        this.cancelEdit();
+      } else if (!this.setupPinned && !this.editingKey()) {
+        this.setupOpen.set(false);
+      }
       return;
     }
 
-    if (board.readOnly) {
+    if (!this.canMutate()) {
       this.setupOpen.set(false);
       this.setupPinned = false;
       this.cancelEdit();
@@ -606,12 +645,13 @@ export class DailiesPage implements OnInit {
     };
   }
 
+  protected formatElapsed(ms: number | null | undefined): string {
+    const n = ms ?? 0;
+    return n > 0 ? formatElapsedShort(n) : '—';
+  }
+
   private todayIso(): string {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return this.character.todayIso();
   }
 
   private offsetIso(days: number, from = this.selectedDate()): string {

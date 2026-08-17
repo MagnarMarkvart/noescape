@@ -8,12 +8,14 @@ import {
   FEATURE_HABITUS,
 } from '../character/character.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TimeService } from '../time/time.service';
 
 @Injectable()
 export class HabitsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly characterService: CharacterService,
+    private readonly time: TimeService,
   ) {}
 
   todayIso(): string {
@@ -374,8 +376,7 @@ export class HabitsService {
   }
 
   private localToday(): string {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return this.time.today();
   }
 
   private offsetDate(iso: string, days: number): string {

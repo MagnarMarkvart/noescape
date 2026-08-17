@@ -1,3 +1,4 @@
+import { isDevMode } from '@angular/core';
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
@@ -9,8 +10,8 @@ export const routes: Routes = [
   {
     path: 'status',
     loadComponent: () =>
-      import('./skills/skills-page').then((m) => m.SkillsPage),
-    title: 'Status — No Escape',
+      import('./dashboard/dashboard-page').then((m) => m.DashboardPage),
+    title: 'Dashboard — No Escape',
   },
   {
     path: 'status/:skillId/guide',
@@ -25,10 +26,22 @@ export const routes: Routes = [
     title: 'Character — No Escape',
   },
   {
+    path: 'settings',
+    loadComponent: () =>
+      import('./settings/settings-page').then((m) => m.SettingsPage),
+    title: 'Settings — No Escape',
+  },
+  {
     path: 'quests/forge',
     loadComponent: () =>
       import('./quests/quest-forge-page').then((m) => m.QuestForgePage),
     title: 'Forge Quest — No Escape',
+  },
+  {
+    path: 'quests/:id/edit',
+    loadComponent: () =>
+      import('./quests/quest-forge-page').then((m) => m.QuestForgePage),
+    title: 'Edit Quest — No Escape',
   },
   {
     path: 'quests',
@@ -82,15 +95,15 @@ export const routes: Routes = [
   },
   {
     path: 'dailies/logs',
-    loadComponent: () =>
-      import('./dailies/daily-logs-page').then((m) => m.DailyLogsPage),
-    title: 'Quest Logs — No Escape',
+    redirectTo: 'dailies',
+    pathMatch: 'full',
   },
   {
     path: 'dailies/logs/:date',
-    loadComponent: () =>
-      import('./dailies/daily-logs-page').then((m) => m.DailyLogsPage),
-    title: 'Quest Log — No Escape',
+    redirectTo: ({ params }) => {
+      const date = params['date'];
+      return date ? `/dailies?date=${date}` : '/dailies';
+    },
   },
   {
     path: 'horologium/log',
@@ -114,6 +127,7 @@ export const routes: Routes = [
   },
   {
     path: 'preview',
+    canMatch: [() => isDevMode()],
     loadComponent: () =>
       import('./preview/preview-page').then((m) => m.PreviewPage),
     title: 'Preview — No Escape',
