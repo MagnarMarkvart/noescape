@@ -1,0 +1,15 @@
+{
+  "apps": [{
+    "name": "noescape",
+    "cwd": "./no-escape-back",
+    "script": "dist/src/main.js",
+    "env": {
+      "PORT": "8084",
+      "DATABASE_URL": "file:./dev.db"
+    },
+    "max_memory_restart": "300M",
+    "error_file": "../logs/noescape-error.log",
+    "out_file": "../logs/noescape-out.log",
+    "merge_logs": true
+  }]
+}
