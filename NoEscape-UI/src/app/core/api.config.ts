@@ -1,3 +1,5 @@
-// Production: empty string = same-origin (both SPA and API served from :8084)
-// Dev: change to 'http://localhost:8084' for ng serve on :4200
-export const API_BASE_URL = '';
+import { isDevMode } from '@angular/core';
+
+// Production build: empty = same-origin (Nest serves SPA + API on :8084)
+// ng serve: Angular is on :4200, Nest is on :3000
+export const API_BASE_URL = isDevMode() ? 'http://localhost:3000' : '';
