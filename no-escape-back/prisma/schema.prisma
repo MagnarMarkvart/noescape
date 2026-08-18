@@ -191,18 +191,21 @@ model HorologiumSession {
 
 /// Count-up project stopwatch — work time only, can span days.
 model HorologiumWatch {
-  id            Int       @id @default(autoincrement())
-  name          String
-  status        String    @default("ACTIVE")
-  elapsedMs     BigInt    @default(0)
-  running       Boolean   @default(false)
-  startedAt     DateTime  @default(now())
-  lastStartedAt DateTime?
-  archivedAt    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                Int              @id @default(autoincrement())
+  name              String
+  status            String           @default("ACTIVE")
+  elapsedMs         BigInt           @default(0)
+  running           Boolean          @default(false)
+  startedAt         DateTime         @default(now())
+  lastStartedAt     DateTime?
+  archivedAt        DateTime?
+  scriptoriumWorkId Int?
+  scriptoriumWork   ScriptoriumWork? @relation(fields: [scriptoriumWorkId], references: [id], onDelete: SetNull)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@index([status])
+  @@index([scriptoriumWorkId])
 }
 
 /// Saved Sessio (pomodoro) splits for Horologium.
@@ -301,6 +304,7 @@ model Quest {
   createdAt      DateTime   @default(now())
   runs           QuestRun[]
   subtasks       QuestSubtask[]
+  scriptoriumWorks ScriptoriumWork[]
 }
 
 model QuestSubtask {
@@ -470,4 +474,47 @@ model RoutineStepLog {
   sortOrder      Int          @default(0)
 
   @@index([runId])
+}
+
+/// Scriptorium — vault of works, notions, and dated projects.
+model ScriptoriumWork {
+  id               Int      @id @default(autoincrement())
+  title            String
+  notes            String   @default("")
+  icon             String?
+  /// IMMINENS | TEMPESTIVA | COGITATA
+  tier             String   @default("COGITATA")
+  /// YYYY-MM-DD, optional.
+  dueDate          String?
+  /// Planned volume in minutes. Null = unset.
+  durationMinutes  Int?
+  /// Complexity 1–10.
+  effort           Int      @default(5)
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10 when any skills are set.
+  skillWeightsJson String?
+  /// OPEN | ARCHIVED
+  status           String   @default("OPEN")
+  questId          Int?
+  quest            Quest?   @relation(fields: [questId], references: [id], onDelete: SetNull)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  subtasks         ScriptoriumSubtask[]
+  watches          HorologiumWatch[]
+
+  @@index([status])
+  @@index([tier])
+  @@index([dueDate])
+  @@index([questId])
+}
+
+model ScriptoriumSubtask {
+  id        Int             @id @default(autoincrement())
+  workId    Int
+  work      ScriptoriumWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+  title     String
+  done      Boolean         @default(false)
+  sortOrder Int             @default(0)
+
+  @@index([workId])
 }

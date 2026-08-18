@@ -177,9 +177,10 @@ export class HorologiumApiService {
     );
   }
 
-  createWatch(name: string) {
+  createWatch(name: string, scriptoriumWorkId?: number) {
     return this.http.post<HorologiumWatchRecord>(`${this.baseUrl}/watches`, {
       name,
+      ...(scriptoriumWorkId ? { scriptoriumWorkId } : {}),
     });
   }
 

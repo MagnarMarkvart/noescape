@@ -17,6 +17,9 @@ echo "🗄️  Running Prisma migrations..."
 npx prisma migrate deploy
 npx prisma generate
 
+echo "🌱 Seeding catalog (skills, rewards, quests)..."
+npx prisma db seed
+
 echo "🏗️  Building backend..."
 npm run build
 

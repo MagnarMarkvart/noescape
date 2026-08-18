@@ -173,6 +173,7 @@ export interface CreateQuestPayload {
   totalXp?: number;
   skillWeights?: { slug: string; weight: number }[];
   wealthCents?: number | null;
+  scriptoriumWorkId?: number;
 }
 
 /** Resolve cover URL (catalog + uploaded files live on the API host). */

@@ -59,6 +59,7 @@ export class QuestsController {
       skillWeights?: { slug: string; weight: number }[];
       completionBonus?: Record<string, number>;
       wealthCents?: number | null;
+      scriptoriumWorkId?: number;
     },
   ) {
     return this.questsService.create(body);

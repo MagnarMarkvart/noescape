@@ -196,6 +196,34 @@
         }
       </section>
 
+      <section class="panel scriptorium-panel" aria-label="Approaching Scriptorium dues">
+        <header class="panel-head">
+          <h2>Scriptorium</h2>
+          <a routerLink="/scriptorium">Vault →</a>
+        </header>
+        @if (dueWorks().length === 0) {
+          <p class="empty">No dated works approaching.</p>
+        } @else {
+          <ul class="rows">
+            @for (w of dueWorks(); track w.id) {
+              <li class="row" [attr.data-urgency]="w.urgency">
+                <span class="row-icon" aria-hidden="true">{{ w.icon || '📜' }}</span>
+                <span class="row-body">
+                  <strong>{{ w.title }}</strong>
+                  <small>
+                    {{ workDueCaption(w) }}
+                    · {{ workTierName(w.tier) }}
+                    · Effort {{ w.effort }}
+                    · {{ durationLabel(w.durationMinutes) }}
+                  </small>
+                </span>
+                <a class="done-btn log" [routerLink]="['/scriptorium']" [queryParams]="{ work: w.id }">Open</a>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
       <section class="panel dailies-panel" aria-label="Today’s dailies">
         <header class="panel-head">
           <h2>Dailies</h2>

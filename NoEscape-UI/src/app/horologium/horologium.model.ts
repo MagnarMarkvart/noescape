@@ -181,6 +181,7 @@ export interface HorologiumWatchRecord {
   startedAt: string;
   lastStartedAt: string | null;
   archivedAt: string | null;
+  scriptoriumWorkId?: number | null;
   createdAt: string;
   updatedAt: string;
 }

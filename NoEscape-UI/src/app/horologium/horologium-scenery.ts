@@ -24,6 +24,7 @@ import {
   horologiumBindKey,
 } from './horologium.model';
 import { RoutineView } from '../consuetudo/routines.service';
+import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
 
 export interface HorologiumScene {
   id: string;
@@ -127,6 +128,7 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   @Input() showConsuetudo = false;
   @Input() routines: RoutineView[] = [];
   @Input() selectedRoutineId: number | null = null;
+  @Input() scriptoriumWorks: ScriptoriumWorkView[] = [];
   @Output() readonly closed = new EventEmitter<void>();
   @Output() readonly taskDone = new EventEmitter<void>();
   @Output() readonly started = new EventEmitter<void>();
@@ -365,6 +367,16 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
 
   protected createWatch(): void {
     this.watches.create();
+  }
+
+  protected bindScriptoriumWork(raw: string): void {
+    const id = Number(raw);
+    if (!Number.isFinite(id) || id <= 0) {
+      return;
+    }
+    const work = this.scriptoriumWorks.find((w) => w.id === id);
+    this.setupKindChange.emit('vigilia');
+    this.watches.bindScriptorium(id, work?.title ?? '');
   }
 
   protected toggleWatch(): void {

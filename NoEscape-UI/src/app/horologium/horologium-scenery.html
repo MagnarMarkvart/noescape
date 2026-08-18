@@ -235,6 +235,17 @@
             Create
           </button>
         </form>
+        @if (scriptoriumWorks.length) {
+          <label class="task">
+            From Scriptorium
+            <select (change)="bindScriptoriumWork($any($event.target).value)">
+              <option value="">Choose a work…</option>
+              @for (w of scriptoriumWorks; track w.id) {
+                <option [value]="w.id">{{ w.icon || '📜' }} {{ w.title }}</option>
+              }
+            </select>
+          </label>
+        }
         } @else if (projectWatches().length > 0) {
         <label class="task">
           Vigilia

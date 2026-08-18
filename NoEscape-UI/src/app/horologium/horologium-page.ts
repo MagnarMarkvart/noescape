@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { form, FormField, max, min, required } from '@angular/forms/signals';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { HorologiumApiService } from './horologium-api.service';
 import { HorologiumTimerService } from './horologium-timer.service';
@@ -51,6 +51,8 @@ import {
   RoutinesService,
 } from '../consuetudo/routines.service';
 import { calculateConsuetudoXp } from '../consuetudo/consuetudo-xp';
+import { ScriptoriumService } from '../scriptorium/scriptorium.service';
+import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 
 @Component({
@@ -71,6 +73,8 @@ export class HorologiumPage implements OnInit {
   private readonly quests = inject(QuestsService);
   private readonly dailiesApi = inject(DailiesService);
   private readonly routinesApi = inject(RoutinesService);
+  private readonly scriptoriumApi = inject(ScriptoriumService);
+  private readonly route = inject(ActivatedRoute);
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly shell = inject(AppShellService);
   private readonly destroyRef = inject(DestroyRef);
@@ -189,6 +193,7 @@ export class HorologiumPage implements OnInit {
   protected readonly consuetudoUnlocked = signal(false);
   protected readonly routines = signal<RoutineView[]>([]);
   protected readonly selectedRoutineId = signal<number | null>(null);
+  protected readonly scriptoriumWorks = signal<ScriptoriumWorkView[]>([]);
   protected readonly showConsuetudoMode = computed(
     () =>
       isDevMode() ||
@@ -368,6 +373,7 @@ export class HorologiumPage implements OnInit {
     this.refreshPreview();
     this.reloadDailies();
     this.reloadRoutines();
+    this.reloadScriptorium();
     this.character.getProfile().subscribe({
       next: (p) => this.consuetudoUnlocked.set(Boolean(p.consuetudoUnlocked)),
       error: () => this.consuetudoUnlocked.set(false),
@@ -384,6 +390,7 @@ export class HorologiumPage implements OnInit {
     } else if (this.mode() === 'planned' && this.isActive()) {
       this.enterFocus();
     }
+    this.bindVigiliaQuery();
   }
 
   protected setSetupKind(kind: HorologiumSetupKind): void {
@@ -719,6 +726,16 @@ export class HorologiumPage implements OnInit {
     this.watches.create();
   }
 
+  protected bindScriptoriumWork(raw: string): void {
+    const id = Number(raw);
+    if (!Number.isFinite(id) || id <= 0) {
+      return;
+    }
+    const work = this.scriptoriumWorks().find((w) => w.id === id);
+    this.setSetupKind('vigilia');
+    this.watches.bindScriptorium(id, work?.title ?? '');
+  }
+
   protected toggleWatchWidget(): void {
     this.watches.toggleWidget();
   }
@@ -803,6 +820,29 @@ export class HorologiumPage implements OnInit {
         }
       },
       error: () => this.routines.set([]),
+    });
+  }
+
+  private reloadScriptorium(): void {
+    this.scriptoriumApi.list('OPEN').subscribe({
+      next: (rows) => this.scriptoriumWorks.set(rows),
+      error: () => this.scriptoriumWorks.set([]),
+    });
+  }
+
+  private bindVigiliaQuery(): void {
+    const raw = this.route.snapshot.queryParamMap.get('vigilia');
+    const id = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(id) || id <= 0) {
+      return;
+    }
+    this.setSetupKind('vigilia');
+    this.scriptoriumApi.getOne(id).subscribe({
+      next: (work) => {
+        this.setSetupKind('vigilia');
+        this.watches.bindScriptorium(work.id, work.title);
+      },
+      error: () => this.watches.bindScriptorium(id),
     });
   }
 

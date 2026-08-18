@@ -508,6 +508,17 @@
               <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
             }
           </select>
+          @if (scriptoriumWorks().length) {
+            <label class="scriptorium-bind">
+              From Scriptorium
+              <select (change)="bindScriptoriumWork($any($event.target).value)">
+                <option value="">Choose a work…</option>
+                @for (w of scriptoriumWorks(); track w.id) {
+                  <option [value]="w.id">{{ w.icon || '📜' }} {{ w.title }}</option>
+                }
+              </select>
+            </label>
+          }
           <form class="watch-create" (submit)="$event.preventDefault(); createWatch()">
             <input
               type="text"
@@ -528,6 +539,7 @@
             </div>
             <p class="muted">{{ watchHint() }}</p>
           }
+          <a routerLink="/scriptorium" class="preset-manage">Scriptorium →</a>
         </fieldset>
         } @else if (!isConsuetudo() && projectWatches().length > 0) {
         <fieldset class="task-bind" [disabled]="!canEdit()">
@@ -602,6 +614,7 @@
     [showConsuetudo]="showConsuetudoMode()"
     [routines]="routines()"
     [selectedRoutineId]="selectedRoutineId()"
+    [scriptoriumWorks]="scriptoriumWorks()"
     (closed)="exitScenery()"
     (taskDone)="completeBoundTask()"
     (started)="startFromScenery()"

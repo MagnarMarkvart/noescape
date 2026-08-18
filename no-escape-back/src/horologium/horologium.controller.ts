@@ -102,8 +102,13 @@ export class HorologiumController {
   }
 
   @Post('watches')
-  createWatch(@Body() body: { name?: string }) {
-    return this.watchesService.create(body?.name ?? '');
+  createWatch(
+    @Body() body: { name?: string; scriptoriumWorkId?: number },
+  ) {
+    return this.watchesService.create(
+      body?.name ?? '',
+      body?.scriptoriumWorkId,
+    );
   }
 
   @Patch('watches/:id')

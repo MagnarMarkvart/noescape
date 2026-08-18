@@ -63,6 +63,7 @@ type CreateQuestInput = {
   skillWeights?: QuestSkillWeight[];
   completionBonus?: Record<string, number>;
   wealthCents?: number | null;
+  scriptoriumWorkId?: number;
 };
 
 const MAX_COVER_BYTES = 4 * 1024 * 1024;
@@ -281,6 +282,14 @@ export class QuestsService {
       await this.prisma.quest.update({
         where: { id: created.id },
         data: { coverImage },
+      });
+    }
+
+    const workId = Number(input.scriptoriumWorkId);
+    if (Number.isFinite(workId) && workId > 0) {
+      await this.prisma.scriptoriumWork.updateMany({
+        where: { id: workId },
+        data: { questId: created.id },
       });
     }
 

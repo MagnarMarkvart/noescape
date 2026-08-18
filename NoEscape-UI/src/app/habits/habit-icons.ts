@@ -89,6 +89,8 @@ export const HABIT_ICON_GROUPS: HabitIconGroup[] = [
       { glyph: '🏠', label: 'Home' },
       { glyph: '🌱', label: 'Grow' },
       { glyph: '🔥', label: 'Streak' },
+      { glyph: '📜', label: 'Scroll' },
+      { glyph: '📋', label: 'Ledger' },
     ],
   },
 ];

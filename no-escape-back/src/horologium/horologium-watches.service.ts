@@ -10,6 +10,7 @@ export type HorologiumWatchDto = {
   startedAt: Date;
   lastStartedAt: Date | null;
   archivedAt: Date | null;
+  scriptoriumWorkId: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -26,13 +27,38 @@ export class HorologiumWatchesService {
     return rows.map((row) => this.view(row));
   }
 
-  async create(name: string) {
-    const trimmed = name.trim().slice(0, 80);
+  async create(name: string, scriptoriumWorkId?: number) {
+    let workId: number | null = null;
+    let trimmed = name.trim().slice(0, 80);
+    if (scriptoriumWorkId != null) {
+      const id = Math.round(Number(scriptoriumWorkId));
+      if (!Number.isFinite(id) || id <= 0) {
+        throw new BadRequestException('Invalid Scriptorium work');
+      }
+      const work = await this.prisma.scriptoriumWork.findUnique({
+        where: { id },
+        select: { id: true, title: true, status: true },
+      });
+      if (!work || work.status !== 'OPEN') {
+        throw new NotFoundException(`Scriptorium work #${id} not found`);
+      }
+      const existing = await this.prisma.horologiumWatch.findFirst({
+        where: { scriptoriumWorkId: id, status: 'ACTIVE' },
+      });
+      if (existing) {
+        return this.view(existing);
+      }
+      workId = id;
+      trimmed = trimmed || work.title.trim().slice(0, 80);
+    }
     if (!trimmed) {
       throw new BadRequestException('Watch name is required');
     }
     const row = await this.prisma.horologiumWatch.create({
-      data: { name: trimmed },
+      data: {
+        name: trimmed,
+        scriptoriumWorkId: workId,
+      },
     });
     return this.view(row);
   }
@@ -103,12 +129,22 @@ export class HorologiumWatchesService {
     startedAt: Date;
     lastStartedAt: Date | null;
     archivedAt: Date | null;
+    scriptoriumWorkId?: number | null;
     createdAt: Date;
     updatedAt: Date;
   }): HorologiumWatchDto {
     return {
-      ...row,
+      id: row.id,
+      name: row.name,
+      status: row.status,
       elapsedMs: Number(row.elapsedMs),
+      running: row.running,
+      startedAt: row.startedAt,
+      lastStartedAt: row.lastStartedAt,
+      archivedAt: row.archivedAt,
+      scriptoriumWorkId: row.scriptoriumWorkId ?? null,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
   }
 }

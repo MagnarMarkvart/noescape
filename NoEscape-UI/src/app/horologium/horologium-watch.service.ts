@@ -182,6 +182,24 @@ export class HorologiumWatchService {
     });
   }
 
+  bindScriptorium(workId: number, name = ''): void {
+    const existing = this.watches().find(
+      (w) => w.scriptoriumWorkId === workId && w.status === 'ACTIVE',
+    );
+    if (existing) {
+      this.select(existing.id);
+      return;
+    }
+    this.api.createWatch(name, workId).subscribe({
+      next: (row) => {
+        this.watches.update((list) =>
+          list.some((w) => w.id === row.id) ? list : [row, ...list],
+        );
+        this.select(row.id);
+      },
+    });
+  }
+
   select(id: number | null): void {
     if (id === this.selectedId()) {
       return;

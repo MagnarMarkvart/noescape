@@ -178,6 +178,12 @@ export const routes: Routes = [
     title: 'Horologium — No Escape',
   },
   {
+    path: 'scriptorium',
+    loadComponent: () =>
+      import('./scriptorium/scriptorium-page').then((m) => m.ScriptoriumPage),
+    title: 'Scriptorium — No Escape',
+  },
+  {
     path: 'level-ups',
     loadComponent: () =>
       import('./level-ups/level-ups-page').then((m) => m.LevelUpsPage),

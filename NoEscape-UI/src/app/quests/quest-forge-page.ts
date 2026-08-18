@@ -24,6 +24,8 @@ import {
   splitQuestXp,
 } from './quest.model';
 import { QuestsService } from './quests.service';
+import { ScriptoriumService } from '../scriptorium/scriptorium.service';
+import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
 
 interface ForgeSubtask {
   id?: number;
@@ -40,6 +42,7 @@ interface ForgeSubtask {
 })
 export class QuestForgePage implements OnInit {
   private readonly questsService = inject(QuestsService);
+  private readonly scriptoriumApi = inject(ScriptoriumService);
   private readonly skillsService = inject(SkillsService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -50,6 +53,7 @@ export class QuestForgePage implements OnInit {
   protected readonly saving = signal(false);
   protected readonly loading = signal(false);
   protected readonly editId = signal<number | null>(null);
+  protected readonly scriptoriumWorkId = signal<number | null>(null);
   protected readonly skills = signal<Skill[]>([]);
   protected readonly catalog = signal<QuestView[]>([]);
   protected readonly coverPreview = signal<string | null>(null);
@@ -129,6 +133,13 @@ export class QuestForgePage implements OnInit {
     if (Number.isFinite(id) && id > 0) {
       this.editId.set(id);
       this.loadQuest(id);
+      return;
+    }
+    const scriptoriumRaw = this.route.snapshot.queryParamMap.get('scriptorium');
+    const workId = scriptoriumRaw ? Number(scriptoriumRaw) : NaN;
+    if (Number.isFinite(workId) && workId > 0) {
+      this.scriptoriumWorkId.set(workId);
+      this.loadScriptorium(workId);
     }
   }
 
@@ -374,6 +385,7 @@ export class QuestForgePage implements OnInit {
         wealthCents: boostsWealth(this.skillWeights())
           ? parseMoneyToCents(m.wealthAmount)
           : 0,
+        scriptoriumWorkId: this.scriptoriumWorkId() ?? undefined,
       };
       const id = this.editId();
       const req =
@@ -445,5 +457,34 @@ export class QuestForgePage implements OnInit {
     const existing = resolveQuestCoverUrl(q.coverUrl, API_BASE_URL);
     this.coverPreview.set(existing);
     this.coverDataUrl.set(null);
+  }
+
+  private loadScriptorium(id: number): void {
+    this.loading.set(true);
+    this.scriptoriumApi.getOne(id).subscribe({
+      next: (work) => {
+        this.applyScriptorium(work);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.loading.set(false);
+        this.timed.set('Could not load the Scriptorium work');
+      },
+    });
+  }
+
+  private applyScriptorium(work: ScriptoriumWorkView): void {
+    this.createModel.update((m) => ({
+      ...m,
+      name: work.title,
+      summary: work.notes.trim() || work.title,
+    }));
+    this.subtasks.set(
+      work.subtasks.map((s) => ({
+        title: s.title,
+        gatesJourney: false,
+      })),
+    );
+    this.skillWeights.set(work.skillWeights.map((w) => ({ ...w })));
   }
 }

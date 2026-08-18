@@ -386,6 +386,25 @@ a.panel:focus-visible {
   margin-top: 0.35rem;
 }
 
+a.done-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.scriptorium-panel a.done-btn {
+  margin-top: 0;
+}
+
+.scriptorium-panel .row[data-urgency='overdue'] strong {
+  color: #e08a72;
+}
+
+.scriptorium-panel .row[data-urgency='today'] strong,
+.scriptorium-panel .row[data-urgency='soon'] strong {
+  color: var(--rs-accent);
+}
+
 .done-flag {
   color: var(--rs-xp);
 }
@@ -442,6 +461,7 @@ a.panel:focus-visible {
     grid-template-areas:
       'skills clock'
       'habits quests'
+      'scriptorium scriptorium'
       'dailies dailies';
   }
 
@@ -449,6 +469,7 @@ a.panel:focus-visible {
   .clock-panel { grid-area: clock; }
   .habits-panel { grid-area: habits; }
   .quests-panel { grid-area: quests; }
+  .scriptorium-panel { grid-area: scriptorium; }
   .dailies-panel { grid-area: dailies; }
 }
 
@@ -458,6 +479,7 @@ a.panel:focus-visible {
     grid-template-areas:
       'skills clock habits'
       'skills quests quests'
+      'scriptorium scriptorium scriptorium'
       'dailies dailies dailies';
   }
 }

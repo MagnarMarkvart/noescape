@@ -22,6 +22,12 @@ import { formatElapsedShort } from '../shared/time';
 import { TimedToast } from '../shared/timed-toast';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
+import { ScriptoriumService } from '../scriptorium/scriptorium.service';
+import {
+  durationLabel,
+  ScriptoriumDueView,
+  SCRIPTORIUM_TIERS,
+} from '../scriptorium/scriptorium.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 
 @Component({
@@ -36,6 +42,7 @@ export class DashboardPage implements OnInit {
   private readonly dailiesService = inject(DailiesService);
   private readonly habitsService = inject(HabitsService);
   private readonly questsService = inject(QuestsService);
+  private readonly scriptoriumApi = inject(ScriptoriumService);
   private readonly characterService = inject(CharacterService);
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly timer = inject(HorologiumTimerService);
@@ -46,6 +53,7 @@ export class DashboardPage implements OnInit {
   protected readonly habits = signal<HabitView[]>([]);
   protected readonly board = signal<DailyBoard | null>(null);
   protected readonly quests = signal<QuestView[]>([]);
+  protected readonly dueWorks = signal<ScriptoriumDueView[]>([]);
   protected readonly habitusUnlocked = signal(false);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
@@ -68,6 +76,7 @@ export class DashboardPage implements OnInit {
   private readonly ringCircumference = 2 * Math.PI * 42;
 
   protected readonly todayIso = this.characterService.todayIso;
+  protected readonly durationLabel = durationLabel;
 
   protected readonly totalLevel = computed(() => this.tree()?.totalLevel ?? 0);
   protected readonly wealthLabel = this.characterService.wealthLabel;
@@ -147,6 +156,25 @@ export class DashboardPage implements OnInit {
 
   protected habitDoneToday(habit: HabitView): boolean {
     return habit.recentDates.includes(this.todayIso());
+  }
+
+  protected workDueCaption(row: ScriptoriumDueView): string {
+    const pretty = this.characterService.formatDate(row.dueDate);
+    if (row.urgency === 'overdue') {
+      const n = Math.abs(row.dueInDays);
+      return n === 1 ? `Overdue · ${pretty}` : `${n} days overdue · ${pretty}`;
+    }
+    if (row.urgency === 'today') {
+      return `Due today · ${pretty}`;
+    }
+    if (row.dueInDays === 1) {
+      return `Tomorrow · ${pretty}`;
+    }
+    return `In ${row.dueInDays} days · ${pretty}`;
+  }
+
+  protected workTierName(tier: string): string {
+    return SCRIPTORIUM_TIERS.find((t) => t.id === tier)?.name ?? tier;
   }
 
   protected todayTasks(quest: QuestView): QuestSubtaskView[] {
@@ -257,14 +285,18 @@ export class DashboardPage implements OnInit {
       board: this.dailiesService.getBoard(this.todayIso(), true),
       quests: this.questsService.list('active'),
       habits: this.habitsService.list().pipe(catchError(() => of([] as HabitView[]))),
+      dueWorks: this.scriptoriumApi.dueSoon(14).pipe(
+        catchError(() => of([] as ScriptoriumDueView[])),
+      ),
       profile: this.characterService.getProfile().pipe(
         catchError(() => of(null)),
       ),
     }).subscribe({
-      next: ({ tree, board, quests, habits, profile }) => {
+      next: ({ tree, board, quests, habits, dueWorks, profile }) => {
         this.tree.set(tree);
         this.board.set(board);
         this.quests.set(quests);
+        this.dueWorks.set(dueWorks);
         this.habits.set(habits.filter((h) => h.active && !h.archived));
         this.habitusUnlocked.set(Boolean(profile?.habitusUnlocked));
         this.loading.set(false);
