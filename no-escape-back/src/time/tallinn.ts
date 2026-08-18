@@ -33,12 +33,14 @@ export function eachDateInclusive(from: string, to: string): string[] {
   return out;
 }
 
-export function isoWeekDates(iso: string): string[] {
+/** 0 = Sunday, 1 = Monday. */
+export function weekDates(iso: string, weekStartsOn: 0 | 1 = 1): string[] {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   const day = dt.getUTCDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  dt.setUTCDate(dt.getUTCDate() + mondayOffset);
+  const offset =
+    weekStartsOn === 0 ? -day : day === 0 ? -6 : 1 - day;
+  dt.setUTCDate(dt.getUTCDate() + offset);
   return Array.from({ length: 7 }, (_, i) => {
     const n = new Date(dt);
     n.setUTCDate(dt.getUTCDate() + i);
@@ -47,4 +49,9 @@ export function isoWeekDates(iso: string): string[] {
     const dd = String(n.getUTCDate()).padStart(2, '0');
     return `${yy}-${mm}-${dd}`;
   });
+}
+
+/** Monday-start week (ISO). Prefer TimeService.weekDates when settings apply. */
+export function isoWeekDates(iso: string): string[] {
+  return weekDates(iso, 1);
 }

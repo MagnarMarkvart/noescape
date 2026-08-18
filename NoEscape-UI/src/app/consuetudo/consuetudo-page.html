@@ -1,0 +1,100 @@
+<section class="consuetudo-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">{{ demo() ? 'Unlockable · Demo' : 'Practice' }}</p>
+      <h1>Consuetudo</h1>
+      @if (demo()) {
+        <p class="hint-inline">
+          Preview of a named practice. Complete
+          <a [routerLink]="unlockQuestPath()">Ordo Diei</a>
+          to forge real routines and run them in Horologium.
+        </p>
+      } @else if (access(); as a) {
+        @if (!a.unlocked && a.questActive) {
+          <p class="hint-inline">
+            Ordo Diei is active — forge one Consuetudo, then walk it in Horologium.
+          </p>
+        }
+      }
+    </div>
+    <nav class="toolbar-links">
+      @if (!demo() && access()?.canCreate) {
+        <a routerLink="/consuetudo/new">New practice</a>
+      }
+      @if (demo()) {
+        <a [routerLink]="unlockQuestPath()">Unlock via quest</a>
+      } @else {
+        <a routerLink="/horologium">Horologium →</a>
+      }
+    </nav>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  @if (error()) {
+    <p class="state error">{{ error() }}</p>
+    <p class="hint">
+      Start
+      <a [routerLink]="unlockQuestPath()">Ordo Diei</a>
+      to forge a Consuetudo. Dev mode can open it early.
+    </p>
+  } @else if (rows().length === 0) {
+    <p class="empty">
+      No practices yet.
+      @if (access()?.canCreate) {
+        <a routerLink="/consuetudo/new">Forge the first Consuetudo.</a>
+      }
+    </p>
+  } @else {
+    <ul class="routine-list">
+      @for (r of rows(); track r.id) {
+        <li class="card">
+          <header class="card-head">
+            <span class="icon" aria-hidden="true">{{ r.icon || '🌅' }}</span>
+            <div>
+              <h2>{{ r.name }}</h2>
+              <p class="meta">{{ plannedLabel(r) }} · effort {{ r.effortLevel }}</p>
+            </div>
+            @if (!demo()) {
+              <a class="edit" [routerLink]="['/consuetudo', r.id]">Edit</a>
+            }
+          </header>
+          <ol class="steps">
+            @for (s of r.steps; track s.id) {
+              <li>
+                <span aria-hidden="true">{{ s.icon || '◆' }}</span>
+                <strong>{{ s.title }}</strong>
+                <span class="mins">{{ s.durationMinutes }}m</span>
+              </li>
+            }
+          </ol>
+          @if (r.runs[0]; as run) {
+            <aside class="last-run" aria-label="Last completion">
+              <p>
+                Last walk {{ formatDate(run.date) }}
+                · +{{ run.xpAwarded }} XP
+                @if (run.bonusXp > 0) {
+                  <span class="bonus">incl. {{ run.bonusXp }} bonus</span>
+                }
+              </p>
+              <ul>
+                @for (s of run.steps; track s.id) {
+                  <li [class.skipped]="s.outcome === 'SKIPPED'">
+                    <span aria-hidden="true">{{ s.icon || '◆' }}</span>
+                    {{ s.title }}
+                    <span class="delta">{{ formatDelta(s.deltaMs) }}</span>
+                    @if (s.outcome === 'SKIPPED') {
+                      <span class="skip-flag">Skip</span>
+                    }
+                  </li>
+                }
+              </ul>
+            </aside>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

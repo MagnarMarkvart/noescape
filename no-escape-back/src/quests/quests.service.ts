@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   CharacterService,
+  FEATURE_CONSUETUDO,
   FEATURE_HABITUS,
 } from '../character/character.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,7 +20,8 @@ import {
   sharesToBonus,
   splitQuestXp,
 } from '../xp/quest-xp.util';
-import { addDaysIso, eachDateInclusive, isoWeekDates } from '../time/tallinn';
+import { boostsWealth, parseRewardCents } from '../wealth/money.util';
+import { addDaysIso, eachDateInclusive } from '../time/tallinn';
 import { formatElapsedShort } from '../time/zone';
 
 type SkillReq = { slug: string; level: number };
@@ -60,11 +62,16 @@ type CreateQuestInput = {
   totalXp?: number;
   skillWeights?: QuestSkillWeight[];
   completionBonus?: Record<string, number>;
+  wealthCents?: number | null;
 };
 
 const MAX_COVER_BYTES = 4 * 1024 * 1024;
 const SUBTASK_PROGRESS_CAP = 90;
 const DESTINATION_PROGRESS = 10;
+
+export const QUEST_ORDO_DIEI_SLUG = 'ordo-diei';
+export const ORDO_DIEI_FORGE_TITLE = 'Forge a Consuetudo';
+export const ORDO_DIEI_WALK_TITLE = 'Walk the Consuetudo';
 
 @Injectable()
 export class QuestsService {
@@ -229,6 +236,9 @@ export class QuestsService {
         commitmentLevel: commitment,
         totalXp,
         skillWeightsJson: weights.length ? JSON.stringify(weights) : null,
+        wealthCents: boostsWealth(weights)
+          ? parseRewardCents(input.wealthCents)
+          : 0,
         skillSlug:
           input.skillSlug?.trim() ||
           weights.slice().sort((a, b) => b.weight - a.weight)[0]?.slug ||
@@ -344,6 +354,14 @@ export class QuestsService {
         commitmentLevel: commitment,
         totalXp,
         skillWeightsJson: weights.length ? JSON.stringify(weights) : null,
+        wealthCents:
+          input.wealthCents !== undefined
+            ? boostsWealth(weights)
+              ? parseRewardCents(input.wealthCents)
+              : 0
+            : boostsWealth(weights)
+              ? quest.wealthCents
+              : 0,
         skillSlug:
           input.skillSlug?.trim() ||
           weights.slice().sort((a, b) => b.weight - a.weight)[0]?.slug ||
@@ -792,6 +810,56 @@ export class QuestsService {
     };
   }
 
+  async hasActiveRunBySlug(slug: string): Promise<boolean> {
+    const quest = await this.prisma.quest.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    if (!quest) {
+      return false;
+    }
+    const run = await this.prisma.questRun.findFirst({
+      where: { questId: quest.id, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    return run != null;
+  }
+
+  /** Marks Ordo Diei subtasks; walking the practice completes the destination. */
+  async advanceOrdoDiei(kind: 'forge' | 'walk'): Promise<void> {
+    const quest = await this.prisma.quest.findUnique({
+      where: { slug: QUEST_ORDO_DIEI_SLUG },
+      include: { subtasks: { orderBy: { sortOrder: 'asc' } } },
+    });
+    if (!quest) {
+      return;
+    }
+    const run = await this.prisma.questRun.findFirst({
+      where: { questId: quest.id, status: 'ACTIVE' },
+    });
+    if (!run) {
+      return;
+    }
+    const titles =
+      kind === 'forge'
+        ? [ORDO_DIEI_FORGE_TITLE]
+        : [ORDO_DIEI_FORGE_TITLE, ORDO_DIEI_WALK_TITLE];
+    for (const title of titles) {
+      const sub = quest.subtasks.find((row) => row.title === title);
+      if (sub) {
+        await this.toggleSubtask(run.id, sub.id, true);
+      }
+    }
+    if (kind !== 'walk') {
+      return;
+    }
+    try {
+      await this.completeDestination(run.id);
+    } catch {
+      /* destination still gated or already completed */
+    }
+  }
+
   private async requireActiveRun(runId: number) {
     const run = await this.prisma.questRun.findUnique({
       where: { id: runId },
@@ -816,6 +884,7 @@ export class QuestsService {
       skillSlug: string | null;
       totalXp?: number;
       skillWeightsJson?: string | null;
+      wealthCents?: number | null;
     },
   ) {
     const plan = this.parseXpPlan(quest.xpPlanJson);
@@ -871,6 +940,25 @@ export class QuestsService {
         unlocked.push(FEATURE_HABITUS);
       }
     }
+    if (quest.slug === QUEST_ORDO_DIEI_SLUG) {
+      await this.characterService.unlockFeature(FEATURE_CONSUETUDO);
+      if (!unlocked.includes(FEATURE_CONSUETUDO)) {
+        unlocked.push(FEATURE_CONSUETUDO);
+      }
+    }
+
+    const wealthCents = boostsWealth(
+      this.parseJson<QuestSkillWeight[]>(quest.skillWeightsJson ?? null) ?? [],
+    )
+      ? parseRewardCents(quest.wealthCents)
+      : 0;
+    if (wealthCents > 0) {
+      await this.characterService.adjustWealth({
+        deltaCents: wealthCents,
+        note: `${quest.name}: quest complete`,
+        source: 'quest',
+      });
+    }
 
     return { awards, unlocked };
   }
@@ -915,6 +1003,7 @@ export class QuestsService {
       commitmentLevel?: number;
       totalXp?: number;
       skillWeightsJson?: string | null;
+      wealthCents?: number | null;
       skillReqsJson: string | null;
       unlockReqsJson: string | null;
       questReqsJson: string | null;
@@ -1141,6 +1230,7 @@ export class QuestsService {
       createdByUser: quest.createdByUser,
       totalXp: quest.totalXp ?? skillShares.reduce((sum, s) => sum + s.xp, 0),
       skillShares,
+      wealthCents: parseRewardCents(quest.wealthCents),
       xpPlan,
       rewards: this.parseJson(quest.rewardJson),
       requirements,
@@ -1235,7 +1325,7 @@ export class QuestsService {
     if (journeyDates.includes(date)) {
       return false;
     }
-    const weekDates = isoWeekDates(date);
+    const weekDates = this.time.weekDates(date);
     const loggedThisWeek = journeyDates.filter((d) => weekDates.includes(d))
       .length;
     return loggedThisWeek < this.clampCommitment(commitmentLevel);
@@ -1246,7 +1336,7 @@ export class QuestsService {
     commitmentLevel: number,
     journeyDates: string[],
   ) {
-    const dates = isoWeekDates(today);
+    const dates = this.time.weekDates(today);
     const logged = dates.filter((d) => journeyDates.includes(d)).length;
     return {
       start: dates[0],
@@ -1295,7 +1385,7 @@ export class QuestsService {
     const missed: Array<{ date: string; reason: string }> = [];
     const seenWeeks = new Set<string>();
     for (const date of days) {
-      const week = isoWeekDates(date);
+      const week = this.time.weekDates(date);
       const key = week[0];
       if (seenWeeks.has(key)) {
         continue;

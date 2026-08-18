@@ -3,11 +3,16 @@ import { QuestsModule } from '../quests/quests.module';
 import { SkillsModule } from '../skills/skills.module';
 import { HorologiumController } from './horologium.controller';
 import { HorologiumService } from './horologium.service';
+import { HorologiumPresetsService } from './horologium-presets.service';
 import { HorologiumWatchesService } from './horologium-watches.service';
 
 @Module({
   imports: [SkillsModule, QuestsModule],
   controllers: [HorologiumController],
-  providers: [HorologiumService, HorologiumWatchesService],
+  providers: [
+    HorologiumService,
+    HorologiumWatchesService,
+    HorologiumPresetsService,
+  ],
 })
 export class HorologiumModule {}

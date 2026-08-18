@@ -12,13 +12,26 @@ import {
 export class QuestsService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${API_BASE_URL}/quests`;
+  private readonly fullCache = new Map<number, QuestView>();
 
   /** Sidebar cache of active IRL goals. */
   readonly activeQuests = signal<ActiveQuestSummary[]>([]);
 
+  peekFull(id: number): QuestView | null {
+    return this.fullCache.get(id) ?? null;
+  }
+
   list(filter = 'all') {
     return this.http.get<QuestView[]>(
       `${this.baseUrl}?filter=${encodeURIComponent(filter)}`,
+    ).pipe(
+      tap((rows) => {
+        for (const q of rows) {
+          if (!this.fullCache.has(q.id)) {
+            this.fullCache.set(q.id, q);
+          }
+        }
+      }),
     );
   }
 
@@ -29,19 +42,26 @@ export class QuestsService {
   }
 
   getOne(id: number) {
-    return this.http.get<QuestView>(`${this.baseUrl}/${id}`);
+    return this.http.get<QuestView>(`${this.baseUrl}/${id}`).pipe(
+      tap((q) => this.fullCache.set(q.id, q)),
+    );
   }
 
   create(body: CreateQuestPayload) {
-    return this.http.post<QuestView>(this.baseUrl, body);
+    return this.http.post<QuestView>(this.baseUrl, body).pipe(
+      tap((q) => this.fullCache.set(q.id, q)),
+    );
   }
 
   update(id: number, body: CreateQuestPayload) {
-    return this.http.patch<QuestView>(`${this.baseUrl}/${id}`, body);
+    return this.http.patch<QuestView>(`${this.baseUrl}/${id}`, body).pipe(
+      tap((q) => this.fullCache.set(q.id, q)),
+    );
   }
 
   start(id: number) {
     return this.http.post<QuestView>(`${this.baseUrl}/${id}/start`, {}).pipe(
+      tap((q) => this.fullCache.set(q.id, q)),
       tap(() => void this.refreshActive().subscribe()),
     );
   }
@@ -56,7 +76,10 @@ export class QuestsService {
         awards: import('../skills/skill.model').LogActivityResponse[];
         quest: QuestView;
       }>(`${this.baseUrl}/runs/${runId}/log`, { result, note })
-      .pipe(tap(() => void this.refreshActive().subscribe()));
+      .pipe(
+        tap((res) => this.fullCache.set(res.quest.id, res.quest)),
+        tap(() => void this.refreshActive().subscribe()),
+      );
   }
 
   logJourney(runId: number, body: { date?: string; note?: string; done?: boolean }) {
@@ -65,7 +88,10 @@ export class QuestsService {
         `${this.baseUrl}/runs/${runId}/journey`,
         body,
       )
-      .pipe(tap(() => void this.refreshActive().subscribe()));
+      .pipe(
+        tap((res) => this.fullCache.set(res.quest.id, res.quest)),
+        tap(() => void this.refreshActive().subscribe()),
+      );
   }
 
   toggleSubtask(runId: number, subtaskId: number, completed: boolean) {
@@ -73,7 +99,10 @@ export class QuestsService {
       .post<QuestView>(`${this.baseUrl}/runs/${runId}/subtasks/${subtaskId}`, {
         completed,
       })
-      .pipe(tap(() => void this.refreshActive().subscribe()));
+      .pipe(
+        tap((q) => this.fullCache.set(q.id, q)),
+        tap(() => void this.refreshActive().subscribe()),
+      );
   }
 
   patchSubtaskElapsed(runId: number, subtaskId: number, elapsedMs: number) {
@@ -95,6 +124,9 @@ export class QuestsService {
         awards: import('../skills/skill.model').LogActivityResponse[];
         quest: QuestView;
       }>(`${this.baseUrl}/runs/${runId}/destination`, {})
-      .pipe(tap(() => void this.refreshActive().subscribe()));
+      .pipe(
+        tap((res) => this.fullCache.set(res.quest.id, res.quest)),
+        tap(() => void this.refreshActive().subscribe()),
+      );
   }
 }

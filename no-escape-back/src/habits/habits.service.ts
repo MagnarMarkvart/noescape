@@ -9,6 +9,7 @@ import {
 } from '../character/character.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeService } from '../time/time.service';
+import { FINANCE_SKILL_SLUG, parseRewardCents } from '../wealth/money.util';
 
 @Injectable()
 export class HabitsService {
@@ -61,6 +62,7 @@ export class HabitsService {
       skillId?: number;
       cadence?: string;
       everyNDays?: number;
+      wealthCents?: number | null;
     },
     devBypass = false,
   ) {
@@ -71,17 +73,50 @@ export class HabitsService {
     }
     const cadence = input.cadence === 'EVERY_N_DAYS' ? 'EVERY_N_DAYS' : 'DAILY';
     const everyNDays = Math.max(1, Math.round(input.everyNDays || 1));
+    const skillId = await this.resolveSkillId(input.skillId);
     const habit = await this.prisma.habit.create({
       data: {
         name,
         icon: input.icon?.trim() || '◆',
-        skillId: input.skillId ?? null,
+        skillId,
         cadence,
         everyNDays: cadence === 'DAILY' ? 1 : everyNDays,
+        wealthCents: await this.resolveWealthCents(skillId, input.wealthCents),
       },
       include: this.habitInclude(),
     });
     return this.enrich(habit);
+  }
+
+  async update(
+    habitId: number,
+    input: {
+      skillId?: number | null;
+      wealthCents?: number | null;
+    },
+    devBypass = false,
+  ) {
+    await this.assertUnlocked(devBypass);
+    const habit = await this.prisma.habit.findUnique({ where: { id: habitId } });
+    if (!habit) {
+      throw new NotFoundException(`Habit #${habitId} not found`);
+    }
+    const skillId =
+      input.skillId === undefined
+        ? habit.skillId
+        : await this.resolveSkillId(input.skillId);
+    const updated = await this.prisma.habit.update({
+      where: { id: habitId },
+      data: {
+        skillId,
+        wealthCents: await this.resolveWealthCents(
+          skillId,
+          input.wealthCents !== undefined ? input.wealthCents : habit.wealthCents,
+        ),
+      },
+      include: this.habitInclude(),
+    });
+    return this.enrich(updated);
   }
 
   async setArchived(habitId: number, archived: boolean, devBypass = false) {
@@ -89,6 +124,9 @@ export class HabitsService {
     const habit = await this.prisma.habit.findUnique({ where: { id: habitId } });
     if (!habit) {
       throw new NotFoundException(`Habit #${habitId} not found`);
+    }
+    if (archived) {
+      await this.detachHabitFromDailies(habitId);
     }
     const updated = await this.prisma.habit.update({
       where: { id: habitId },
@@ -104,8 +142,24 @@ export class HabitsService {
     if (!habit) {
       throw new NotFoundException(`Habit #${habitId} not found`);
     }
+    await this.detachHabitFromDailies(habitId);
     await this.prisma.habit.delete({ where: { id: habitId } });
     return { deleted: true, id: habitId };
+  }
+
+  /**
+   * Defaults and unfinished dailies keep their other fields; the habit
+   * link is cleared. Completing a daily must not fail if the habit is gone.
+   */
+  private async detachHabitFromDailies(habitId: number) {
+    await this.prisma.dailyTaskTemplate.updateMany({
+      where: { habitId },
+      data: { habitId: null },
+    });
+    await this.prisma.dailyTask.updateMany({
+      where: { habitId, completed: false },
+      data: { habitId: null },
+    });
   }
 
   async rangeLog(
@@ -205,6 +259,7 @@ export class HabitsService {
           habitId,
           source: 'manual',
           dailyTaskId: null,
+          wealthAwardedCents: 0,
           createdAt: new Date(),
         })),
       }),
@@ -237,16 +292,41 @@ export class HabitsService {
       }
       return null;
     }
-    return this.prisma.habitCompletion.upsert({
+    const existing = await this.prisma.habitCompletion.findUnique({
       where: { habitId_date: { habitId, date } },
-      update: { source, dailyTaskId: dailyTaskId ?? null },
-      create: {
+    });
+    if (existing) {
+      if (source === 'daily') {
+        return this.prisma.habitCompletion.update({
+          where: { habitId_date: { habitId, date } },
+          data: { source, dailyTaskId: dailyTaskId ?? null },
+        });
+      }
+      return existing;
+    }
+    const created = await this.prisma.habitCompletion.create({
+      data: {
         habitId,
         date,
         source,
         dailyTaskId: dailyTaskId ?? null,
       },
     });
+    const wealthCents = parseRewardCents(habit.wealthCents);
+    if (source === 'manual' && wealthCents > 0) {
+      await this.characterService.adjustWealth({
+        deltaCents: wealthCents,
+        note: `Habit: ${habit.name}`,
+        source: 'habit',
+        sourceId: created.id,
+        date,
+      });
+      return this.prisma.habitCompletion.update({
+        where: { id: created.id },
+        data: { wealthAwardedCents: wealthCents },
+      });
+    }
+    return created;
   }
 
   async uncomplete(habitId: number, date: string) {
@@ -265,6 +345,16 @@ export class HabitsService {
     });
     if (!existing) {
       return { removed: false, date };
+    }
+    const awarded = parseRewardCents(existing.wealthAwardedCents);
+    if (awarded > 0) {
+      await this.characterService.adjustWealth({
+        deltaCents: -awarded,
+        note: `Undo habit: ${habit.name}`,
+        source: 'habit',
+        sourceId: existing.id,
+        date,
+      });
     }
     await this.prisma.habitCompletion.delete({
       where: { habitId_date: { habitId, date } },
@@ -297,6 +387,7 @@ export class HabitsService {
     skillId: number | null;
     cadence: string;
     everyNDays: number;
+    wealthCents?: number | null;
     active: boolean;
     createdAt: Date;
     skill: {
@@ -320,6 +411,7 @@ export class HabitsService {
       skill: habit.skill,
       cadence: habit.cadence,
       everyNDays: habit.everyNDays,
+      wealthCents: parseRewardCents(habit.wealthCents),
       active: habit.active,
       archived: !habit.active,
       createdAt: habit.createdAt,
@@ -330,6 +422,38 @@ export class HabitsService {
       lastLog,
       recentDates: dates.slice(-14),
     };
+  }
+
+  private async resolveSkillId(raw: unknown): Promise<number | null> {
+    const id = Math.round(Number(raw) || 0);
+    if (id <= 0) {
+      return null;
+    }
+    const skill = await this.prisma.skill.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!skill) {
+      throw new BadRequestException(`Unknown skill #${id}`);
+    }
+    return skill.id;
+  }
+
+  private async resolveWealthCents(
+    skillId: number | null,
+    raw: unknown,
+  ): Promise<number> {
+    if (!skillId) {
+      return 0;
+    }
+    const skill = await this.prisma.skill.findUnique({
+      where: { id: skillId },
+      select: { slug: true },
+    });
+    if (skill?.slug !== FINANCE_SKILL_SLUG) {
+      return 0;
+    }
+    return parseRewardCents(raw);
   }
 
   private computeStreaks(sortedDates: string[]) {

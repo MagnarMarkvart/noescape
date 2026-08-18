@@ -26,10 +26,32 @@ export const routes: Routes = [
     title: 'Character — No Escape',
   },
   {
+    path: 'wealth',
+    loadComponent: () =>
+      import('./character/wealth-page').then((m) => m.WealthPage),
+    title: 'Wealth — No Escape',
+  },
+  {
     path: 'settings',
     loadComponent: () =>
-      import('./settings/settings-page').then((m) => m.SettingsPage),
+      import('./settings/settings-layout').then((m) => m.SettingsLayout),
     title: 'Settings — No Escape',
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./settings/settings-page').then((m) => m.SettingsPage),
+        title: 'Settings — No Escape',
+      },
+      {
+        path: 'pomodoro',
+        loadComponent: () =>
+          import('./settings/settings-pomodoro-page').then(
+            (m) => m.SettingsPomodoroPage,
+          ),
+        title: 'Pomodoro — Settings',
+      },
+    ],
   },
   {
     path: 'quests/forge',
@@ -76,10 +98,46 @@ export const routes: Routes = [
     title: 'New Habit — No Escape',
   },
   {
+    path: 'habitus/demo',
+    loadComponent: () =>
+      import('./habits/habitus-page').then((m) => m.HabitusPage),
+    data: { demo: true },
+    title: 'Habitus Demo — No Escape',
+  },
+  {
     path: 'habitus',
     loadComponent: () =>
       import('./habits/habitus-page').then((m) => m.HabitusPage),
     title: 'Habitus — No Escape',
+  },
+  {
+    path: 'consuetudo/new',
+    loadComponent: () =>
+      import('./consuetudo/consuetudo-edit-page').then(
+        (m) => m.ConsuetudoEditPage,
+      ),
+    title: 'New Consuetudo — No Escape',
+  },
+  {
+    path: 'consuetudo/demo',
+    loadComponent: () =>
+      import('./consuetudo/consuetudo-page').then((m) => m.ConsuetudoPage),
+    data: { demo: true },
+    title: 'Consuetudo Demo — No Escape',
+  },
+  {
+    path: 'consuetudo/:id',
+    loadComponent: () =>
+      import('./consuetudo/consuetudo-edit-page').then(
+        (m) => m.ConsuetudoEditPage,
+      ),
+    title: 'Edit Consuetudo — No Escape',
+  },
+  {
+    path: 'consuetudo',
+    loadComponent: () =>
+      import('./consuetudo/consuetudo-page').then((m) => m.ConsuetudoPage),
+    title: 'Consuetudo — No Escape',
   },
   {
     path: 'dailies/defaults',

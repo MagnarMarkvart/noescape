@@ -122,17 +122,23 @@ export class HorologiumService {
     };
   }
 
-  async listSessions(limit = 40, offset = 0) {
+  async listSessions(limit = 40, offset = 0, date?: string) {
     const take = Math.min(100, Math.max(1, Math.round(limit) || 40));
     const skip = Math.max(0, Math.round(offset) || 0);
+    const day = date?.trim();
+    if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      throw new BadRequestException('date must be YYYY-MM-DD');
+    }
+    const where = day ? { date: day } : {};
     const [items, total] = await Promise.all([
       this.prisma.horologiumSession.findMany({
+        where,
         orderBy: { completedAt: 'desc' },
         take,
         skip,
         include: { skill: { select: SKILL_SELECT } },
       }),
-      this.prisma.horologiumSession.count(),
+      this.prisma.horologiumSession.count({ where }),
     ]);
     return {
       items: items.map((row) => this.presentSession(row)),
@@ -140,6 +146,18 @@ export class HorologiumService {
       limit: take,
       offset: skip,
     };
+  }
+
+  async sessionCalendar(from: string, to: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      throw new BadRequestException('from and to must be YYYY-MM-DD');
+    }
+    const rows = await this.prisma.horologiumSession.groupBy({
+      by: ['date'],
+      where: { date: { gte: from, lte: to } },
+      _count: { _all: true },
+    });
+    return rows.map((row) => ({ date: row.date, count: row._count._all }));
   }
 
   /** Focus XP for one finished work block (track or planned). */

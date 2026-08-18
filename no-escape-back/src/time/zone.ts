@@ -1,5 +1,35 @@
 export const DEFAULT_TZ = 'Europe/Tallinn';
 
+export type DateFormatId = 'DMY' | 'MDY' | 'YMD';
+export type WeekStart = 0 | 1;
+
+export function isDateFormat(value: string): value is DateFormatId {
+  return value === 'DMY' || value === 'MDY' || value === 'YMD';
+}
+
+export function isWeekStart(value: number): value is WeekStart {
+  return value === 0 || value === 1;
+}
+
+export function formatIsoDate(
+  iso: string,
+  format: DateFormatId = 'DMY',
+): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!match) {
+    return iso;
+  }
+  const [, y, m, d] = match;
+  switch (format) {
+    case 'MDY':
+      return `${m}/${d}/${y}`;
+    case 'YMD':
+      return `${y}-${m}-${d}`;
+    default:
+      return `${d}.${m}.${y}`;
+  }
+}
+
 export function isValidTimeZone(tz: string): boolean {
   try {
     Intl.DateTimeFormat('en', { timeZone: tz }).format(new Date());
@@ -22,6 +52,7 @@ export function zoneStamp(
 ): {
   date: string;
   time: string;
+  zone: string;
   label: string;
   iso: string;
 } {
@@ -44,6 +75,7 @@ export function zoneStamp(
   return {
     date,
     time,
+    zone,
     label: `${date} ${time} ${zone}`,
     iso: d.toISOString(),
   };

@@ -8,7 +8,7 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { CharacterService } from '../character/character.service';
@@ -36,7 +36,7 @@ import { AppShellService } from './app-shell.service';
         <p class="collapsed-label" aria-hidden="true">{{ viewLabel() }}</p>
         <span class="sr-only">{{ viewLabel() }}</span>
       } @else {
-        <nav class="nav">
+        <nav class="nav" (click)="onNavClick($event)">
           <a
             routerLink="/status"
             routerLinkActive="active"
@@ -67,6 +67,28 @@ import { AppShellService } from './app-shell.service';
             >
               Habitus
             </a>
+          }
+          @if (showConsuetudo()) {
+            <a
+              routerLink="/consuetudo"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: true }"
+            >
+              Consuetudo
+            </a>
+          }
+          @if (unlockables().length) {
+            <p class="group-label">Unlockables</p>
+            @for (item of unlockables(); track item.id) {
+              <a
+                class="goal"
+                [routerLink]="item.path"
+                routerLinkActive="active"
+              >
+                {{ item.label }}
+                <span class="streak">Demo</span>
+              </a>
+            }
           }
           <a
             routerLink="/dailies"
@@ -222,6 +244,7 @@ export class AppSidebar implements OnInit {
 
   protected readonly collapsed = this.shell.collapsed;
   protected readonly habitusUnlocked = signal(false);
+  protected readonly consuetudoUnlocked = signal(false);
   protected readonly activeQuests = this.questsService.activeQuests;
   protected readonly hasLevelUps = this.skillsService.hasLevelUps;
   protected readonly isDev = isDevMode;
@@ -229,6 +252,32 @@ export class AppSidebar implements OnInit {
   protected readonly showHabitus = computed(
     () => isDevMode() || this.habitusUnlocked(),
   );
+
+  protected readonly consuetudoQuestActive = computed(() =>
+    this.activeQuests().some((q) => q.slug === 'ordo-diei'),
+  );
+
+  protected readonly showConsuetudo = computed(
+    () =>
+      isDevMode() ||
+      this.consuetudoUnlocked() ||
+      this.consuetudoQuestActive(),
+  );
+
+  protected readonly unlockables = computed(() => {
+    const items: Array<{ id: string; label: string; path: string }> = [];
+    if (isDevMode() || !this.habitusUnlocked()) {
+      items.push({ id: 'habitus', label: 'Habitus', path: '/habitus/demo' });
+    }
+    if (isDevMode() || !this.consuetudoUnlocked()) {
+      items.push({
+        id: 'consuetudo',
+        label: 'Consuetudo',
+        path: '/consuetudo/demo',
+      });
+    }
+    return items;
+  });
 
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -243,10 +292,44 @@ export class AppSidebar implements OnInit {
     this.shell.bindViewport((teardown) => this.destroyRef.onDestroy(teardown));
     void this.questsService.refreshActive().subscribe();
     void this.skillsService.listLevelUps(1, 1).subscribe();
+    this.refreshUnlocks();
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        this.refreshUnlocks();
+      });
+  }
+
+  private refreshUnlocks(): void {
     this.characterService.getProfile().subscribe({
-      next: (p) => this.habitusUnlocked.set(p.habitusUnlocked),
-      error: () => this.habitusUnlocked.set(false),
+      next: (p) => {
+        this.habitusUnlocked.set(p.habitusUnlocked);
+        this.consuetudoUnlocked.set(Boolean(p.consuetudoUnlocked));
+      },
+      error: () => {
+        this.habitusUnlocked.set(false);
+        this.consuetudoUnlocked.set(false);
+      },
     });
+  }
+
+  protected onNavClick(event: Event): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('a')) {
+      return;
+    }
+    if (this.shell.isCompact()) {
+      if (this.characterService.menuAutoToggleMobile()) {
+        this.shell.collapse();
+      }
+      return;
+    }
+    if (this.characterService.menuAutoToggleDesktop()) {
+      this.shell.collapse();
+    }
   }
 
   protected readonly viewLabel = computed(() => {
@@ -257,11 +340,17 @@ export class AppSidebar implements OnInit {
     if (path.startsWith('/character')) {
       return 'CHARACTER';
     }
+    if (path.startsWith('/wealth')) {
+      return 'WEALTH';
+    }
     if (path.startsWith('/quests')) {
       return 'QUESTS';
     }
     if (path.startsWith('/habitus')) {
       return 'HABITUS';
+    }
+    if (path.startsWith('/consuetudo')) {
+      return 'CONSUETUDO';
     }
     if (path.startsWith('/dailies')) {
       return 'DAILIES';

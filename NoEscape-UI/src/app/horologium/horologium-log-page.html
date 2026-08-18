@@ -3,15 +3,26 @@
     <div>
       <p class="kicker">Archive</p>
       <h1>Horo Log</h1>
-      <p class="lede">{{ total() }} sessions · page {{ page() + 1 }} / {{ pageCount() }}</p>
+      <p class="lede">
+        {{ total() }} session{{ total() === 1 ? '' : 's' }} on
+        {{ formatDate(selectedDate()) }}
+      </p>
     </div>
     <a routerLink="/horologium" class="back">← Horologium</a>
   </header>
 
+  <app-date-nav
+    [date]="selectedDate()"
+    [today]="todayIso()"
+    [marks]="calendarMarks()"
+    (dateChange)="onDateNav($event)"
+    (rangeChange)="loadCalendar($event)"
+  />
+
   @if (loading()) {
     <p class="muted">Loading…</p>
   } @else if (items().length === 0) {
-    <p class="muted">No sessions yet.</p>
+    <p class="muted">No sessions on this day.</p>
   } @else {
     <ul class="session-log">
       @for (row of items(); track row.id) {
@@ -23,14 +34,11 @@
             [attr.aria-pressed]="selected()?.id === row.id"
           >
             <div class="log-top">
-              <strong>{{ row.date }}</strong>
+              <strong>{{ clock(startIso(row)) }} – {{ clock(row.completedAt) }}</strong>
               <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
                 {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
               </span>
             </div>
-            <p class="log-when">
-              {{ clock(startIso(row)) }} – {{ clock(row.completedAt) }}
-            </p>
             @if (row.endedEarly) {
               <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
             }
@@ -42,17 +50,6 @@
         </li>
       }
     </ul>
-
-    <div class="pager">
-      <button type="button" [disabled]="page() === 0" (click)="prev()">‹ Prev</button>
-      <button
-        type="button"
-        [disabled]="page() + 1 >= pageCount()"
-        (click)="next()"
-      >
-        Next ›
-      </button>
-    </div>
   }
 </section>
 
@@ -68,7 +65,7 @@
       <header class="detail-head">
         <div>
           <p class="kicker">{{ outcomeLabel(row) }}</p>
-          <h2 id="horo-detail-title">{{ row.date }}</h2>
+          <h2 id="horo-detail-title">{{ formatDate(row.date) }}</h2>
         </div>
         <button type="button" class="ghost" (click)="close()">Close</button>
       </header>

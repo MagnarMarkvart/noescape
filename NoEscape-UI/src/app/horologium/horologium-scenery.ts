@@ -15,13 +15,15 @@ import {
 } from '@angular/core';
 import { HorologiumTimerService } from './horologium-timer.service';
 import { HorologiumWatchService } from './horologium-watch.service';
+import { HorologiumPresetsService } from './horologium-presets.service';
+import { ConsuetudoClockService } from './consuetudo-clock.service';
 import {
-  HOROLOGIUM_PRESETS,
   HorologiumBoundDaily,
   HorologiumConfig,
   HorologiumSetupKind,
   horologiumBindKey,
 } from './horologium.model';
+import { RoutineView } from '../consuetudo/routines.service';
 
 export interface HorologiumScene {
   id: string;
@@ -107,6 +109,8 @@ export function saveSceneryId(id: string): void {
 export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   private readonly timer = inject(HorologiumTimerService);
   private readonly watches = inject(HorologiumWatchService);
+  private readonly presetStore = inject(HorologiumPresetsService);
+  private readonly consuetudo = inject(ConsuetudoClockService);
 
   @Input({ required: true }) src = '';
   @Input() name = '';
@@ -120,6 +124,9 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   @Input() setupKind: HorologiumSetupKind = 'planned';
   @Input() widgetVisible = true;
   @Input() blockEscape = false;
+  @Input() showConsuetudo = false;
+  @Input() routines: RoutineView[] = [];
+  @Input() selectedRoutineId: number | null = null;
   @Output() readonly closed = new EventEmitter<void>();
   @Output() readonly taskDone = new EventEmitter<void>();
   @Output() readonly started = new EventEmitter<void>();
@@ -127,11 +134,12 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   @Output() readonly sceneChange = new EventEmitter<string>();
   @Output() readonly dailyChange = new EventEmitter<string>();
   @Output() readonly setupKindChange = new EventEmitter<HorologiumSetupKind>();
+  @Output() readonly routineChange = new EventEmitter<string>();
   protected readonly bindKey = horologiumBindKey;
   @ViewChild('loop') private loop?: ElementRef<HTMLVideoElement>;
   @ViewChild('ambience') private ambience?: ElementRef<HTMLAudioElement>;
   protected readonly scenes = HOROLOGIUM_SCENERY;
-  protected readonly presets = HOROLOGIUM_PRESETS;
+  protected readonly presets = this.presetStore.list;
   protected readonly soundOpen = signal(false);
   protected readonly bedVolume = signal(loadAmbienceVolume());
   private htmlOverflow = '';
@@ -166,6 +174,14 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   protected readonly watchLinked = this.watches.pomodoroLinked;
   protected readonly watchRunning = this.watches.desiredRunning;
   protected readonly watchHint = this.watches.linkedHint;
+  protected readonly consuetudoLabel = this.consuetudo.displayLabel;
+  protected readonly consuetudoOvertime = this.consuetudo.overtime;
+  protected readonly consuetudoStep = this.consuetudo.currentStep;
+  protected readonly consuetudoRunning = this.consuetudo.running;
+  protected readonly consuetudoInProgress = this.consuetudo.inProgress;
+  protected readonly consuetudoFinished = this.consuetudo.finished;
+  protected readonly consuetudoMeta = this.consuetudo.stepMeta;
+  protected readonly consuetudoAwarding = this.consuetudo.awarding;
   protected readonly statusLine = computed(() => {
     const phase = this.phase();
     const label = this.phaseLabel();
@@ -234,6 +250,10 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   }
 
   protected pause(): void {
+    if (this.setupKind === 'consuetudo') {
+      this.consuetudo.pause();
+      return;
+    }
     if (this.setupKind === 'vigilia') {
       this.watches.pauseSolo();
       return;
@@ -242,6 +262,10 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   }
 
   protected resume(): void {
+    if (this.setupKind === 'consuetudo') {
+      this.consuetudo.resume();
+      return;
+    }
     if (this.setupKind === 'vigilia') {
       this.watches.startSolo();
       return;
@@ -268,7 +292,7 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
     if (!this.canEdit) {
       return;
     }
-    const preset = this.presets.find((p) => p.id === id);
+    const preset = this.presets().find((p) => p.id === id);
     if (!preset) {
       return;
     }
@@ -305,6 +329,21 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
       return;
     }
     this.dailyChange.emit(raw);
+  }
+
+  protected pickRoutine(raw: string): void {
+    if (!this.canEdit) {
+      return;
+    }
+    this.routineChange.emit(raw);
+  }
+
+  protected completeStep(): void {
+    this.consuetudo.completeCurrent();
+  }
+
+  protected skipStep(): void {
+    this.consuetudo.skipCurrent();
   }
 
   protected toggleWatchWidget(): void {

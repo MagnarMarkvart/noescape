@@ -6,10 +6,12 @@ import { API_BASE_URL } from '../core/api.config';
 import { LogActivityResponse, XpReversalResponse } from '../skills/skill.model';
 import {
   DailyBoard,
+  DailyCalendarDay,
   DailyLogDetail,
   DailyTaskSlot,
   DailyTaskTemplate,
   UpsertDailyTaskPayload,
+  UpsertDailyTemplatePayload,
 } from './daily.model';
 
 @Injectable({ providedIn: 'root' })
@@ -113,7 +115,8 @@ export class DailiesService {
     return this.http
       .post<{
         task: DailyTaskSlot;
-        award: LogActivityResponse;
+        award: LogActivityResponse | null;
+        awards: LogActivityResponse[];
       }>(`${this.baseUrl}/${id}/complete`, {})
       .pipe(
         tap((result) => {
@@ -127,6 +130,7 @@ export class DailiesService {
       .post<{
         task: DailyTaskSlot;
         reversal: XpReversalResponse | null;
+        reversals: XpReversalResponse[];
       }>(`${this.baseUrl}/${id}/uncomplete`, {})
       .pipe(
         tap((result) => {
@@ -172,16 +176,13 @@ export class DailiesService {
     return this.http.get<DailyTaskTemplate[]>(`${this.baseUrl}/templates`);
   }
 
-  createTemplate(body: {
-    name: string;
-    icon?: string;
-    skillId: number;
-    fixedXp: number;
-    effortLevel?: number;
-    durationMinutes?: number;
-  }) {
-    return this.http.post<DailyTaskTemplate>(
-      `${this.baseUrl}/templates`,
+  createTemplate(body: UpsertDailyTemplatePayload) {
+    return this.http.post<DailyTaskTemplate>(`${this.baseUrl}/templates`, body);
+  }
+
+  updateTemplate(id: number, body: UpsertDailyTemplatePayload) {
+    return this.http.patch<DailyTaskTemplate>(
+      `${this.baseUrl}/templates/${id}`,
       body,
     );
   }
@@ -189,6 +190,12 @@ export class DailiesService {
   removeTemplate(id: number) {
     return this.http.delete<{ deleted: boolean; id: number }>(
       `${this.baseUrl}/templates/${id}`,
+    );
+  }
+
+  calendar(from: string, to: string) {
+    return this.http.get<DailyCalendarDay[]>(
+      `${this.baseUrl}/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     );
   }
 

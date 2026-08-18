@@ -75,6 +75,19 @@
   min-height: 1.35em;
 }
 
+.clock.overtime {
+  color: #e07060;
+}
+
+.practice-step {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+  display: flex;
+  gap: 0.4rem;
+  justify-content: center;
+  align-items: center;
+}
+
 .clock {
   margin: 0.45rem auto 0;
   font-family: var(--font-clock);

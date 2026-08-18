@@ -14,6 +14,10 @@ export class AppShellService {
     this.collapsed.set(true);
   }
 
+  isCompact(): boolean {
+    return prefersCompact();
+  }
+
   bindViewport(onDestroy: (teardown: () => void) => void): void {
     if (typeof window === 'undefined') {
       return;

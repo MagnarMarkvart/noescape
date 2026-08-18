@@ -32,7 +32,7 @@ const skills = [
     slug: 'hygiene',
     category: 'Physical',
     icon: '🚿',
-    xpSources: 'Shower, shave, deodorant: fixed daily presets',
+    xpSources: 'Shower, shave, deodorant: effort × duration formula',
     sortOrder: 4,
   },
   {
@@ -703,6 +703,11 @@ async function main() {
     update: {},
     create: { key: 'feature:habitus', unlocked: false },
   });
+  await prisma.featureUnlock.upsert({
+    where: { key: 'feature:consuetudo' },
+    update: {},
+    create: { key: 'feature:consuetudo', unlocked: false },
+  });
 
   await prisma.quest.upsert({
     where: { slug: 'custodia-mentis' },
@@ -833,6 +838,61 @@ async function main() {
     { title: 'Clean Trashbins' },
   ]);
 
+  const ordoWeights = [
+    { slug: 'strategy', weight: 6 },
+    { slug: 'focus', weight: 1 },
+    { slug: 'discipline', weight: 3 },
+  ];
+  const ordoXp = 2000;
+  const ordoBonus = Object.fromEntries(
+    ordoWeights.map((w) => [w.slug, Math.round((ordoXp * w.weight) / 10)]),
+  );
+  const ordoFields = {
+    name: 'Ordo Diei',
+    tier: 'NOVICE',
+    summary: 'Forge a Consuetudo and walk it once. Unlock Practice.',
+    description:
+      'A day without order is a day spent reacting. Name a Consuetudo — a morning practice, an evening close, any sequence you mean to keep — then walk every step from start to finish. One forged practice, one completed walk. After that, Horologium opens Consuetudo as a fourth mode, and you may keep as many routines as the day can hold.',
+    coverImage: 'pexels-sikunovruslan-20373905.jpg',
+    skillSlug: 'strategy',
+    durationDays: null,
+    kind: 'DESTINATION',
+    rules:
+      'Forge one Consuetudo (name, steps, durations). Complete it once in Horologium. Skips are allowed on the walk; the destination still counts. Until the quest is done you may keep only one routine.',
+    stakes:
+      'Without a practice the morning dissolves. This quest puts the first sequence on the bronze.',
+    howToWin:
+      'Create a Consuetudo, then complete it once. The feature unlocks on destination.',
+    destination: 'Complete one Consuetudo from start to finish.',
+    journeyLabel: null,
+    journeyNote: null,
+    commitmentLevel: 1,
+    totalXp: ordoXp,
+    skillWeightsJson: JSON.stringify(ordoWeights),
+    skillReqsJson: null,
+    unlockReqsJson: null,
+    questReqsJson: null,
+    xpPlanJson: JSON.stringify({
+      dayXp: [0],
+      completionBonus: ordoBonus,
+    }),
+    rewardJson: JSON.stringify({
+      title: 'Consuetudo',
+      features: ['feature:consuetudo'],
+    }),
+    sortOrder: 3,
+    createdByUser: false,
+  };
+  await prisma.quest.upsert({
+    where: { slug: 'ordo-diei' },
+    update: ordoFields,
+    create: { slug: 'ordo-diei', ...ordoFields },
+  });
+  await syncCatalogSubtasks('ordo-diei', [
+    { title: 'Forge a Consuetudo' },
+    { title: 'Walk the Consuetudo' },
+  ]);
+
   // Dev sample habits (visible when Habitus unlocked or ?dev=1).
   const gymSkill = bySlug['strength'];
   const existingHabits = await prisma.habit.count();
@@ -868,33 +928,72 @@ async function main() {
     name: string;
     icon: string;
     skillSlug: string;
-    fixedXp: number;
+    effortLevel: number;
+    durationMinutes: number;
     sortOrder: number;
   }> = [
-    { name: 'Showering', icon: '🚿', skillSlug: 'hygiene', fixedXp: 50, sortOrder: 1 },
-    { name: 'Shaving Beard', icon: '🪒', skillSlug: 'hygiene', fixedXp: 50, sortOrder: 2 },
-    { name: 'Shaving Body', icon: '🛁', skillSlug: 'hygiene', fixedXp: 150, sortOrder: 3 },
+    {
+      name: 'Showering',
+      icon: '🚿',
+      skillSlug: 'hygiene',
+      effortLevel: 1,
+      durationMinutes: 15,
+      sortOrder: 1,
+    },
+    {
+      name: 'Shaving Beard',
+      icon: '🪒',
+      skillSlug: 'hygiene',
+      effortLevel: 2,
+      durationMinutes: 15,
+      sortOrder: 2,
+    },
+    {
+      name: 'Shaving Body',
+      icon: '🛁',
+      skillSlug: 'hygiene',
+      effortLevel: 4,
+      durationMinutes: 30,
+      sortOrder: 3,
+    },
     {
       name: 'Deodorant + Perfume',
       icon: '🧴',
       skillSlug: 'hygiene',
-      fixedXp: 25,
+      effortLevel: 1,
+      durationMinutes: 5,
       sortOrder: 4,
     },
-    { name: 'Dog Walking', icon: '🐕', skillSlug: 'cardio', fixedXp: 50, sortOrder: 5 },
+    {
+      name: 'Dog Walking',
+      icon: '🐕',
+      skillSlug: 'cardio',
+      effortLevel: 3,
+      durationMinutes: 30,
+      sortOrder: 5,
+    },
     {
       name: 'Full-Body Stretching',
       icon: '🤸',
       skillSlug: 'mobility',
-      fixedXp: 100,
+      effortLevel: 4,
+      durationMinutes: 20,
       sortOrder: 6,
     },
-    { name: 'Home Cooking', icon: '🍳', skillSlug: 'cook', fixedXp: 150, sortOrder: 7 },
+    {
+      name: 'Home Cooking',
+      icon: '🍳',
+      skillSlug: 'cook',
+      effortLevel: 5,
+      durationMinutes: 60,
+      sortOrder: 7,
+    },
     {
       name: 'Room/Apartment Cleaning',
       icon: '🧹',
       skillSlug: 'order',
-      fixedXp: 200,
+      effortLevel: 6,
+      durationMinutes: 90,
       sortOrder: 8,
     },
   ];
@@ -913,7 +1012,10 @@ async function main() {
         data: {
           icon: t.icon,
           skillId,
-          fixedXp: t.fixedXp,
+          habitId: existing.habitId,
+          fixedXp: 0,
+          effortLevel: t.effortLevel,
+          durationMinutes: t.durationMinutes,
           sortOrder: t.sortOrder,
           active: true,
         },
@@ -924,7 +1026,9 @@ async function main() {
           name: t.name,
           icon: t.icon,
           skillId,
-          fixedXp: t.fixedXp,
+          fixedXp: 0,
+          effortLevel: t.effortLevel,
+          durationMinutes: t.durationMinutes,
           sortOrder: t.sortOrder,
           createdByUser: false,
         },
@@ -933,7 +1037,7 @@ async function main() {
   }
 
   console.log(
-    `Seeded ${skills.length} skills, ${rewardCount} rewards, Custodia Mentis, Keep it Clean!, Character, default tasks`,
+    `Seeded ${skills.length} skills, ${rewardCount} rewards, Custodia Mentis, Keep it Clean!, Ordo Diei, Character, default tasks`,
   );
 }
 

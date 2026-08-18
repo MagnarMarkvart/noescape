@@ -65,6 +65,29 @@
       <input type="number" [formField]="createForm.everyNDays" />
     </label>
 
+    <label>
+      Skill (optional)
+      <select [value]="createModel().skillId" (change)="setSkill($event)">
+        <option [value]="0">— none —</option>
+        @for (s of skills(); track s.id) {
+          <option [value]="s.id">{{ s.icon }} {{ s.name }}</option>
+        }
+      </select>
+    </label>
+
+    @if (showWealth()) {
+      <label>
+        Wealth gained ({{ currencyLabel() }})
+        <input
+          type="text"
+          inputmode="decimal"
+          [value]="createModel().wealthAmount"
+          (input)="setWealthAmount($event)"
+          placeholder="0.00"
+        />
+      </label>
+    }
+
     <div class="actions">
       <button type="submit" [disabled]="creating()">
         {{ creating() ? '…' : 'Create habit' }}

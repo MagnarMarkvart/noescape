@@ -2,8 +2,8 @@ import { formatElapsedMs as formatElapsedMsShared } from '../shared/time';
 
 export type TimerPhase = 'idle' | 'work' | 'rest' | 'complete';
 export type HorologiumMode = 'adhoc' | 'planned';
-/** Setup selector: Sessio / Track are pomodoro; Vigilia is count-up only. */
-export type HorologiumSetupKind = HorologiumMode | 'vigilia';
+/** Setup selector: Sessio / Track are pomodoro; Vigilia is count-up; Consuetudo is a practice. */
+export type HorologiumSetupKind = HorologiumMode | 'vigilia' | 'consuetudo';
 
 export interface HorologiumConfig {
   workMinutes: number;

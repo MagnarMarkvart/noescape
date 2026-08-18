@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { SkillsService } from '../skills/skills.service';
+import { SoundSettingsService } from '../shared/sound-settings.service';
 import {
   LEVEL_DOWN_MS,
   LEVEL_UP_JINGLE,
@@ -17,6 +18,7 @@ import { Skill } from '../skills/skill.model';
 @Injectable({ providedIn: 'root' })
 export class XpFeedbackService {
   private readonly skills = inject(SkillsService);
+  private readonly sound = inject(SoundSettingsService);
   private readonly queue: XpFeedbackEvent[] = [];
   private busy = false;
   private timers: ReturnType<typeof setTimeout>[] = [];
@@ -244,7 +246,8 @@ export class XpFeedbackService {
   }
 
   private playSfx(kind: 'gain' | 'loss' | 'levelup' | 'leveldown'): void {
-    if (typeof Audio === 'undefined') {
+    const gain = this.sound.playbackGain();
+    if (gain == null || typeof Audio === 'undefined') {
       return;
     }
     let audio: HTMLAudioElement;
@@ -263,6 +266,7 @@ export class XpFeedbackService {
         break;
     }
     try {
+      audio.volume = gain;
       audio.currentTime = 0;
       void audio.play();
     } catch {

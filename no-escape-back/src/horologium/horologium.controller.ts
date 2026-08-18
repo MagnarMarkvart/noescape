@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { AbandonHorologiumSessionDto } from './dto/abandon-session.dto';
 import { AwardHorologiumBlockDto } from './dto/award-block.dto';
 import { CompleteHorologiumSessionDto } from './dto/complete-session.dto';
@@ -8,6 +8,7 @@ import {
 } from './dto/complete-task.dto';
 import { HorologiumService } from './horologium.service';
 import { HorologiumWatchesService } from './horologium-watches.service';
+import { HorologiumPresetsService } from './horologium-presets.service';
 import { HorologiumMode } from '../xp/horologium-xp.util';
 
 @Controller('horologium')
@@ -15,16 +16,27 @@ export class HorologiumController {
   constructor(
     private readonly horologiumService: HorologiumService,
     private readonly watchesService: HorologiumWatchesService,
+    private readonly presetsService: HorologiumPresetsService,
   ) {}
+
+  @Get('sessions/calendar')
+  sessionCalendar(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.horologiumService.sessionCalendar(from ?? '', to ?? '');
+  }
 
   @Get('sessions')
   listSessions(
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Query('date') date?: string,
   ) {
     return this.horologiumService.listSessions(
       limit ? Number(limit) : undefined,
       offset ? Number(offset) : 0,
+      date,
     );
   }
 
@@ -48,6 +60,45 @@ export class HorologiumController {
   @Get('watches')
   listWatches(@Query('status') status?: string) {
     return this.watchesService.list(status || 'ACTIVE');
+  }
+
+  @Get('presets')
+  listPresets() {
+    return this.presetsService.list();
+  }
+
+  @Post('presets')
+  createPreset(
+    @Body()
+    body: {
+      label?: string;
+      workMinutes?: number;
+      restMinutes?: number;
+      iterations?: number;
+      restAfterLast?: boolean;
+    },
+  ) {
+    return this.presetsService.create(body ?? {});
+  }
+
+  @Patch('presets/:id')
+  updatePreset(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: {
+      label?: string;
+      workMinutes?: number;
+      restMinutes?: number;
+      iterations?: number;
+      restAfterLast?: boolean;
+    },
+  ) {
+    return this.presetsService.update(id, body ?? {});
+  }
+
+  @Delete('presets/:id')
+  removePreset(@Param('id', ParseIntPipe) id: number) {
+    return this.presetsService.remove(id);
   }
 
   @Post('watches')

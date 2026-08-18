@@ -7,6 +7,11 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { CharacterService } from '../character/character.service';
+import {
+  monthGridLead,
+  weekdayNames,
+} from '../shared/time';
 import { HabitMonthLog, HabitsService, HabitView } from './habits.service';
 
 @Component({
@@ -18,6 +23,7 @@ import { HabitMonthLog, HabitsService, HabitView } from './habits.service';
 })
 export class HabitusProgressionPage implements OnInit {
   private readonly habitsService = inject(HabitsService);
+  private readonly character = inject(CharacterService);
 
   protected readonly habits = signal<HabitView[]>([]);
   protected readonly selected = signal<HabitView | null>(null);
@@ -43,6 +49,23 @@ export class HabitusProgressionPage implements OnInit {
   protected readonly archivedCount = computed(
     () => this.habits().filter((h) => h.archived).length,
   );
+
+  protected readonly weekdays = computed(() =>
+    weekdayNames(this.character.weekStartsOn()),
+  );
+
+  protected readonly monthLead = computed(() => {
+    const c = this.cursor();
+    return monthGridLead(c.year, c.month, this.character.weekStartsOn());
+  });
+
+  protected readonly leadPads = computed(() =>
+    Array.from({ length: this.monthLead() }, (_, i) => i),
+  );
+
+  protected formatDate(iso: string | null | undefined): string {
+    return this.character.formatDate(iso);
+  }
 
   ngOnInit(): void {
     this.reload();

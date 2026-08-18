@@ -21,6 +21,7 @@ export class CharacterPage implements OnInit {
 
   protected readonly profile = signal<CharacterProfile | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly wealthLabel = this.characterService.wealthLabel;
 
   protected readonly skillGroups = computed(() => {
     const skills = this.profile()?.skills ?? [];

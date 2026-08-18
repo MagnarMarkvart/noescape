@@ -105,6 +105,10 @@
   background: rgba(47, 143, 58, 0.16);
 }
 
+:host > .toast {
+  margin: 1.25rem 1rem;
+}
+
 .run-grid {
   display: grid;
   gap: 1rem;
@@ -288,11 +292,10 @@
   gap: 0.4rem;
 }
 
-.subtask-checks label {
+.subtask-checks li {
   display: flex;
   gap: 0.5rem;
   align-items: start;
-  cursor: pointer;
 }
 
 .open-tag {

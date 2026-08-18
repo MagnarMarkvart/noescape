@@ -3,12 +3,17 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { API_BASE_URL } from '../core/api.config';
+import { CharacterService } from '../character/character.service';
+import { formatMoney } from '../shared/money';
+import { RuneLoader } from '../shared/rune-loader';
+import { formatElapsedShort } from '../shared/time';
 import {
   QuestView,
   chronicleKindLabel,
@@ -16,12 +21,12 @@ import {
   questTasks,
   questTimeframe,
 } from './quest.model';
-import { formatElapsedShort } from '../shared/time';
+import { QuestRevealService } from './quest-reveal.service';
 import { QuestsService } from './quests.service';
 
 @Component({
   selector: 'app-quest-detail-page',
-  imports: [RouterLink, KeyValuePipe],
+  imports: [RouterLink, KeyValuePipe, RuneLoader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-detail-page.html',
   styleUrl: './quest-detail-page.css',
@@ -31,10 +36,16 @@ export class QuestDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly questsService = inject(QuestsService);
+  private readonly reveal = inject(QuestRevealService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly character = inject(CharacterService);
   private loadSeq = 0;
+  private loaderTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly quest = signal<QuestView | null>(null);
   protected readonly loading = signal(true);
+  protected readonly ready = signal(false);
+  protected readonly showLoader = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly starting = signal(false);
 
@@ -59,6 +70,7 @@ export class QuestDetailPage {
   );
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.clearLoaderTimer());
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       const id = Number(params.get('id'));
       if (!Number.isFinite(id)) {
@@ -72,24 +84,52 @@ export class QuestDetailPage {
 
   private load(id: number): void {
     const seq = ++this.loadSeq;
-    this.loading.set(true);
+    this.armLoader(seq);
     this.error.set(null);
-    this.questsService.getOne(id).subscribe({
-      next: (q) => {
+    this.reveal.open(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: ({ quest }) => {
         if (seq !== this.loadSeq) {
           return;
         }
-        this.quest.set(q);
-        this.loading.set(false);
+        this.revealNow(quest);
       },
       error: () => {
         if (seq !== this.loadSeq) {
           return;
         }
+        this.clearLoaderTimer();
         this.error.set('Could not load quest');
         this.loading.set(false);
+        this.showLoader.set(false);
       },
     });
+  }
+
+  private armLoader(seq: number): void {
+    this.clearLoaderTimer();
+    this.ready.set(false);
+    this.showLoader.set(false);
+    this.loading.set(true);
+    this.loaderTimer = setTimeout(() => {
+      if (seq === this.loadSeq && !this.ready()) {
+        this.showLoader.set(true);
+      }
+    }, 70);
+  }
+
+  private revealNow(quest: QuestView): void {
+    this.clearLoaderTimer();
+    this.quest.set(quest);
+    this.ready.set(true);
+    this.showLoader.set(false);
+    this.loading.set(false);
+  }
+
+  private clearLoaderTimer(): void {
+    if (this.loaderTimer != null) {
+      clearTimeout(this.loaderTimer);
+      this.loaderTimer = null;
+    }
   }
 
   protected start(): void {
@@ -117,7 +157,39 @@ export class QuestDetailPage {
   }
 
   protected featureLabel(key: string): string {
-    return key.replace(/^feature:/, '');
+    const raw = key.replace(/^feature:/, '');
+    if (!raw) {
+      return key;
+    }
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
+  protected featureHref(key: string): string | null {
+    const raw = key.replace(/^feature:/, '').toLowerCase();
+    if (raw === 'habitus') {
+      return '/habitus/demo';
+    }
+    if (raw === 'consuetudo') {
+      return '/consuetudo/demo';
+    }
+    return null;
+  }
+
+  protected titleDisplay(title: string | undefined): string {
+    if (!title) {
+      return '';
+    }
+    const gloss: Record<string, string> = {
+      'Mens Sana': 'a sound mind',
+      Consuetudo: 'a practice',
+    };
+    const meaning = gloss[title];
+    return meaning ? `${title} (${meaning})` : title;
+  }
+
+  protected wealthLabel(cents: number | null | undefined): string {
+    const n = Math.round(Number(cents) || 0);
+    return n > 0 ? formatMoney(n, this.character.currency()) : '';
   }
 
   protected kindLabel(kind: string): string {

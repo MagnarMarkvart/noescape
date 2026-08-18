@@ -19,6 +19,13 @@ export interface DailyTaskSlot {
   title: string;
   skillId: number | null;
   skill: DailySkillRef | null;
+  skillWeights?: Array<{ slug: string; weight: number }>;
+  skillShares?: Array<{
+    slug: string;
+    name: string;
+    weight: number;
+    xp: number;
+  }>;
   habitId?: number | null;
   fixedXp?: number | null;
   effortLevel: number;
@@ -31,10 +38,11 @@ export interface DailyTaskSlot {
   isEmpty: boolean;
   projectedXp: number;
   breakdown: {
-    base: number;
-    effortMult: number;
-    durationMult: number;
+    billedMinutes: number;
+    xpPerMinute: number;
   } | null;
+  wealthCents?: number;
+  wealthAwardedCents?: number | null;
 }
 
 export interface DailyTier {
@@ -79,10 +87,18 @@ export interface UpsertDailyTaskPayload {
   slotIndex: number;
   title: string;
   skillId: number;
+  skillWeights?: Array<{ slug: string; weight: number }>;
   effortLevel: number;
   durationMinutes: number;
   habitId?: number | null;
   fixedXp?: number | null;
+  wealthCents?: number | null;
+}
+
+export interface DailyHabitRef {
+  id: number;
+  name: string;
+  icon: string | null;
 }
 
 export interface DailyTaskTemplate {
@@ -91,11 +107,31 @@ export interface DailyTaskTemplate {
   icon: string | null;
   skillId: number;
   skill: DailySkillRef;
-  fixedXp: number;
+  skillWeights?: Array<{ slug: string; weight: number }>;
+  skillShares?: Array<{
+    slug: string;
+    name: string;
+    weight: number;
+    xp: number;
+  }>;
+  habitId: number | null;
+  habit: DailyHabitRef | null;
   effortLevel: number;
   durationMinutes: number;
   sortOrder: number;
   createdByUser: boolean;
+  wealthCents?: number;
+}
+
+export interface UpsertDailyTemplatePayload {
+  name: string;
+  icon?: string;
+  skillId: number;
+  skillWeights?: Array<{ slug: string; weight: number }>;
+  habitId?: number | null;
+  effortLevel: number;
+  durationMinutes: number;
+  wealthCents?: number | null;
 }
 
 export interface DailyLogSummary {
@@ -106,6 +142,11 @@ export interface DailyLogSummary {
   completedCount: number;
   earnedXp: number;
   projectedXp: number;
+}
+
+export interface DailyCalendarDay {
+  date: string;
+  status: 'sealed' | 'abandoned' | 'open';
 }
 
 export interface DailyLogDetail extends DailyLogSummary {
@@ -128,15 +169,57 @@ export interface SlotFormModel {
   title: string;
   /** 0 = not selected */
   skillId: number;
+  skillWeights: Array<{ slug: string; weight: number }>;
   /** 0 = no habit link */
   habitId: number;
-  /** null = use formula XP */
-  fixedXp: number | null;
   effortLevel: number;
   durationMinutes: number;
   /** When true, durationMinutes is driven by customDurationMinutes */
   customDuration: boolean;
   customDurationMinutes: number;
+  /** Persist this form as a reusable default after save. */
+  saveAsDefault: boolean;
+  /** Template that was loaded into the form, if any. */
+  loadedTemplateId: number;
+  /** Major-unit amount when Finance is among skills. */
+  wealthAmount: string;
 }
 
 export type ParentSkillCategory = Pick<SkillCategory, 'category' | 'label' | 'icon'>;
+
+export const DURATION_PRESETS = Array.from({ length: 16 }, (_, i) => 15 * (i + 1));
+export const EFFORT_LEVELS = Array.from({ length: 10 }, (_, i) => i + 1);
+
+export function dailySkillWeights(input: {
+  skillWeights?: Array<{ slug: string; weight: number }> | null;
+  skill?: { slug: string } | null;
+}): Array<{ slug: string; weight: number }> {
+  const rows = (input.skillWeights ?? [])
+    .map((row) => ({
+      slug: String(row.slug || '').trim(),
+      weight: Math.round(Number(row.weight) || 0),
+    }))
+    .filter((row) => row.slug && row.weight > 0);
+  if (rows.length) {
+    return rows;
+  }
+  if (input.skill?.slug) {
+    return [{ slug: input.skill.slug, weight: 10 }];
+  }
+  return [];
+}
+
+export function dailySkillLine(
+  input: {
+    skillShares?: Array<{ name: string }> | null;
+    skill?: { name: string } | null;
+  } | null | undefined,
+): string {
+  const names = (input?.skillShares ?? [])
+    .map((row) => row.name)
+    .filter(Boolean);
+  if (names.length) {
+    return names.join(' · ');
+  }
+  return input?.skill?.name ?? '';
+}

@@ -1,6 +1,6 @@
 export type TaskImportance = 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR';
 
-/** Default / minimum slots per tier (1 / 3 / 5). */
+/** Default / minimum slots per tier (1 / 3 / 5). Layout only — not XP. */
 export const DAILY_SLOT_COUNTS: Record<TaskImportance, number> = {
   MOST_IMPORTANT: 1,
   IMPORTANT: 3,
@@ -14,54 +14,68 @@ export const DAILY_SLOT_MAXIMUMS: Record<TaskImportance, number> = {
   REGULAR: 20,
 };
 
-export const IMPORTANCE_BASE_XP: Record<TaskImportance, number> = {
-  MOST_IMPORTANT: 50,
-  IMPORTANT: 30,
-  REGULAR: 5,
-};
-
 export const IMPORTANCE_ORDER: TaskImportance[] = [
   'MOST_IMPORTANT',
   'IMPORTANT',
   'REGULAR',
 ];
 
-/** Effort 1–10 → multiplier. Effort 5 = 1.0×. */
-export function effortMultiplier(effortLevel: number): number {
-  const effort = clamp(effortLevel, 1, 10);
-  return 0.4 + (effort / 10) * 1.2;
-}
-
 /**
- * Duration multiplier with a soft floor so short tasks are not punished.
- * Reference duration is 45 minutes (= 1.0×).
- * Floor 0.65× (≈15 min and below), ceiling 2.0× (long sessions).
+ * Minutes past this cap do not grant extra daily XP.
+ * 8 hours = 480 minutes.
  */
-export function durationMultiplier(durationMinutes: number): number {
-  const minutes = Math.max(1, durationMinutes);
-  const raw = Math.sqrt(minutes / 45);
-  return clamp(raw, 0.65, 2.0);
+export const DAILY_DURATION_CAP_MINUTES = 8 * 60;
+
+/**
+ * XP granted per billed minute at each effort level.
+ *
+ *   1–5  powers of two:  1, 2, 4, 8, 16
+ *   6–9  +15 from effort 5:  31, 46, 61, 76
+ *   10   100 (special peak)
+ *
+ * Canonical write-up: root README.md → “Daily task XP formula”.
+ * Keep NoEscape-UI/src/app/dailies/daily-xp.ts in sync.
+ */
+export function effortXpPerMinute(effortLevel: number): number {
+  const effort = clamp(Math.round(effortLevel), 1, 10);
+  if (effort <= 5) {
+    return 2 ** (effort - 1);
+  }
+  if (effort === 10) {
+    return 100;
+  }
+  return 16 + 15 * (effort - 5);
+}
+
+/** Duration that actually counts toward XP (0 … 480). */
+export function billedDurationMinutes(durationMinutes: number): number {
+  return clamp(Math.floor(Number(durationMinutes) || 0), 0, DAILY_DURATION_CAP_MINUTES);
 }
 
 /**
- * Daily task XP:
- *   XP = round(base × effortMult × durationMult)
+ * Daily task XP — duration × effort rate, nothing else.
  *
- * base: MI=50, I=30, Regular=5
- * effortMult: 0.4 + (effort/10)*1.2
- * durationMult: clamp(√(minutes/45), 0.65, 2.0)
+ *   XP = billedMinutes × xpPerMinute(effort)
+ *
+ * Slot importance (Most Important / Important / Regular) does not change XP.
+ * Duration above 8 hours is ignored.
+ *
+ * Examples:
+ *   Showering   effort 1 / 15m   → 15 XP
+ *   Typical     effort 5 / 45m   → 720 XP
+ *   Deep work   effort 10 / 3h   → 18,000 XP
+ *   9h grind    effort 5 / 540m  → 7,680 XP (capped at 8h)
  */
 export function calculateDailyTaskXp(input: {
-  importance: TaskImportance;
   effortLevel: number;
   durationMinutes: number;
+  /** Ignored. Kept so older callers can still pass the slot tier. */
+  importance?: TaskImportance;
 }): number {
-  const base = IMPORTANCE_BASE_XP[input.importance];
-  const xp =
-    base *
-    effortMultiplier(input.effortLevel) *
-    durationMultiplier(input.durationMinutes);
-  return Math.max(1, Math.round(xp));
+  return (
+    billedDurationMinutes(input.durationMinutes) *
+    effortXpPerMinute(input.effortLevel)
+  );
 }
 
 function clamp(value: number, min: number, max: number): number {

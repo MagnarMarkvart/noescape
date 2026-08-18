@@ -26,6 +26,8 @@
     <p class="kicker">
       @if (setupKind === 'vigilia') {
         Vigilia
+      } @else if (setupKind === 'consuetudo') {
+        Consuetudo
       } @else if (mode() === 'adhoc') {
         Track
       } @else {
@@ -36,6 +38,20 @@
       <p class="phase">{{ watchRunning() ? 'Running' : 'Paused' }}</p>
       <p class="clock" aria-live="polite">{{ watchElapsedLabel() }}</p>
       <p class="meta">{{ selectedWatch()?.name || 'No project' }}</p>
+    } @else if (setupKind === 'consuetudo') {
+      <p class="phase">{{ consuetudoOvertime() ? 'Over' : consuetudoRunning() ? 'Practice' : 'Paused' }}</p>
+      @if (consuetudoStep(); as step) {
+        <p class="practice-step">
+          <span aria-hidden="true">{{ step.icon || '◆' }}</span>
+          {{ step.title }}
+        </p>
+      }
+      <p
+        class="clock"
+        [class.overtime]="consuetudoOvertime()"
+        aria-live="polite"
+      >{{ consuetudoLabel() }}</p>
+      <p class="meta">{{ consuetudoMeta() }}</p>
     } @else {
       <p class="phase">{{ statusLine() }}</p>
       <p class="clock" aria-live="polite">{{ remainingLabel() }}</p>
@@ -74,7 +90,7 @@
         }
       </dl>
     }
-    @if (canEdit || setupKind === 'vigilia') {
+    @if (canEdit || setupKind === 'vigilia' || setupKind === 'consuetudo') {
       <div class="setup" [hidden]="!canEdit">
         <div class="chips">
           <button
@@ -101,10 +117,20 @@
           >
             Vigilia
           </button>
+          @if (showConsuetudo) {
+            <button
+              type="button"
+              class="exit slim"
+              [class.selected]="setupKind === 'consuetudo'"
+              (click)="setSetupKind('consuetudo')"
+            >
+              Consuetudo
+            </button>
+          }
         </div>
         @if (setupKind === 'planned') {
           <div class="chips">
-            @for (preset of presets; track preset.id) {
+            @for (preset of presets(); track preset.id) {
               <button
                 type="button"
                 class="exit slim"
@@ -116,7 +142,7 @@
             }
           </div>
         }
-        @if (setupKind !== 'vigilia') {
+        @if (setupKind !== 'vigilia' && setupKind !== 'consuetudo') {
         <div class="fields">
           <label>
             Work
@@ -152,7 +178,7 @@
           }
         </div>
         }
-        @if (setupKind !== 'vigilia' && (dailies.length > 0 || boundDailyId)) {
+        @if (setupKind !== 'vigilia' && setupKind !== 'consuetudo' && (dailies.length > 0 || boundDailyId)) {
         <label class="task">
           Task
           <select
@@ -172,7 +198,20 @@
           </select>
         </label>
         }
-        @if (setupKind === 'vigilia') {
+        @if (setupKind === 'consuetudo') {
+        <label class="task">
+          Practice
+          <select
+            [value]="selectedRoutineId ?? ''"
+            (change)="pickRoutine($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (r of routines; track r.id) {
+              <option [value]="r.id">{{ r.icon || '🌅' }} {{ r.name }}</option>
+            }
+          </select>
+        </label>
+        } @else if (setupKind === 'vigilia') {
         <label class="task">
           Vigilia
           <select (change)="selectWatch($any($event.target).value)">
@@ -239,6 +278,30 @@
             Start Vigilia
           </button>
         }
+      } @else if (setupKind === 'consuetudo') {
+        @if (consuetudoFinished()) {
+          <button type="button" class="exit primary" disabled>
+            {{ consuetudoAwarding() ? 'Logging…' : 'Complete' }}
+          </button>
+        } @else if (consuetudoRunning()) {
+          <button type="button" class="exit primary" (click)="pause()">Pause</button>
+          <button type="button" class="exit" (click)="completeStep()">Completed</button>
+          <button type="button" class="exit" (click)="skipStep()">Skip</button>
+        } @else if (consuetudoInProgress()) {
+          <button type="button" class="exit primary" (click)="resume()">Resume</button>
+          <button type="button" class="exit" (click)="completeStep()">Completed</button>
+          <button type="button" class="exit" (click)="skipStep()">Skip</button>
+          <button type="button" class="exit" (click)="stop()">Stop</button>
+        } @else {
+          <button
+            type="button"
+            class="exit primary"
+            (click)="begin()"
+            [disabled]="!selectedRoutineId"
+          >
+            Start Consuetudo
+          </button>
+        }
       } @else if (phase() === 'idle') {
         <button type="button" class="exit primary" (click)="begin()">
           {{ mode() === 'adhoc' ? 'Start Track' : 'Begin Sessio' }}
@@ -273,7 +336,7 @@
     </div>
   </section>
 
-  @if (setupKind !== 'vigilia' && widgetVisible && selectedWatch(); as watch) {
+  @if (setupKind !== 'vigilia' && setupKind !== 'consuetudo' && widgetVisible && selectedWatch(); as watch) {
     <aside class="watch-widget">
       <div>
         <p>Vigilia</p>
@@ -282,7 +345,7 @@
       <span>{{ watchElapsedLabel() }}</span>
       <button type="button" class="exit slim" (click)="toggleWatchWidget()">Hide</button>
     </aside>
-  } @else if (setupKind !== 'vigilia' && selectedWatch() && !widgetVisible && phase() !== 'idle') {
+  } @else if (setupKind !== 'vigilia' && setupKind !== 'consuetudo' && selectedWatch() && !widgetVisible && phase() !== 'idle') {
     <button type="button" class="exit slim watch-show" (click)="toggleWatchWidget()">
       Show vigilia
     </button>

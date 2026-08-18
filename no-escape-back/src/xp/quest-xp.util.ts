@@ -46,6 +46,49 @@ export function splitQuestXp(
   return shares.map(({ remainder: _r, ...rest }) => rest);
 }
 
+export function parseSkillWeights(raw: unknown): QuestSkillWeight[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const rows = raw.map((w) => {
+    const row = w as { slug?: string; weight?: number };
+    return {
+      slug: String(row?.slug || '').trim(),
+      weight: Math.round(Number(row?.weight) || 0),
+    };
+  });
+  return rows.filter((w) => w.slug && w.weight > 0);
+}
+
+/** Validate 10-point skill weights. Empty is allowed only when allowEmpty is true. */
+export function validateSkillWeights(
+  raw: unknown,
+  opts?: { allowEmpty?: boolean },
+): { weights: QuestSkillWeight[]; error: string | null } {
+  const weights = parseSkillWeights(raw);
+  const slugs = new Set(weights.map((w) => w.slug));
+  if (slugs.size !== weights.length) {
+    return {
+      weights,
+      error: 'Each integrated skill can appear only once',
+    };
+  }
+  if (weights.length === 0) {
+    return {
+      weights,
+      error: opts?.allowEmpty ? null : 'At least one skill is required',
+    };
+  }
+  const sum = weights.reduce((n, w) => n + w.weight, 0);
+  if (sum !== QUEST_WEIGHT_TOTAL) {
+    return {
+      weights,
+      error: `Skill weights must sum to ${QUEST_WEIGHT_TOTAL} (currently ${sum})`,
+    };
+  }
+  return { weights, error: null };
+}
+
 export function sharesToBonus(
   shares: QuestSkillShare[],
 ): Record<string, number> | undefined {

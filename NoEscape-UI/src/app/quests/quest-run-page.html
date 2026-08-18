@@ -1,3 +1,12 @@
+@if (showLoader()) {
+  <app-rune-loader label="the quest" />
+}
+
+@if (toast() && !ready()) {
+  <p class="toast" role="status">{{ toast() }}</p>
+}
+
+@if (ready()) {
 <section class="run-shell">
   <header class="run-head">
     <div>
@@ -23,9 +32,7 @@
     <p class="toast" role="status">{{ toast() }}</p>
   }
 
-  @if (loading()) {
-    <p class="state">Loading run…</p>
-  } @else if (quest(); as q) {
+  @if (quest(); as q) {
     <div class="progress-block" aria-label="Quest progress">
       <div class="progress-track">
         <div class="progress-fill" [style.width.%]="q.progressPercent"></div>
@@ -134,28 +141,24 @@
           <ul class="subtask-checks">
             @for (t of q.subtasks; track t.id) {
               <li>
-                <label>
-                  <input
-                    type="checkbox"
-                    [checked]="t.completed"
-                    [disabled]="logging() || q.run?.status !== 'ACTIVE'"
-                    (change)="toggleSubtask(t.id, !t.completed)"
-                  />
-                  <span>
-                    {{ t.title }}
-                    @if (t.gatesJourney) {
-                      <em class="gate-flag">Gate</em>
-                    }
-                    @if (t.elapsedMs) {
-                      <span class="sub-meta">{{ elapsedLabel(t.elapsedMs) }} tracked</span>
-                    }
-                    @if (t.completed && t.completedAtLabel) {
-                      <span class="sub-meta">
-                        #{{ t.completionOrder }} · {{ t.completedAtLabel }}
-                      </span>
-                    }
-                  </span>
-                </label>
+                <app-rune-check
+                  [checked]="t.completed"
+                  [disabled]="logging() || q.run?.status !== 'ACTIVE'"
+                  (checkedChange)="toggleSubtask(t.id, $event)"
+                >
+                  {{ t.title }}
+                  @if (t.gatesJourney) {
+                    <em class="gate-flag">Gate</em>
+                  }
+                  @if (t.elapsedMs) {
+                    <span class="sub-meta">{{ elapsedLabel(t.elapsedMs) }} tracked</span>
+                  }
+                  @if (t.completed && t.completedAtLabel) {
+                    <span class="sub-meta">
+                      #{{ t.completionOrder }} · {{ t.completedAtLabel }}
+                    </span>
+                  }
+                </app-rune-check>
               </li>
             }
           </ul>
@@ -221,3 +224,4 @@
     <p class="state">Quest not found.</p>
   }
 </section>
+}

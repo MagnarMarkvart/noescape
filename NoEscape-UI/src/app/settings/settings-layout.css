@@ -1,0 +1,71 @@
+:host {
+  --rs-bg: #2b2518;
+  --rs-border: #8a7340;
+  --rs-border-bright: #c6a85a;
+  --rs-text: #f0e6c8;
+  --rs-muted: #b8a878;
+  --rs-accent: #d4a84b;
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
+  --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  display: block;
+  min-height: 100dvh;
+  color: var(--rs-text);
+  font-family: var(--font-body);
+  background: linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 50%, #221c12 100%);
+}
+
+.settings-shell {
+  max-width: 32rem;
+  padding: 0.85rem 1rem 2rem;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.toolbar h1 {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-display);
+  color: var(--rs-accent);
+}
+
+.back {
+  color: var(--rs-muted);
+  text-decoration: none;
+  font-family: var(--font-display);
+}
+
+.subnav {
+  display: flex;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.subnav a {
+  padding: 0.4rem 0.7rem;
+  text-decoration: none;
+  color: var(--rs-muted);
+  border: 1px solid var(--rs-border);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+}
+
+.subnav a.active,
+.subnav a:hover,
+.subnav a:focus-visible {
+  color: var(--rs-accent);
+  border-color: var(--rs-border-bright);
+  outline: none;
+}

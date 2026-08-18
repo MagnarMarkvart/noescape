@@ -1,0 +1,165 @@
+:host {
+  --rs-border: #8a7340;
+  --rs-border-bright: #c6a85a;
+  --rs-text: #f0e6c8;
+  --rs-muted: #b8a878;
+  --rs-accent: #d4a84b;
+  --rs-danger: #c45c4a;
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
+  --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: block;
+}
+
+.lede {
+  margin: 0 0 0.85rem;
+  color: var(--rs-muted);
+  font-size: 0.9rem;
+}
+
+.toast {
+  padding: 0.65rem;
+  margin-bottom: 0.85rem;
+  border: 1px solid var(--rs-border-bright);
+  background: rgba(47, 143, 58, 0.16);
+}
+
+.preset-list {
+  list-style: none;
+  margin: 0 0 1.15rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.preset-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem;
+  align-items: center;
+  border: 1px solid var(--rs-border);
+  background: rgba(30, 24, 14, 0.7);
+  padding: 0.35rem;
+}
+
+.preset-list li.editing {
+  border-color: var(--rs-accent);
+}
+
+.preset-list .empty {
+  color: var(--rs-muted);
+  padding: 0.65rem;
+  border-style: dashed;
+}
+
+.pick {
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.35rem 0.45rem;
+}
+
+.pick strong {
+  font-family: var(--font-display);
+}
+
+.pick small {
+  color: var(--rs-muted);
+}
+
+.danger,
+.ghost,
+.editor button {
+  font-family: var(--font-display);
+  cursor: pointer;
+  padding: 0.4rem 0.65rem;
+}
+
+.danger {
+  border: 1px solid #8a4038;
+  background: transparent;
+  color: #d4a070;
+}
+
+.ghost {
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-text);
+}
+
+.editor {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid var(--rs-border);
+}
+
+.editor h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--rs-accent);
+}
+
+.editor label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--rs-muted);
+}
+
+.editor input[type='text'],
+.editor input[type='number'] {
+  padding: 0.45rem;
+  border: 1px solid var(--rs-border);
+  background: #1a1610;
+  color: var(--rs-text);
+  font: inherit;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.check {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+}
+
+.check input {
+  width: auto;
+  accent-color: var(--rs-accent);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.editor button[type='submit'] {
+  justify-self: start;
+  border: 1px solid var(--rs-border-bright);
+  background: rgba(212, 168, 75, 0.14);
+  color: var(--rs-text);
+}
+
+.editor button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}

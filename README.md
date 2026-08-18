@@ -104,13 +104,7 @@ API:
 
 ### Dailies board structure
 
-Each day has a fixed **1 / 3 / 5** slot layout:
-
-| Tier | Slots | Importance key | Base XP |
-|------|-------|----------------|---------|
-| Most Important | 1 | `MOST_IMPORTANT` | **50** |
-| Important | 3 | `IMPORTANT` | **30** |
-| Regular | 5 | `REGULAR` | **5** |
+Each day has a fixed **1 / 3 / 5** slot layout (Most Important / Important / Regular). Slot tier is **layout only** — it does not change XP.
 
 Each filled slot has:
 
@@ -119,49 +113,71 @@ Each filled slot has:
 - **effort** 1–10
 - **duration** in minutes
 
+Source of truth for the formula: `no-escape-back/src/xp/daily-xp.util.ts` (UI copy: `NoEscape-UI/src/app/dailies/daily-xp.ts`).
+
 ### Daily task XP formula
 
-Short tasks must not be harshly punished (a naive `duration/60` would cut a 30‑minute task in half). Instead we use a square-root curve around a 45‑minute reference, with a floor and ceiling:
+Every billed minute is worth an effort-scaled rate. Duration past **8 hours** (480 minutes) is ignored — longer tasks do not grant extra XP.
 
 ```
-XP = round(base × effortMult × durationMult)
-
-base:
-  MOST_IMPORTANT = 50
-  IMPORTANT      = 30
-  REGULAR        = 5
-
-effortMult = 0.4 + (effort / 10) × 1.2
-  # effort 1  → 0.52×
-  # effort 5  → 1.00×
-  # effort 10 → 1.60×
-
-durationMult = clamp(√(minutes / 45), 0.65, 2.0)
-  # ≤ ~15 min → 0.65× floor (no cliff for short focus blocks)
-  # 30 min    → ≈0.82×
-  # 45 min    → 1.00×
-  # 60 min    → ≈1.15×
-  # long grind → capped at 2.00×
+billedMinutes = clamp(floor(durationMinutes), 0, 480)
+XP            = billedMinutes × xpPerMinute(effort)
 ```
 
-Minimum award is **1 XP**.
+**xpPerMinute(effort)**
+
+| Effort | XP / minute | How it is derived |
+|--------|-------------|-------------------|
+| 1 | **1** | `2^(effort−1)` |
+| 2 | **2** | powers of two |
+| 3 | **4** | |
+| 4 | **8** | |
+| 5 | **16** | last doubling |
+| 6 | **31** | 16 + 15×1 |
+| 7 | **46** | 16 + 15×2 |
+| 8 | **61** | 16 + 15×3 |
+| 9 | **76** | 16 + 15×4 |
+| 10 | **100** | special peak (not +15 from 9) |
+
+```
+xpPerMinute(e):
+  if e <= 5:  2^(e − 1)
+  if e == 10: 100
+  else:       16 + 15 × (e − 5)    # e = 6..9
+```
 
 #### Examples
 
-| Task | Effort | Duration | Approx XP |
-|------|--------|----------|-----------|
-| Most Important, average | 5 | 45 min | 50 |
-| Most Important, hard | 8 | 30 min | 56 |
-| Important | 7 | 60 min | ~50 |
-| Regular quick win | 5 | 15 min | 3 |
-| Regular deep block | 6 | 90 min | ~10 |
+| Task | Effort | Duration | XP |
+|------|--------|----------|----|
+| Showering | 1 | 15 min | 15 |
+| Typical block | 5 | 45 min | 720 |
+| Hard hour | 8 | 60 min | 3,660 |
+| Deep work | 10 | 3 h | 18,000 |
+| Full-day grind | 5 | 9 h | 7,680 (capped at 8 h × 16) |
 
 Completing a daily task:
 
 1. Computes XP with the formula above
-2. Awards XP to the linked skill (same progression curve)
-3. Writes an `Activity` note like `Daily: <title>`
-4. Locks the slot (completed tasks cannot be edited)
+2. Splits that XP across the task’s skills using the same **10-point weight** split as quests (largest remainder so the pieces still add up to the full reward)
+3. Awards each share to its skill (same progression curve)
+4. Writes an `Activity` note like `Daily: <title>` per skill
+5. Locks the slot (completed tasks cannot be edited)
+
+### Consuetudo (practice) XP
+
+Walking a routine in Horologium uses the **same duration × effort rate** as dailies, billed from **completed** (not skipped) planned minutes. Finishing the whole practice adds a bonus that shrinks with skips:
+
+```
+baseXp  = billedMinutes(completed steps) × xpPerMinute(effort)
+bonus   = skipRatio > 0.5 ? 0
+        : round(baseXp × 0.5 × (1 − skipRatio / 0.5))
+totalXp = baseXp + bonus
+```
+
+`skipRatio = skippedSteps / totalSteps`. More than half skipped → no bonus. Total XP is then split with the same 10-point skill weights as dailies and quests.
+
+Source of truth: `no-escape-back/src/xp/consuetudo-xp.util.ts`.
 
 ---
 

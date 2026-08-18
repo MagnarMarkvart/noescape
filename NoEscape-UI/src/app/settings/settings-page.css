@@ -1,5 +1,4 @@
 :host {
-  --rs-bg: #2b2518;
   --rs-border: #8a7340;
   --rs-border-bright: #c6a85a;
   --rs-text: #f0e6c8;
@@ -7,44 +6,7 @@
   --rs-accent: #d4a84b;
   --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
   --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-
   display: block;
-  min-height: 100dvh;
-  color: var(--rs-text);
-  font-family: var(--font-body);
-  background: linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 50%, #221c12 100%);
-}
-
-.settings-shell {
-  max-width: 28rem;
-  padding: 0.85rem 1rem 2rem;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.kicker {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--rs-muted);
-}
-
-.toolbar h1 {
-  margin: 0.2rem 0 0;
-  font-family: var(--font-display);
-  color: var(--rs-accent);
-}
-
-.back {
-  color: var(--rs-muted);
-  text-decoration: none;
-  font-family: var(--font-display);
 }
 
 .toast,
@@ -100,4 +62,45 @@
 .save:disabled {
   opacity: 0.6;
   cursor: wait;
+}
+
+.settings-form app-rune-check {
+  justify-self: start;
+}
+
+.option-group {
+  margin: 0;
+  padding: 0.75rem 0.85rem 0.85rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(20, 16, 10, 0.35);
+  display: grid;
+  gap: 0.65rem;
+  justify-items: start;
+}
+
+.option-group legend {
+  padding: 0 0.35rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.vol {
+  display: grid;
+  gap: 0.3rem;
+  width: min(22rem, 100%);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.vol.off {
+  opacity: 0.45;
+}
+
+.vol input {
+  width: 100%;
+  accent-color: var(--rs-accent);
 }

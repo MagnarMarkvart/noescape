@@ -11,6 +11,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { CopyIncompleteDto } from './dto/copy-incomplete.dto';
+import {
+  CreateDailyTemplateDto,
+  UpdateDailyTemplateDto,
+} from './dto/daily-template.dto';
 import { PostponeDailyDto } from './dto/postpone-daily.dto';
 import { DailiesService } from './dailies.service';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
@@ -18,6 +22,11 @@ import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
 @Controller('dailies')
 export class DailiesController {
   constructor(private readonly dailiesService: DailiesService) {}
+
+  @Get('calendar')
+  calendar(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.dailiesService.calendar(from ?? '', to ?? '');
+  }
 
   @Get()
   getBoard(@Query('date') date?: string) {
@@ -60,18 +69,16 @@ export class DailiesController {
   }
 
   @Post('templates')
-  createTemplate(
-    @Body()
-    body: {
-      name: string;
-      icon?: string;
-      skillId: number;
-      fixedXp: number;
-      effortLevel?: number;
-      durationMinutes?: number;
-    },
-  ) {
+  createTemplate(@Body() body: CreateDailyTemplateDto) {
     return this.dailiesService.createTemplate(body);
+  }
+
+  @Patch('templates/:id')
+  updateTemplate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdateDailyTemplateDto,
+  ) {
+    return this.dailiesService.updateTemplate(id, body);
   }
 
   @Delete('templates/:id')

@@ -56,6 +56,16 @@
   color: var(--rs-muted);
 }
 
+.head-chips {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-end;
+}
+
+a.wealth-chip {
+  text-decoration: none;
+}
+
 .level-chip strong {
   display: block;
   font-family: var(--font-display);

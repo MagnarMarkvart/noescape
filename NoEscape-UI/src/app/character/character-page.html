@@ -21,13 +21,25 @@
           <dt>Habitus</dt>
           <dd>{{ p.habitusUnlocked ? 'On' : '—' }}</dd>
         </div>
+        <div>
+          <dt>Consuetudo</dt>
+          <dd>{{ p.consuetudoUnlocked ? 'On' : '—' }}</dd>
+        </div>
+        <a routerLink="/wealth" class="wealth-vital">
+          <dt>Wealth</dt>
+          <dd>{{ wealthLabel() }}</dd>
+        </a>
       </dl>
       <nav class="quick" aria-label="Shortcuts">
         <a routerLink="/quests">Quests</a>
         @if (p.habitusUnlocked) {
           <a routerLink="/habitus">Habitus</a>
         }
+        @if (p.consuetudoUnlocked) {
+          <a routerLink="/consuetudo">Consuetudo</a>
+        }
         <a routerLink="/settings">Settings</a>
+        <a routerLink="/wealth">Wealth</a>
       </nav>
     </header>
 

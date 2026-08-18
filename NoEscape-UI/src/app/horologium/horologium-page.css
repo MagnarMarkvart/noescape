@@ -158,8 +158,26 @@
   opacity: 0.55;
 }
 
-.ring.vigilia .ring-progress {
-  opacity: 0;
+.ring.overtime .ring-progress {
+  stroke: #c45c4a;
+}
+
+.ring[data-phase='consuetudo'] .ring-progress {
+  stroke: var(--rs-accent);
+}
+
+.practice-step {
+  margin: 0.15rem 0 0;
+  color: var(--rs-text);
+  font-size: 0.82rem;
+  display: flex;
+  gap: 0.3rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.clock.overtime {
+  color: #c45c4a;
 }
 
 .ring-core {
@@ -264,8 +282,6 @@
   padding: 0;
   display: grid;
   gap: 0.55rem;
-  max-height: 18rem;
-  overflow: auto;
 }
 
 .session-log li {
@@ -423,6 +439,21 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
   gap: 0.45rem;
+}
+
+.preset-manage {
+  display: inline-block;
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--rs-muted);
+  text-decoration: none;
+  font-family: var(--font-display);
+}
+
+.preset-manage:hover,
+.preset-manage:focus-visible {
+  color: var(--rs-accent);
+  outline: none;
 }
 
 .pick-tile {

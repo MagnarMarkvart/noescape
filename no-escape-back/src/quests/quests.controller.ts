@@ -58,6 +58,7 @@ export class QuestsController {
       totalXp?: number;
       skillWeights?: { slug: string; weight: number }[];
       completionBonus?: Record<string, number>;
+      wealthCents?: number | null;
     },
   ) {
     return this.questsService.create(body);
@@ -91,6 +92,7 @@ export class QuestsController {
       };
       totalXp?: number;
       skillWeights?: { slug: string; weight: number }[];
+      wealthCents?: number | null;
     },
   ) {
     return this.questsService.update(id, body);

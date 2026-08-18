@@ -11,7 +11,7 @@ import { RouterLink } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { CharacterService } from '../character/character.service';
-import { DailyBoard, DailyTaskSlot } from '../dailies/daily.model';
+import { DailyBoard, DailyTaskSlot, dailySkillLine } from '../dailies/daily.model';
 import { DailiesService } from '../dailies/dailies.service';
 import { HabitsService, HabitView } from '../habits/habits.service';
 import { HorologiumTimerService } from '../horologium/horologium-timer.service';
@@ -70,6 +70,7 @@ export class DashboardPage implements OnInit {
   protected readonly todayIso = this.characterService.todayIso;
 
   protected readonly totalLevel = computed(() => this.tree()?.totalLevel ?? 0);
+  protected readonly wealthLabel = this.characterService.wealthLabel;
 
   protected readonly todayDailies = computed(() => {
     const board = this.board();
@@ -140,6 +141,10 @@ export class DashboardPage implements OnInit {
     return formatElapsedShort(ms ?? 0);
   }
 
+  protected skillLine(slot: DailyTaskSlot): string {
+    return dailySkillLine(slot) || '—';
+  }
+
   protected habitDoneToday(habit: HabitView): boolean {
     return habit.recentDates.includes(this.todayIso());
   }
@@ -169,6 +174,7 @@ export class DashboardPage implements OnInit {
         this.busyHabitId.set(null);
         this.timed.set(`Logged ${habit.name}`);
         this.reloadHabits();
+        void this.characterService.getProfile().subscribe();
       },
       error: (err: { error?: { message?: string } }) => {
         this.busyHabitId.set(null);
@@ -186,9 +192,12 @@ export class DashboardPage implements OnInit {
       next: (result) => {
         this.busyDailyId.set(null);
         this.skillsService.invalidateTree();
-        this.xpFeedback.publishAward(result.award);
+        for (const award of result.awards ?? (result.award ? [result.award] : [])) {
+          this.xpFeedback.publishAward(award);
+        }
         this.reloadBoard();
         this.reloadTree();
+        void this.characterService.getProfile().subscribe();
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.busyDailyId.set(null);

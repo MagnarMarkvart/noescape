@@ -4,9 +4,14 @@
       <p class="kicker">Today</p>
       <h1>Dashboard</h1>
     </div>
-    <p class="level-chip" aria-label="Total level">
-      Total <strong>{{ totalLevel() }}</strong>
-    </p>
+    <div class="head-chips">
+      <p class="level-chip" aria-label="Total level">
+        Total <strong>{{ totalLevel() }}</strong>
+      </p>
+      <a class="level-chip wealth-chip" routerLink="/wealth" aria-label="Wealth">
+        Wealth <strong>{{ wealthLabel() }}</strong>
+      </a>
+    </div>
   </header>
 
   @if (toast()) {
@@ -205,7 +210,7 @@
                 <span class="row-body">
                   <strong>{{ slot.title }}</strong>
                   <small>
-                    {{ slot.skill?.name || '—' }}
+                    {{ skillLine(slot) }}
                     · {{ (slot.completed ? slot.xpAwarded : slot.projectedXp) | number }} XP
                     · {{ elapsedLabel(slot.elapsedMs) }}
                   </small>

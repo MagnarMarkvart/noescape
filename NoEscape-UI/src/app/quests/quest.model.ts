@@ -111,6 +111,7 @@ export interface QuestView {
   createdByUser: boolean;
   totalXp: number;
   skillShares: QuestSkillShareView[];
+  wealthCents: number;
   xpPlan: { dayXp: number[]; completionBonus?: Record<string, number> };
   rewards: {
     title?: string;
@@ -171,6 +172,7 @@ export interface CreateQuestPayload {
   rewards?: { title?: string };
   totalXp?: number;
   skillWeights?: { slug: string; weight: number }[];
+  wealthCents?: number | null;
 }
 
 /** Resolve cover URL (catalog + uploaded files live on the API host). */

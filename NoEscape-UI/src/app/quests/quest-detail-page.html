@@ -1,20 +1,25 @@
+@if (showLoader()) {
+  <app-rune-loader label="the quest briefing" />
+}
+
+@if (ready() || error()) {
 <section
   class="quest-slide"
-  [style.background-image]="coverBg()"
+  [style.background-image]="ready() ? coverBg() : null"
   aria-live="polite"
 >
   <div class="veil" aria-hidden="true"></div>
 
-  <a class="close" routerLink="/quests" aria-label="Back to quests">✕</a>
-  @if (quest(); as qHead) {
-    <a class="edit-link" [routerLink]="['/quests', qHead.id, 'edit']">Edit</a>
+  @if (ready()) {
+    <a class="close" routerLink="/quests" aria-label="Back to quests">✕</a>
+    @if (quest(); as qHead) {
+      <a class="edit-link" [routerLink]="['/quests', qHead.id, 'edit']">Edit</a>
+    }
   }
 
-  @if (loading()) {
-    <p class="state">Unfurling the scroll…</p>
-  } @else if (error() && !quest()) {
+  @if (error() && !quest()) {
     <p class="state error">{{ error() }}</p>
-  } @else if (quest(); as q) {
+  } @else if (ready() && quest(); as q) {
     <div class="slide-inner">
       <header class="hero">
         <p class="kicker">{{ q.tier }} · Quest Briefing</p>
@@ -51,13 +56,23 @@
 
         <article class="panel">
           <h2>Rewards</h2>
-          @if (q.rewards || q.skillShares.length || q.xpPlan.completionBonus || q.unlocksQuests.length) {
+          @if (q.rewards || q.skillShares.length || q.xpPlan.completionBonus || q.unlocksQuests.length || q.wealthCents) {
             <ul>
               @if (q.rewards?.title) {
-                <li>Title: <em>{{ q.rewards!.title }}</em></li>
+                <li>Title: <em>{{ titleDisplay(q.rewards!.title) }}</em></li>
+              }
+              @if (wealthLabel(q.wealthCents); as cash) {
+                <li>Wealth: {{ cash }}</li>
               }
               @for (f of q.rewards?.features ?? []; track f) {
-                <li>Feature: {{ featureLabel(f) }}</li>
+                <li>
+                  Feature:
+                  @if (featureHref(f); as href) {
+                    <a [routerLink]="href">{{ featureLabel(f) }}</a>
+                  } @else {
+                    {{ featureLabel(f) }}
+                  }
+                </li>
               }
               @for (p of q.rewards?.permissionKeys ?? []; track p) {
                 <li>Unlock: {{ p }}</li>
@@ -65,7 +80,7 @@
               @if (q.skillShares.length) {
                 @for (s of q.skillShares; track s.slug) {
                   <li>
-                    {{ s.name }} {{ s.weight }}/10
+                    {{ s.name }}
                     <span class="detail">+{{ s.xp }} XP</span>
                   </li>
                 }
@@ -219,3 +234,4 @@
     </div>
   }
 </section>
+}

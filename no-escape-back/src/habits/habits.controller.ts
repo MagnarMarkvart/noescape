@@ -38,10 +38,24 @@ export class HabitsController {
       skillId?: number;
       cadence?: string;
       everyNDays?: number;
+      wealthCents?: number | null;
     },
     @Query('dev') dev?: string,
   ) {
     return this.habitsService.create(body, this.isDev(dev));
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: {
+      skillId?: number | null;
+      wealthCents?: number | null;
+    },
+    @Query('dev') dev?: string,
+  ) {
+    return this.habitsService.update(id, body ?? {}, this.isDev(dev));
   }
 
   @Get(':id/month')

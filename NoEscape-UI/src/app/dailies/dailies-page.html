@@ -1,21 +1,14 @@
 <section class="dailies-shell">
   <div class="toolbar">
     <div class="date-nav" aria-label="Day navigation">
-      <button type="button" class="ghost icon" (click)="shiftDate(-1)" aria-label="Previous day">‹</button>
-      <input
-        class="date-input"
-        type="date"
-        [value]="selectedDate()"
-        (change)="onDatePicked($event)"
-        aria-label="Pick date"
+      <app-date-nav
+        [date]="selectedDate()"
+        [today]="todayIso()"
+        [marks]="calendarMarks()"
+        [showTomorrow]="true"
+        (dateChange)="onDateNav($event)"
+        (rangeChange)="loadCalendar($event)"
       />
-      <button type="button" class="ghost icon" (click)="shiftDate(1)" aria-label="Next day">›</button>
-      @if (!isToday()) {
-        <button type="button" class="ghost" (click)="goToday()">Today</button>
-      }
-      @if (!isTomorrow()) {
-        <button type="button" class="ghost" (click)="goTomorrow()">Tomorrow</button>
-      }
     </div>
 
     <div class="toolbar-actions">
@@ -105,21 +98,56 @@
                           <input type="text" [formField]="slotForm.title" placeholder="Quest" />
                         </label>
 
-                        @if (templates().length) {
+                        <div class="default-search">
                           <label class="title-field">
-                            Default task
-                            <select
-                              (change)="onTemplateSelect($event)"
-                            >
-                              <option value="">— pick a preset —</option>
-                              @for (t of templates(); track t.id) {
-                                <option [value]="t.id">
-                                  {{ t.icon }} {{ t.name }} (+{{ t.fixedXp }} {{ t.skill.name }})
-                                </option>
-                              }
-                            </select>
+                            Load a default
+                            <input
+                              type="search"
+                              role="combobox"
+                              autocomplete="off"
+                              placeholder="Search saved tasks"
+                              aria-autocomplete="list"
+                              aria-controls="default-hits"
+                              [attr.aria-expanded]="defaultSearchOpen()"
+                              [value]="defaultQuery()"
+                              (input)="onDefaultQuery($event)"
+                              (focus)="defaultSearchOpen.set(true)"
+                              (blur)="onDefaultBlur()"
+                              (keydown)="onDefaultSearchKey($event)"
+                            />
                           </label>
-                        }
+                          @if (defaultSearchOpen()) {
+                            <ul id="default-hits" class="default-hits" role="listbox">
+                              @if (filteredDefaults().length === 0) {
+                                <li class="default-empty">No matching defaults</li>
+                              } @else {
+                                @for (t of filteredDefaults(); track t.id) {
+                                  <li role="none">
+                                    <button
+                                      type="button"
+                                      class="default-hit"
+                                      role="option"
+                                      (mousedown)="applyTemplate(t.id)"
+                                    >
+                                      <span class="hit-title">
+                                        <span aria-hidden="true">{{ t.icon }}</span>
+                                        {{ t.name }}
+                                      </span>
+                                      <span class="hit-meta">
+                                        {{ skillLine(t) }}
+                                        · E{{ t.effortLevel }}
+                                        · {{ formatDuration(t.durationMinutes) }}
+                                        @if (t.habit) {
+                                          · {{ t.habit.icon }} {{ t.habit.name }}
+                                        }
+                                      </span>
+                                    </button>
+                                  </li>
+                                }
+                              }
+                            </ul>
+                          }
+                        </div>
 
                         @if (habits().length) {
                           <label class="title-field">
@@ -138,12 +166,17 @@
                           </label>
                         }
 
-                        @if (slotModel().fixedXp; as fx) {
-                          <p class="fixed-xp-note">Fixed reward: +{{ fx }} XP</p>
-                        }
+                        <p class="xp-preview">Reward ~{{ previewXp() | number }} XP</p>
 
                         <fieldset class="picker-block">
-                          <legend>Skill</legend>
+                          <legend>Skills</legend>
+                          <app-skill-weight-list
+                            [shares]="weightShares()"
+                            [remaining]="weightRemaining()"
+                            [valid]="weightsValid()"
+                            (bump)="bumpSkillWeight($event)"
+                            (remove)="removeSkillWeight($event)"
+                          />
                           <div class="icon-grid parents" role="listbox" aria-label="Parent skills">
                             @for (cat of categories(); track cat.category) {
                               <button
@@ -170,8 +203,8 @@
                                   type="button"
                                   class="pick-tile"
                                   role="option"
-                                  [class.selected]="slotModel().skillId === skill.id"
-                                  [attr.aria-selected]="slotModel().skillId === skill.id"
+                                  [class.selected]="hasSkill(skill.id)"
+                                  [attr.aria-selected]="hasSkill(skill.id)"
                                   (click)="selectSkill(skill.id)"
                                 >
                                   <span class="pick-icon" aria-hidden="true">{{ skill.icon }}</span>
@@ -230,16 +263,52 @@
                             </button>
                           </div>
                           @if (slotModel().customDuration) {
-                            <label class="custom-duration">
-                              Minutes
-                              <input type="number" [formField]="slotForm.customDurationMinutes" />
-                            </label>
+                            <div class="form-row custom-duration">
+                              <label>
+                                Hours
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="24"
+                                  [value]="customHours()"
+                                  (input)="setCustomHours($event)"
+                                />
+                              </label>
+                              <label>
+                                Minutes
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="59"
+                                  [value]="customMins()"
+                                  (input)="setCustomMins($event)"
+                                />
+                              </label>
+                            </div>
                           }
                         </fieldset>
 
+                        @if (showWealth()) {
+                          <label>
+                            Wealth gained ({{ currencyLabel() }})
+                            <input
+                              type="text"
+                              inputmode="decimal"
+                              [value]="slotModel().wealthAmount"
+                              (input)="setWealthAmount($event)"
+                              placeholder="0.00"
+                            />
+                          </label>
+                        }
+
                         <div class="form-actions">
-                          <button type="submit" [disabled]="saving() || slotForm().invalid()">Save</button>
+                          <button type="submit" [disabled]="saving() || slotForm().invalid() || !weightsValid()">Save</button>
                           <button type="button" class="ghost" (click)="cancelEdit()">Cancel</button>
+                          <app-rune-check
+                            label="Remember"
+                            [checked]="slotModel().saveAsDefault"
+                            (checkedChange)="setSaveAsDefault($event)"
+                          />
                           @if (canPostponeEdit()) {
                             <div class="postpone-group">
                               <button
@@ -287,7 +356,7 @@
                         <span aria-hidden="true">{{ slot.skill?.icon }}</span>
                         <span class="filled-chip-text">
                           <strong>{{ slot.title }}</strong>
-                          <span class="muted">{{ slot.skill?.name }} · E{{ slot.effortLevel }} · {{ formatDuration(slot.durationMinutes) }}</span>
+                          <span class="muted">{{ skillLine(slot) }} · E{{ slot.effortLevel }} · {{ formatDuration(slot.durationMinutes) }}@if (formatWealth(slot.wealthCents); as cash) { · {{ cash }} }</span>
                         </span>
                       </button>
                     }
@@ -339,7 +408,7 @@
                                 <h3>{{ slot.title }}</h3>
                                 <p class="skill-chip">
                                   <span aria-hidden="true">{{ slot.skill?.icon }}</span>
-                                  {{ slot.skill?.name }}
+                                  {{ skillLine(slot) }}
                                   <span class="muted">Lv {{ slot.skill?.level }}</span>
                                 </p>
                               </div>
@@ -365,6 +434,12 @@
                                 <dt>Tracked</dt>
                                 <dd>{{ formatElapsed(slot.elapsedMs) }}</dd>
                               </div>
+                              @if (formatWealth(slot.wealthCents); as cash) {
+                                <div>
+                                  <dt>Wealth</dt>
+                                  <dd>{{ cash }}</dd>
+                                </div>
+                              }
                             </dl>
 
                             <div class="quest-actions">

@@ -11,7 +11,11 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { form, FormField, required, submit } from '@angular/forms/signals';
 import { Skill } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
+import { RuneCheck } from '../shared/rune-check';
+import { CharacterService } from '../character/character.service';
 import { TimedToast } from '../shared/timed-toast';
+import { boostsWealth } from '../shared/skill-weights';
+import { centsToInput, parseMoneyToCents } from '../shared/money';
 import { API_BASE_URL } from '../core/api.config';
 import {
   QUEST_WEIGHT_TOTAL,
@@ -29,7 +33,7 @@ interface ForgeSubtask {
 
 @Component({
   selector: 'app-quest-forge-page',
-  imports: [RouterLink, FormField, DecimalPipe],
+  imports: [RouterLink, FormField, DecimalPipe, RuneCheck],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-forge-page.html',
   styleUrl: './quest-forge-page.css',
@@ -40,6 +44,7 @@ export class QuestForgePage implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly timed = new TimedToast();
+  private readonly character = inject(CharacterService);
 
   protected readonly toast = this.timed.value;
   protected readonly saving = signal(false);
@@ -77,6 +82,7 @@ export class QuestForgePage implements OnInit {
     commitmentLevel: 7,
     titleReward: '',
     totalXp: 0,
+    wealthAmount: '',
   });
   protected readonly createForm = form(this.createModel, (p) => {
     required(p.name);
@@ -103,6 +109,13 @@ export class QuestForgePage implements OnInit {
     }
     return this.weightRemaining() === 0;
   });
+
+  protected readonly showWealth = computed(() =>
+    boostsWealth(this.skillWeights()) ||
+    parseMoneyToCents(this.createModel().wealthAmount) > 0,
+  );
+
+  protected readonly currencyLabel = computed(() => this.character.currency());
 
   ngOnInit(): void {
     this.skillsService.getAll().subscribe({
@@ -181,8 +194,8 @@ export class QuestForgePage implements OnInit {
     );
   }
 
-  protected setGateDraft(event: Event): void {
-    this.gateDraft.set((event.target as HTMLInputElement).checked);
+  protected setGateDraft(checked: boolean): void {
+    this.gateDraft.set(checked);
   }
 
   protected addSkillReq(): void {
@@ -216,6 +229,11 @@ export class QuestForgePage implements OnInit {
   protected setTotalXp(event: Event): void {
     const n = Math.max(0, Math.round(Number((event.target as HTMLInputElement).value) || 0));
     this.createModel.update((m) => ({ ...m, totalXp: n }));
+  }
+
+  protected setWealthAmount(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.createModel.update((m) => ({ ...m, wealthAmount: value }));
   }
 
   protected addSkillShare(): void {
@@ -301,10 +319,13 @@ export class QuestForgePage implements OnInit {
     return this.skills().find((s) => s.slug === slug)?.name ?? slug;
   }
 
-  protected toggleQuestReq(slug: string): void {
-    this.questReqs.update((rows) =>
-      rows.includes(slug) ? rows.filter((s) => s !== slug) : [...rows, slug],
-    );
+  protected setQuestReq(slug: string, on: boolean): void {
+    this.questReqs.update((rows) => {
+      if (on) {
+        return rows.includes(slug) ? rows : [...rows, slug];
+      }
+      return rows.filter((s) => s !== slug);
+    });
   }
 
   protected commitmentLabel(n: number): string {
@@ -350,6 +371,9 @@ export class QuestForgePage implements OnInit {
           : undefined,
         totalXp: Math.max(0, Math.round(Number(m.totalXp) || 0)),
         skillWeights: this.skillWeights(),
+        wealthCents: boostsWealth(this.skillWeights())
+          ? parseMoneyToCents(m.wealthAmount)
+          : 0,
       };
       const id = this.editId();
       const req =
@@ -396,6 +420,7 @@ export class QuestForgePage implements OnInit {
       commitmentLevel: q.commitmentLevel || 7,
       titleReward: q.rewards?.title ?? '',
       totalXp: q.totalXp || 0,
+      wealthAmount: centsToInput(q.wealthCents),
     });
     this.subtasks.set(
       q.subtasks.map((s) => ({

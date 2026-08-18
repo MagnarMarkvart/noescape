@@ -23,9 +23,22 @@ export class HorologiumApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${API_BASE_URL}/horologium`;
 
-  listSessions(limit = 40, offset = 0) {
+  listSessions(limit = 40, offset = 0, date?: string) {
+    const q = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (date) {
+      q.set('date', date);
+    }
     return this.http.get<HorologiumSessionPage>(
-      `${this.baseUrl}/sessions?limit=${limit}&offset=${offset}`,
+      `${this.baseUrl}/sessions?${q.toString()}`,
+    );
+  }
+
+  sessionCalendar(from: string, to: string) {
+    return this.http.get<Array<{ date: string; count: number }>>(
+      `${this.baseUrl}/sessions/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     );
   }
 

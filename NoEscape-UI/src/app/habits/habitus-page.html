@@ -1,12 +1,23 @@
 <section class="habitus-shell">
   <header class="toolbar">
     <div>
-      <p class="kicker">Streaks</p>
+      <p class="kicker">{{ demo() ? 'Unlockable · Demo' : 'Streaks' }}</p>
       <h1>Habitus</h1>
+      @if (demo()) {
+        <p class="hint-inline">
+          Preview of the habit calendar. Complete
+          <a [routerLink]="unlockQuestPath()">Custodia Mentis</a>
+          to keep real logs.
+        </p>
+      }
     </div>
     <nav class="toolbar-links">
-      <a routerLink="/habitus/new">New habit</a>
-      <a routerLink="/habitus/progression">Progression →</a>
+      @if (!demo()) {
+        <a routerLink="/habitus/new">New habit</a>
+        <a routerLink="/habitus/progression">Progression →</a>
+      } @else {
+        <a [routerLink]="unlockQuestPath()">Unlock via quest</a>
+      }
       <a routerLink="/character" class="back">← Character</a>
     </nav>
   </header>
@@ -48,7 +59,9 @@
         @if (habits().length === 0) {
           <p class="state">No active habits.</p>
         }
-        <a routerLink="/habitus/new" class="new-link">+ New habit</a>
+        @if (!demo()) {
+          <a routerLink="/habitus/new" class="new-link">+ New habit</a>
+        }
       </aside>
 
       <section class="calendar-panel">
@@ -61,7 +74,39 @@
             <p class="meta">
               {{ h.cadence === 'DAILY' ? 'Daily' : 'Every ' + h.everyNDays + ' days' }}
               · {{ h.totalCompletions }} logs · best streak {{ h.bestStreak }}
+              @if (formatHabitWealth(h.wealthCents); as cash) {
+                · {{ cash }}
+              }
             </p>
+
+            @if (!demo()) {
+              <form class="reward-edit" (submit)="$event.preventDefault(); saveReward()">
+                <label>
+                  Skill
+                  <select [value]="skillDraft()" (change)="setSkillDraft($event)">
+                    <option [value]="0">— none —</option>
+                    @for (s of skills(); track s.id) {
+                      <option [value]="s.id">{{ s.icon }} {{ s.name }}</option>
+                    }
+                  </select>
+                </label>
+                @if (showWealthEdit()) {
+                  <label>
+                    Wealth ({{ currencyLabel() }})
+                    <input
+                      type="text"
+                      inputmode="decimal"
+                      [value]="wealthDraft()"
+                      (input)="setWealthDraft($event)"
+                      placeholder="0.00"
+                    />
+                  </label>
+                }
+                <button type="submit" [disabled]="savingReward()">
+                  {{ savingReward() ? '…' : 'Save' }}
+                </button>
+              </form>
+            }
 
             <div class="view-tabs" role="tablist">
               @for (mode of ['day', 'week', 'month']; track mode) {
@@ -94,6 +139,16 @@
               role="grid"
               [attr.aria-label]="periodLabel()"
             >
+              @if (viewMode() !== 'day') {
+                @for (wd of weekdays(); track wd) {
+                  <span class="wd">{{ wd }}</span>
+                }
+              }
+              @if (viewMode() === 'month') {
+                @for (pad of leadPads(); track pad) {
+                  <span class="day pad" aria-hidden="true"></span>
+                }
+              }
               @for (day of p.days; track day.date) {
                 <button
                   type="button"
@@ -122,20 +177,28 @@
           }
 
           <div class="actions">
-            <button type="button" class="primary" (click)="markToday()">
-              Mark today complete
-            </button>
-            <button type="button" class="ghost" (click)="archiveSelected()">
-              Archive
-            </button>
-            <button type="button" class="danger" (click)="deleteSelected()">
-              Delete
-            </button>
+            @if (demo()) {
+              <a [routerLink]="unlockQuestPath()" class="primary-link">
+                Complete Custodia Mentis to unlock
+              </a>
+            } @else {
+              <button type="button" class="primary" (click)="markToday()">
+                Mark today complete
+              </button>
+              <button type="button" class="ghost" (click)="archiveSelected()">
+                Archive
+              </button>
+              <button type="button" class="danger" (click)="deleteSelected()">
+                Delete
+              </button>
+            }
           </div>
         } @else {
           <p class="state">
             No habit selected.
-            <a routerLink="/habitus/new">Create one</a>
+            @if (!demo()) {
+              <a routerLink="/habitus/new">Create one</a>
+            }
           </p>
         }
       </section>

@@ -8,10 +8,12 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { API_BASE_URL } from '../core/api.config';
+import { ImageWarmService } from '../shared/image-warm.service';
 import { TimedToast } from '../shared/timed-toast';
 import {
   QuestView,
   questCoverBg,
+  resolveQuestCoverUrl,
   weekdayLabel,
 } from './quest.model';
 import { QuestsService } from './quests.service';
@@ -65,6 +67,7 @@ function saveQuestBoard(id: QuestBoard): void {
 })
 export class QuestsPage implements OnInit {
   private readonly questsService = inject(QuestsService);
+  private readonly images = inject(ImageWarmService);
   private readonly router = inject(Router);
   private readonly timed = new TimedToast();
 
@@ -127,6 +130,9 @@ export class QuestsPage implements OnInit {
     this.questsService.list('all').subscribe({
       next: (rows) => {
         this.quests.set(rows);
+        this.images.warmAll(
+          rows.map((q) => resolveQuestCoverUrl(q.coverUrl, API_BASE_URL)),
+        );
         this.loading.set(false);
         if (
           !hasStoredQuestBoard() &&

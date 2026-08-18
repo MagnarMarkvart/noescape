@@ -16,6 +16,7 @@ export interface HabitView {
   } | null;
   cadence: string;
   everyNDays: number;
+  wealthCents: number;
   active: boolean;
   archived: boolean;
   createdAt: string;
@@ -72,9 +73,23 @@ export class HabitsService {
     skillId?: number;
     cadence?: string;
     everyNDays?: number;
+    wealthCents?: number | null;
   }) {
     return this.http.post<HabitView>(
       `${this.baseUrl}${this.devQuery()}`,
+      body,
+    );
+  }
+
+  update(
+    habitId: number,
+    body: {
+      skillId?: number | null;
+      wealthCents?: number | null;
+    },
+  ) {
+    return this.http.patch<HabitView>(
+      `${this.baseUrl}/${habitId}${this.devQuery()}`,
       body,
     );
   }

@@ -3,21 +3,30 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  CharacterService,
+} from '../character/character.service';
 import { HabitsService } from '../habits/habits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SkillsService } from '../skills/skills.service';
 import { TimeService } from '../time/time.service';
 import { formatElapsedShort } from '../time/zone';
 import {
+  billedDurationMinutes,
   calculateDailyTaskXp,
   DAILY_SLOT_COUNTS,
   DAILY_SLOT_MAXIMUMS,
-  durationMultiplier,
-  effortMultiplier,
-  IMPORTANCE_BASE_XP,
+  effortXpPerMinute,
   IMPORTANCE_ORDER,
   TaskImportance,
 } from '../xp/daily-xp.util';
+import {
+  parseSkillWeights,
+  splitQuestXp,
+  validateSkillWeights,
+  type QuestSkillWeight,
+} from '../xp/quest-xp.util';
+import { boostsWealth, parseRewardCents } from '../wealth/money.util';
 import { CopyIncompleteDto } from './dto/copy-incomplete.dto';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
 
@@ -51,10 +60,18 @@ type EnrichedTask = {
   isEmpty: boolean;
   projectedXp: number;
   breakdown: {
-    base: number;
-    effortMult: number;
-    durationMult: number;
+    billedMinutes: number;
+    xpPerMinute: number;
   } | null;
+  skillWeights: QuestSkillWeight[];
+  skillShares: Array<{
+    slug: string;
+    name: string;
+    weight: number;
+    xp: number;
+  }>;
+  wealthCents: number;
+  wealthAwardedCents: number | null;
 };
 
 type BoardSnapshot = {
@@ -89,6 +106,7 @@ export class DailiesService {
     private readonly prisma: PrismaService,
     private readonly skillsService: SkillsService,
     private readonly habitsService: HabitsService,
+    private readonly characterService: CharacterService,
     private readonly time: TimeService,
   ) {}
 
@@ -226,7 +244,11 @@ export class DailiesService {
       if (existing?.title.trim() && existing.skillId) {
         continue;
       }
-      if (!task.skillId || !task.title.trim()) {
+      if (!task.title.trim()) {
+        continue;
+      }
+      const copiedWeights = this.taskWeights(task);
+      if (!task.skillId && copiedWeights.length === 0) {
         continue;
       }
 
@@ -244,25 +266,46 @@ export class DailiesService {
           slotIndex: task.slotIndex,
           title: task.title,
           skillId: task.skillId,
+          skillWeightsJson: copiedWeights.length
+            ? JSON.stringify(copiedWeights)
+            : null,
+          habitId: task.habitId ?? null,
+          fixedXp: null,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
           elapsedMs: BigInt(Math.max(0, Math.round(Number(task.elapsedMs) || 0))),
           completed: false,
           xpAwarded: null,
           completedAt: null,
+          wealthCents: task.wealthCents ?? 0,
+          wealthAwardedCents: null,
         },
         update: {
           title: task.title,
           skillId: task.skillId,
+          skillWeightsJson: copiedWeights.length
+            ? JSON.stringify(copiedWeights)
+            : null,
+          habitId: task.habitId ?? null,
+          fixedXp: null,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
           elapsedMs: BigInt(Math.max(0, Math.round(Number(task.elapsedMs) || 0))),
           completed: false,
           xpAwarded: null,
           completedAt: null,
+          wealthCents: task.wealthCents ?? 0,
+          wealthAwardedCents: null,
         },
       });
       copied += 1;
+    }
+
+    if (copied > 0) {
+      await this.prisma.dailyLog.update({
+        where: { date: sourceLog.date },
+        data: { incompletesCarried: true },
+      });
     }
 
     return {
@@ -271,6 +314,55 @@ export class DailiesService {
       copied,
       board: await this.getBoard(targetDate),
     };
+  }
+
+  async calendar(from: string, to: string) {
+    const start = this.normalizeDate(from);
+    const end = this.normalizeDate(to);
+    const today = this.localToday();
+    const [logs, tasks] = await Promise.all([
+      this.prisma.dailyLog.findMany({
+        where: { date: { gte: start, lte: end } },
+        select: {
+          date: true,
+          filledCount: true,
+          completedCount: true,
+          incompletesCarried: true,
+        },
+      }),
+      this.prisma.dailyTask.findMany({
+        where: { date: { gte: start, lte: end } },
+        select: { date: true, title: true, skillId: true },
+      }),
+    ]);
+
+    const filled = new Set<string>();
+    for (const task of tasks) {
+      if (task.title.trim() && task.skillId) {
+        filled.add(task.date);
+      }
+    }
+    const logByDate = new Map(logs.map((log) => [log.date, log]));
+    const dates = new Set([...filled, ...logByDate.keys()]);
+    const days: Array<{
+      date: string;
+      status: 'sealed' | 'abandoned' | 'open';
+    }> = [];
+
+    for (const date of dates) {
+      const log = logByDate.get(date);
+      if (log) {
+        const leftover =
+          log.completedCount < log.filledCount && !log.incompletesCarried;
+        days.push({ date, status: leftover ? 'abandoned' : 'sealed' });
+        continue;
+      }
+      if (date < today) {
+        days.push({ date, status: 'open' });
+      }
+    }
+
+    return days.sort((a, b) => a.date.localeCompare(b.date));
   }
 
   async upsertSlot(dto: UpsertDailyTaskDto) {
@@ -283,10 +375,11 @@ export class DailiesService {
     if (!title) {
       throw new BadRequestException('Title is required');
     }
-    if (!Number.isInteger(dto.skillId) || dto.skillId < 1) {
-      throw new BadRequestException('skillId is required');
-    }
-    await this.skillsService.findOne(dto.skillId);
+    const plan = await this.resolveSkillPlan({
+      skillId: dto.skillId,
+      skillWeights: dto.skillWeights,
+    });
+    const habitId = await this.resolveHabitId(dto.habitId);
 
     const effortLevel = this.assertEffort(dto.effortLevel);
     const durationMinutes = this.assertDuration(dto.durationMinutes);
@@ -318,19 +411,27 @@ export class DailiesService {
         importance: dto.importance,
         slotIndex: dto.slotIndex,
         title,
-        skillId: dto.skillId,
-        habitId: dto.habitId ?? null,
-        fixedXp: dto.fixedXp ?? null,
+        skillId: plan.skillId,
+        skillWeightsJson: JSON.stringify(plan.weights),
+        habitId,
+        fixedXp: null,
         effortLevel,
         durationMinutes,
+        wealthCents: boostsWealth(plan.weights)
+          ? parseRewardCents(dto.wealthCents)
+          : 0,
       },
       update: {
         title,
-        skillId: dto.skillId,
-        habitId: dto.habitId ?? null,
-        fixedXp: dto.fixedXp ?? null,
+        skillId: plan.skillId,
+        skillWeightsJson: JSON.stringify(plan.weights),
+        habitId,
+        fixedXp: null,
         effortLevel,
         durationMinutes,
+        wealthCents: boostsWealth(plan.weights)
+          ? parseRewardCents(dto.wealthCents)
+          : 0,
       },
       include: { skill: { select: this.skillSelect() } },
     });
@@ -339,48 +440,110 @@ export class DailiesService {
   }
 
   async listTemplates() {
-    return this.prisma.dailyTaskTemplate.findMany({
+    const rows = await this.prisma.dailyTaskTemplate.findMany({
       where: { active: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: {
-        skill: { select: this.skillSelect() },
-      },
+      include: this.templateInclude(),
     });
+    const catalog = await this.skillCatalog();
+    return rows.map((row) => this.serializeTemplate(row, catalog));
   }
 
   async createTemplate(input: {
     name: string;
     icon?: string;
-    skillId: number;
-    fixedXp: number;
+    skillId?: number;
+    skillWeights?: Array<{ slug: string; weight: number }>;
+    habitId?: number | null;
     effortLevel?: number;
     durationMinutes?: number;
+    wealthCents?: number | null;
   }) {
-    const name = input.name?.trim();
-    if (!name) {
-      throw new BadRequestException('name is required');
+    const data = await this.buildTemplateData(input);
+    const existing = await this.prisma.dailyTaskTemplate.findFirst({
+      where: { name: data.name, active: true },
+    });
+    if (existing) {
+      return this.updateTemplate(existing.id, input);
     }
-    if (!Number.isInteger(input.skillId) || input.skillId < 1) {
-      throw new BadRequestException('skillId is required');
-    }
-    const fixedXp = Math.round(Number(input.fixedXp));
-    if (!Number.isFinite(fixedXp) || fixedXp < 1) {
-      throw new BadRequestException('fixedXp must be ≥ 1');
-    }
-    await this.skillsService.findOne(input.skillId);
-    return this.prisma.dailyTaskTemplate.create({
+    const created = await this.prisma.dailyTaskTemplate.create({
       data: {
-        name,
-        icon: input.icon?.trim() || '◆',
-        skillId: input.skillId,
-        fixedXp,
-        effortLevel: this.assertEffort(input.effortLevel ?? 5),
-        durationMinutes: this.assertDuration(input.durationMinutes ?? 30),
+        ...data,
+        fixedXp: 0,
         createdByUser: true,
         sortOrder: 100,
       },
-      include: { skill: { select: this.skillSelect() } },
+      include: this.templateInclude(),
     });
+    return this.serializeTemplate(created);
+  }
+
+  async updateTemplate(
+    id: number,
+    input: {
+      name?: string;
+      icon?: string;
+      skillId?: number;
+      skillWeights?: Array<{ slug: string; weight: number }>;
+      habitId?: number | null;
+      effortLevel?: number;
+      durationMinutes?: number;
+      wealthCents?: number | null;
+    },
+  ) {
+    const row = await this.prisma.dailyTaskTemplate.findUnique({
+      where: { id },
+    });
+    if (!row || !row.active) {
+      throw new NotFoundException(`Template #${id} not found`);
+    }
+
+    const name = input.name != null ? input.name.trim() : row.name;
+    if (!name) {
+      throw new BadRequestException('name is required');
+    }
+
+    const plan = await this.resolveSkillPlan({
+      skillId: input.skillId ?? row.skillId,
+      skillWeights:
+        input.skillWeights ?? this.parseJson(row.skillWeightsJson),
+    });
+
+    const habitId =
+      input.habitId === undefined
+        ? row.habitId
+        : await this.resolveHabitId(input.habitId);
+
+    const updated = await this.prisma.dailyTaskTemplate.update({
+      where: { id },
+      data: {
+        name,
+        icon:
+          input.icon != null ? input.icon.trim() || '◆' : row.icon,
+        skillId: plan.skillId,
+        skillWeightsJson: JSON.stringify(plan.weights),
+        habitId,
+        effortLevel:
+          input.effortLevel != null
+            ? this.assertEffort(input.effortLevel)
+            : row.effortLevel,
+        durationMinutes:
+          input.durationMinutes != null
+            ? this.assertDuration(input.durationMinutes)
+            : row.durationMinutes,
+        wealthCents:
+          input.wealthCents !== undefined
+            ? boostsWealth(plan.weights)
+              ? parseRewardCents(input.wealthCents)
+              : 0
+            : boostsWealth(plan.weights)
+              ? row.wealthCents
+              : 0,
+        fixedXp: 0,
+      },
+      include: this.templateInclude(),
+    });
+    return this.serializeTemplate(updated);
   }
 
   async removeTemplate(id: number) {
@@ -464,35 +627,74 @@ export class DailiesService {
     }
 
     const importance = task.importance as TaskImportance;
-    const xp =
-      task.fixedXp != null && task.fixedXp > 0
-        ? task.fixedXp
-        : calculateDailyTaskXp({
-            importance,
-            effortLevel: task.effortLevel,
-            durationMinutes: task.durationMinutes,
-          });
-
-    const tracked = Number(task.elapsedMs ?? 0);
-    const award = await this.skillsService.awardXp(task.skillId, {
-      xpGained: xp,
-      duration: task.durationMinutes,
-      note:
-        tracked > 0
-          ? `Daily: ${task.title} · tracked ${formatElapsedShort(tracked)}`
-          : `Daily: ${task.title}`,
+    const xp = calculateDailyTaskXp({
+      importance,
+      effortLevel: task.effortLevel,
+      durationMinutes: task.durationMinutes,
     });
 
+    const catalog = await this.skillCatalog();
+    const weights = this.taskWeights(task);
+    const shares = splitQuestXp(xp, weights);
+    const tracked = Number(task.elapsedMs ?? 0);
+    const note =
+      tracked > 0
+        ? `Daily: ${task.title} · tracked ${formatElapsedShort(tracked)}`
+        : `Daily: ${task.title}`;
+
+    const awards: Awaited<ReturnType<SkillsService['awardXp']>>[] = [];
+    try {
+      for (const share of shares) {
+        if (share.xp <= 0) {
+          continue;
+        }
+        const skill = catalog.get(share.slug);
+        if (!skill) {
+          throw new BadRequestException(`Unknown skill '${share.slug}'`);
+        }
+        awards.push(
+          await this.skillsService.awardXp(skill.id, {
+            xpGained: share.xp,
+            duration: task.durationMinutes,
+            note,
+          }),
+        );
+      }
+    } catch (err) {
+      for (const awarded of [...awards].reverse()) {
+        await this.skillsService.reverseXp(
+          awarded.skill.id,
+          awarded.activity.xpGained,
+          awarded.activity.id,
+        );
+      }
+      throw err;
+    }
+
+    const activityIds = awards.map((a) => a.activity.id);
+    const wealthCents = parseRewardCents(task.wealthCents);
     const updated = await this.prisma.dailyTask.update({
       where: { id },
       data: {
         completed: true,
         xpAwarded: xp,
-        activityId: award.activity.id,
+        activityId: activityIds[0] ?? null,
+        activityIdsJson: activityIds.length ? JSON.stringify(activityIds) : null,
         completedAt: new Date(),
+        wealthAwardedCents: wealthCents > 0 ? wealthCents : null,
       },
       include: { skill: { select: this.skillSelect() } },
     });
+
+    if (wealthCents > 0) {
+      await this.characterService.adjustWealth({
+        deltaCents: wealthCents,
+        note: `Daily: ${updated.title}`,
+        source: 'daily',
+        sourceId: updated.id,
+        date: updated.date,
+      });
+    }
 
     if (updated.habitId) {
       await this.habitsService.markComplete(
@@ -504,8 +706,9 @@ export class DailiesService {
     }
 
     return {
-      task: this.enrichTask(updated),
-      award,
+      task: this.enrichTask(updated, catalog),
+      award: awards[0] ?? null,
+      awards,
     };
   }
 
@@ -522,15 +725,53 @@ export class DailiesService {
     if (!task.completed) {
       throw new BadRequestException('Task is not completed');
     }
-    if (!task.skillId || !task.xpAwarded) {
+
+    const activityIds = this.parseIdList(task.activityIdsJson);
+    if (task.activityId != null && !activityIds.includes(task.activityId)) {
+      activityIds.unshift(task.activityId);
+    }
+
+    const reversals: Awaited<ReturnType<SkillsService['reverseXp']>>[] = [];
+    if (activityIds.length) {
+      const activities = await this.prisma.activity.findMany({
+        where: { id: { in: activityIds } },
+      });
+      const byId = new Map(activities.map((a) => [a.id, a]));
+      for (const id of activityIds) {
+        const activity = byId.get(id);
+        if (!activity) {
+          continue;
+        }
+        reversals.push(
+          await this.skillsService.reverseXp(
+            activity.skillId,
+            activity.xpGained,
+            activity.id,
+          ),
+        );
+      }
+    } else if (task.skillId && task.xpAwarded) {
+      reversals.push(
+        await this.skillsService.reverseXp(
+          task.skillId,
+          task.xpAwarded,
+          task.activityId,
+        ),
+      );
+    } else if (!task.wealthAwardedCents) {
       throw new BadRequestException('Task has no XP award to reverse');
     }
 
-    const reversal = await this.skillsService.reverseXp(
-      task.skillId,
-      task.xpAwarded,
-      task.activityId,
-    );
+    const awardedWealth = parseRewardCents(task.wealthAwardedCents);
+    if (awardedWealth > 0) {
+      await this.characterService.adjustWealth({
+        deltaCents: -awardedWealth,
+        note: `Undo daily: ${task.title}`,
+        source: 'daily',
+        sourceId: task.id,
+        date: task.date,
+      });
+    }
 
     const updated = await this.prisma.dailyTask.update({
       where: { id },
@@ -538,14 +779,17 @@ export class DailiesService {
         completed: false,
         xpAwarded: null,
         activityId: null,
+        activityIdsJson: null,
         completedAt: null,
+        wealthAwardedCents: null,
       },
       include: { skill: { select: this.skillSelect() } },
     });
 
     return {
       task: this.enrichTask(updated),
-      reversal,
+      reversal: reversals[0] ?? null,
+      reversals,
     };
   }
 
@@ -625,6 +869,9 @@ export class DailiesService {
           slotIndex,
           title: task.title,
           skillId: task.skillId,
+          skillWeightsJson: task.skillWeightsJson,
+          habitId: task.habitId ?? null,
+          fixedXp: null,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
           elapsedMs: task.elapsedMs ?? BigInt(0),
@@ -632,10 +879,15 @@ export class DailiesService {
           xpAwarded: null,
           activityId: null,
           completedAt: null,
+          wealthCents: task.wealthCents ?? 0,
+          wealthAwardedCents: null,
         },
         update: {
           title: task.title,
           skillId: task.skillId,
+          skillWeightsJson: task.skillWeightsJson,
+          habitId: task.habitId ?? null,
+          fixedXp: null,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
           elapsedMs: task.elapsedMs ?? BigInt(0),
@@ -643,6 +895,8 @@ export class DailiesService {
           xpAwarded: null,
           activityId: null,
           completedAt: null,
+          wealthCents: task.wealthCents ?? 0,
+          wealthAwardedCents: null,
         },
       });
     });
@@ -714,6 +968,7 @@ export class DailiesService {
       where: { date: day },
       include: { skill: { select: this.skillSelect() } },
     });
+    const catalog = await this.skillCatalog();
 
     const byKey = new Map(
       tasks.map((task) => [`${task.importance}:${task.slotIndex}`, task]),
@@ -727,13 +982,13 @@ export class DailiesService {
         if (!existing) {
           return this.emptySlot(day, importance, slotIndex);
         }
-        return this.enrichTask(existing);
+        return this.enrichTask(existing, catalog);
       });
 
       return {
         importance,
         label: this.importanceLabel(importance),
-        baseXp: IMPORTANCE_BASE_XP[importance],
+        baseXp: 0,
         capacity,
         filled: slots.filter((slot) => slot.isFilled).length,
         completed: slots.filter((slot) => slot.completed).length,
@@ -793,63 +1048,70 @@ export class DailiesService {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  private enrichTask(task: {
-    id: number;
-    date: string;
-    importance: string;
-    slotIndex: number;
-    title: string;
-    skillId: number | null;
-    skill: SkillSnap | null;
-    habitId?: number | null;
-    fixedXp?: number | null;
-    effortLevel: number;
-    durationMinutes: number;
-    elapsedMs?: bigint | number;
-    completed: boolean;
-    xpAwarded: number | null;
-    activityId?: number | null;
-    completedAt: Date | null;
-  }): EnrichedTask {
+  private enrichTask(
+    task: {
+      id: number;
+      date: string;
+      importance: string;
+      slotIndex: number;
+      title: string;
+      skillId: number | null;
+      skill: SkillSnap | null;
+      habitId?: number | null;
+      fixedXp?: number | null;
+      skillWeightsJson?: string | null;
+      effortLevel: number;
+      durationMinutes: number;
+      elapsedMs?: bigint | number;
+      completed: boolean;
+      xpAwarded: number | null;
+      activityId?: number | null;
+      completedAt: Date | null;
+      wealthCents?: number | null;
+      wealthAwardedCents?: number | null;
+    },
+    catalog?: Map<string, SkillSnap>,
+  ): EnrichedTask {
     const importance = task.importance as TaskImportance;
-    const isFilled = Boolean(task.title.trim() && task.skillId);
-    const fixedXp = task.fixedXp ?? null;
+    const skillWeights = this.taskWeights(task);
+    const isFilled = Boolean(task.title.trim() && (task.skillId || skillWeights.length));
     const projectedXp = isFilled
-      ? fixedXp != null && fixedXp > 0
-        ? fixedXp
-        : calculateDailyTaskXp({
-            importance,
-            effortLevel: task.effortLevel,
-            durationMinutes: task.durationMinutes,
-          })
+      ? calculateDailyTaskXp({
+          importance,
+          effortLevel: task.effortLevel,
+          durationMinutes: task.durationMinutes,
+        })
       : 0;
+    const skillShares = splitQuestXp(projectedXp, skillWeights).map((share) => ({
+      ...share,
+      name:
+        catalog?.get(share.slug)?.name ??
+        (task.skill?.slug === share.slug ? task.skill.name : share.slug),
+    }));
 
     return {
       ...task,
       elapsedMs: Number(task.elapsedMs ?? 0),
       importance,
       habitId: task.habitId ?? null,
-      fixedXp,
+      fixedXp: null,
       activityId: task.activityId ?? null,
       isFilled,
       isEmpty: !isFilled,
       projectedXp,
       breakdown: isFilled
         ? {
-            base:
-              fixedXp != null && fixedXp > 0
-                ? fixedXp
-                : IMPORTANCE_BASE_XP[importance],
-            effortMult:
-              fixedXp != null && fixedXp > 0
-                ? 1
-                : Number(effortMultiplier(task.effortLevel).toFixed(3)),
-            durationMult:
-              fixedXp != null && fixedXp > 0
-                ? 1
-                : Number(durationMultiplier(task.durationMinutes).toFixed(3)),
+            billedMinutes: billedDurationMinutes(task.durationMinutes),
+            xpPerMinute: effortXpPerMinute(task.effortLevel),
           }
         : null,
+      skillWeights,
+      skillShares,
+      wealthCents: parseRewardCents(task.wealthCents),
+      wealthAwardedCents:
+        task.wealthAwardedCents == null
+          ? null
+          : parseRewardCents(task.wealthAwardedCents),
     };
   }
 
@@ -879,6 +1141,10 @@ export class DailiesService {
       isEmpty: true,
       projectedXp: 0,
       breakdown: null,
+      skillWeights: [],
+      skillShares: [],
+      wealthCents: 0,
+      wealthAwardedCents: null,
     };
   }
 
@@ -922,6 +1188,115 @@ export class DailiesService {
       icon: true,
       level: true,
     } as const;
+  }
+
+  private templateInclude() {
+    return {
+      skill: { select: this.skillSelect() },
+      habit: {
+        select: { id: true, name: true, icon: true, active: true },
+      },
+    } as const;
+  }
+
+  private serializeTemplate(row: {
+    id: number;
+    name: string;
+    icon: string | null;
+    skillId: number;
+    skill: SkillSnap;
+    skillWeightsJson?: string | null;
+    habitId: number | null;
+    habit: {
+      id: number;
+      name: string;
+      icon: string | null;
+      active: boolean;
+    } | null;
+    effortLevel: number;
+    durationMinutes: number;
+    sortOrder: number;
+    createdByUser: boolean;
+    wealthCents?: number | null;
+  },
+    catalog?: Map<string, SkillSnap>,
+  ) {
+    const habitActive = row.habit?.active === true;
+    const skillWeights = this.taskWeights({
+      skillWeightsJson: row.skillWeightsJson,
+      skill: row.skill,
+    });
+    const skillShares = splitQuestXp(0, skillWeights).map((share) => ({
+      ...share,
+      name:
+        catalog?.get(share.slug)?.name ??
+        (share.slug === row.skill.slug ? row.skill.name : share.slug),
+    }));
+    return {
+      id: row.id,
+      name: row.name,
+      icon: row.icon,
+      skillId: row.skillId,
+      skill: row.skill,
+      habitId: habitActive ? row.habitId : null,
+      habit: habitActive && row.habit
+        ? { id: row.habit.id, name: row.habit.name, icon: row.habit.icon }
+        : null,
+      effortLevel: row.effortLevel,
+      durationMinutes: row.durationMinutes,
+      sortOrder: row.sortOrder,
+      createdByUser: row.createdByUser,
+      skillWeights,
+      skillShares,
+      wealthCents: parseRewardCents(row.wealthCents),
+    };
+  }
+
+  private async buildTemplateData(input: {
+    name: string;
+    icon?: string;
+    skillId?: number;
+    skillWeights?: Array<{ slug: string; weight: number }>;
+    habitId?: number | null;
+    effortLevel?: number;
+    durationMinutes?: number;
+    wealthCents?: number | null;
+  }) {
+    const name = input.name?.trim();
+    if (!name) {
+      throw new BadRequestException('name is required');
+    }
+    const plan = await this.resolveSkillPlan({
+      skillId: input.skillId,
+      skillWeights: input.skillWeights,
+    });
+    return {
+      name,
+      icon: input.icon?.trim() || '◆',
+      skillId: plan.skillId,
+      skillWeightsJson: JSON.stringify(plan.weights),
+      habitId: await this.resolveHabitId(input.habitId),
+      effortLevel: this.assertEffort(input.effortLevel ?? 5),
+      durationMinutes: this.assertDuration(input.durationMinutes ?? 30),
+      wealthCents: boostsWealth(plan.weights)
+        ? parseRewardCents(input.wealthCents)
+        : 0,
+    };
+  }
+
+  /** Archived or missing habits become no-habit — never cascade-delete the default. */
+  private async resolveHabitId(habitId?: number | null): Promise<number | null> {
+    if (habitId == null || !Number.isInteger(habitId) || habitId < 1) {
+      return null;
+    }
+    const habit = await this.prisma.habit.findUnique({
+      where: { id: habitId },
+      select: { id: true, active: true },
+    });
+    if (!habit?.active) {
+      return null;
+    }
+    return habit.id;
   }
 
   private normalizeDate(date?: string): string {
@@ -983,5 +1358,97 @@ export class DailiesService {
       case 'REGULAR':
         return 'Regular';
     }
+  }
+
+  private async skillCatalog(): Promise<Map<string, SkillSnap>> {
+    const rows = await this.prisma.skill.findMany({
+      select: this.skillSelect(),
+    });
+    return new Map(rows.map((row) => [row.slug, row]));
+  }
+
+  private parseJson<T>(raw: string | null | undefined): T | null {
+    if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseIdList(raw: string | null | undefined): number[] {
+    const parsed = this.parseJson<unknown>(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .map((id) => Math.round(Number(id) || 0))
+      .filter((id) => id > 0);
+  }
+
+  private taskWeights(task: {
+    skillWeightsJson?: string | null;
+    skillWeights?: QuestSkillWeight[] | null;
+    skill?: { slug: string } | null;
+  }): QuestSkillWeight[] {
+    if (task.skillWeights?.length) {
+      return parseSkillWeights(task.skillWeights);
+    }
+    const stored = parseSkillWeights(this.parseJson(task.skillWeightsJson));
+    if (stored.length) {
+      return stored;
+    }
+    if (task.skill?.slug) {
+      return [{ slug: task.skill.slug, weight: 10 }];
+    }
+    return [];
+  }
+
+  private async resolveSkillPlan(input: {
+    skillId?: number | null;
+    skillWeights?: unknown;
+  }): Promise<{ skillId: number; weights: QuestSkillWeight[] }> {
+    const catalog = await this.prisma.skill.findMany({
+      select: this.skillSelect(),
+    });
+    const bySlug = new Map(catalog.map((s) => [s.slug, s]));
+    const byId = new Map(catalog.map((s) => [s.id, s]));
+
+    const hasWeights =
+      Array.isArray(input.skillWeights) && input.skillWeights.length > 0;
+    if (hasWeights) {
+      const { weights, error } = validateSkillWeights(input.skillWeights);
+      if (error) {
+        throw new BadRequestException(error);
+      }
+      for (const weight of weights) {
+        if (!bySlug.has(weight.slug)) {
+          throw new BadRequestException(`Unknown skill '${weight.slug}'`);
+        }
+      }
+      const primary = weights.reduce((best, row) =>
+        row.weight > best.weight ? row : best,
+      );
+      const skill = bySlug.get(primary.slug);
+      if (!skill) {
+        throw new BadRequestException('skillId is required');
+      }
+      return { skillId: skill.id, weights };
+    }
+
+    const skillId = input.skillId;
+    if (!Number.isInteger(skillId) || (skillId ?? 0) < 1) {
+      throw new BadRequestException('skillId is required');
+    }
+    const skill = byId.get(skillId as number);
+    if (!skill) {
+      throw new BadRequestException(`Skill #${skillId} not found`);
+    }
+    return {
+      skillId: skill.id,
+      weights: [{ slug: skill.slug, weight: 10 }],
+    };
   }
 }

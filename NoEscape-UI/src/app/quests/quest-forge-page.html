@@ -104,14 +104,11 @@
         <ul class="check-list">
           @for (q of catalogChoices(); track q.id) {
             <li>
-              <label>
-                <input
-                  type="checkbox"
-                  [checked]="questReqs().includes(q.slug)"
-                  (change)="toggleQuestReq(q.slug)"
-                />
-                {{ q.name }}
-              </label>
+              <app-rune-check
+                [label]="q.name"
+                [checked]="questReqs().includes(q.slug)"
+                (checkedChange)="setQuestReq(q.slug, $event)"
+              />
             </li>
           }
         </ul>
@@ -169,14 +166,11 @@
             placeholder="Ship the first vertical slice"
           />
         </label>
-        <label class="gate-toggle">
-          <input
-            type="checkbox"
-            [checked]="gateDraft()"
-            (change)="setGateDraft($event)"
-          />
-          Gate
-        </label>
+        <app-rune-check
+          label="Gate"
+          [checked]="gateDraft()"
+          (checkedChange)="setGateDraft($event)"
+        />
         <button type="button" class="ghost-btn" (click)="addSubtask()">Add</button>
       </div>
       @if (subtasks().length) {
@@ -184,14 +178,11 @@
           @for (t of subtasks(); track t.id ?? $index) {
             <li>
               <span>{{ t.title }}</span>
-              <label class="gate-toggle">
-                <input
-                  type="checkbox"
-                  [checked]="t.gatesJourney"
-                  (change)="toggleGate($index)"
-                />
-                Gate
-              </label>
+              <app-rune-check
+                label="Gate"
+                [checked]="t.gatesJourney"
+                (checkedChange)="toggleGate($index)"
+              />
               <button type="button" (click)="removeSubtask($index)" aria-label="Remove subtask">×</button>
             </li>
           }
@@ -294,6 +285,18 @@
         Title on completion
         <input type="text" [formField]="createForm.titleReward" placeholder="Optional character title" />
       </label>
+      @if (showWealth()) {
+        <label>
+          Wealth on completion ({{ currencyLabel() }})
+          <input
+            type="text"
+            inputmode="decimal"
+            [value]="createModel().wealthAmount"
+            (input)="setWealthAmount($event)"
+            placeholder="0.00"
+          />
+        </label>
+      }
     </fieldset>
 
     <div class="actions">

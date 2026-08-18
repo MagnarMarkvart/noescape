@@ -197,10 +197,7 @@
   cursor: pointer;
 }
 
-.check-list label {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
+.check-list app-rune-check {
   color: var(--rs-text);
 }
 

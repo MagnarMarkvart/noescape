@@ -7,6 +7,7 @@ import {
   effect,
   HostListener,
   inject,
+  isDevMode,
   OnInit,
   signal,
 } from '@angular/core';
@@ -18,10 +19,11 @@ import { HorologiumApiService } from './horologium-api.service';
 import { HorologiumTimerService } from './horologium-timer.service';
 import { HorologiumWatchService } from './horologium-watch.service';
 import { HorologiumTaskClockService } from './horologium-task-clock.service';
+import { ConsuetudoClockService } from './consuetudo-clock.service';
 import { CharacterService } from '../character/character.service';
+import { HorologiumPresetsService } from './horologium-presets.service';
 import {
   DEFAULT_HOROLOGIUM_CONFIG,
-  HOROLOGIUM_PRESETS,
   HorologiumBoundDaily,
   HorologiumConfig,
   HorologiumMode,
@@ -44,6 +46,12 @@ import {
 } from '../quests/quest.model';
 import { QuestsService } from '../quests/quests.service';
 import { DailiesService } from '../dailies/dailies.service';
+import {
+  RoutineView,
+  RoutinesService,
+} from '../consuetudo/routines.service';
+import { calculateConsuetudoXp } from '../consuetudo/consuetudo-xp';
+import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 
 @Component({
   selector: 'app-horologium-page',
@@ -56,16 +64,20 @@ export class HorologiumPage implements OnInit {
   private readonly timer = inject(HorologiumTimerService);
   private readonly watches = inject(HorologiumWatchService);
   private readonly taskClock = inject(HorologiumTaskClockService);
+  private readonly consuetudo = inject(ConsuetudoClockService);
   private readonly character = inject(CharacterService);
   private readonly api = inject(HorologiumApiService);
+  private readonly presetStore = inject(HorologiumPresetsService);
   private readonly quests = inject(QuestsService);
   private readonly dailiesApi = inject(DailiesService);
+  private readonly routinesApi = inject(RoutinesService);
+  private readonly xpFeedback = inject(XpFeedbackService);
   private readonly shell = inject(AppShellService);
   private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly presets = HOROLOGIUM_PRESETS;
+  protected readonly presets = this.presetStore.list;
   protected readonly selectedPresetId = signal<string | 'custom' | 'track'>(
-    'classic',
+    'custom',
   );
   protected readonly scenery = HOROLOGIUM_SCENERY;
   protected readonly sceneryId = signal(loadSceneryId());
@@ -91,16 +103,43 @@ export class HorologiumPage implements OnInit {
   });
 
   protected readonly phase = this.timer.phase;
-  protected readonly running = this.timer.running;
-  protected readonly remainingLabel = this.timer.remainingLabel;
-  protected readonly progressPercent = this.timer.progressPercent;
-  protected readonly phaseLabel = this.timer.phaseLabel;
-  protected readonly sessionLabel = this.timer.sessionLabel;
+  protected readonly running = computed(() =>
+    this.isConsuetudo() ? this.consuetudo.running() : this.timer.running(),
+  );
+  protected readonly remainingLabel = computed(() =>
+    this.isConsuetudo()
+      ? this.consuetudo.displayLabel()
+      : this.timer.remainingLabel(),
+  );
+  protected readonly progressPercent = computed(() =>
+    this.isConsuetudo()
+      ? this.consuetudo.progressPercent()
+      : this.timer.progressPercent(),
+  );
+  protected readonly phaseLabel = computed(() => {
+    if (!this.isConsuetudo()) {
+      return this.timer.phaseLabel();
+    }
+    if (this.consuetudo.overtime()) {
+      return 'Over';
+    }
+    return this.consuetudo.currentStep()?.title || 'Practice';
+  });
+  protected readonly sessionLabel = computed(() =>
+    this.isConsuetudo()
+      ? this.consuetudo.stepMeta()
+      : this.timer.sessionLabel(),
+  );
   protected readonly jinglesMuted = this.timer.jinglesMuted;
   protected readonly currentIteration = this.timer.currentIteration;
   protected readonly activeConfig = this.timer.config;
-  protected readonly awarding = this.timer.awarding;
-  protected readonly toast = this.timer.lastToast;
+  protected readonly awarding = computed(() =>
+    this.isConsuetudo() ? this.consuetudo.awarding() : this.timer.awarding(),
+  );
+  protected readonly consuetudoToast = signal<string | null>(null);
+  protected readonly toast = computed(
+    () => this.timer.lastToast() || this.consuetudoToast(),
+  );
   protected readonly mode = this.timer.mode;
   protected readonly completedBlocks = this.timer.completedBlocks;
   protected readonly boundDaily = this.timer.boundDaily;
@@ -144,15 +183,59 @@ export class HorologiumPage implements OnInit {
   });
 
   protected readonly isVigilia = computed(() => this.setupKind() === 'vigilia');
+  protected readonly isConsuetudo = computed(
+    () => this.setupKind() === 'consuetudo',
+  );
+  protected readonly consuetudoUnlocked = signal(false);
+  protected readonly routines = signal<RoutineView[]>([]);
+  protected readonly selectedRoutineId = signal<number | null>(null);
+  protected readonly showConsuetudoMode = computed(
+    () =>
+      isDevMode() ||
+      this.consuetudoUnlocked() ||
+      this.quests.activeQuests().some((q) => q.slug === 'ordo-diei'),
+  );
+  protected readonly selectedRoutine = computed((): RoutineView | null => {
+    const rows = this.routines();
+    const id = this.selectedRoutineId();
+    const found = rows.find((r) => r.id === id);
+    if (found) {
+      return found;
+    }
+    return rows[0] ?? null;
+  });
+  protected readonly consuetudoXpPreview = computed(() => {
+    const routine = this.selectedRoutine();
+    if (!routine) {
+      return null;
+    }
+    const minutes = routine.steps.reduce(
+      (sum, s) => sum + s.durationMinutes,
+      0,
+    );
+    return calculateConsuetudoXp({
+      effortLevel: routine.effortLevel,
+      completedPlannedMinutes: minutes,
+      skippedCount: 0,
+      totalSteps: routine.steps.length,
+    });
+  });
+  protected readonly consuetudoOvertime = this.consuetudo.overtime;
+  protected readonly consuetudoStep = this.consuetudo.currentStep;
+  protected readonly consuetudoFinished = this.consuetudo.finished;
+  protected readonly consuetudoInProgress = this.consuetudo.inProgress;
 
   protected readonly canEdit = computed(
     () =>
       !this.isActive() &&
       this.phase() !== 'complete' &&
-      !(this.isVigilia() && this.watchRunning()),
+      !(this.isVigilia() && this.watchRunning()) &&
+      !this.consuetudo.inProgress(),
   );
 
-  protected readonly isTrack = computed(() => this.mode() === 'adhoc' && !this.isVigilia());
+  protected readonly isTrack = computed(
+    () => this.mode() === 'adhoc' && !this.isVigilia() && !this.isConsuetudo(),
+  );
 
   protected readonly showWatchWidget = computed(
     () =>
@@ -252,6 +335,26 @@ export class HorologiumPage implements OnInit {
         this.exitFocus();
       }
     });
+    effect(() => {
+      const rows = this.presets();
+      const id = this.timer.presetId();
+      if (id === 'track' || id === 'custom' || !this.canEdit()) {
+        return;
+      }
+      if (rows.some((p) => p.id === id)) {
+        this.selectedPresetId.set(id);
+        return;
+      }
+      const first = rows[0];
+      if (first) {
+        this.selectPreset(first.id);
+      }
+    });
+    effect(() => {
+      if (this.consuetudo.finished() && !this.consuetudo.awarding()) {
+        this.finishConsuetudo();
+      }
+    });
   }
 
   ngOnInit(): void {
@@ -259,12 +362,22 @@ export class HorologiumPage implements OnInit {
     this.selectedPresetId.set(
       preset === 'track' || preset === 'custom' || typeof preset === 'string'
         ? preset
-        : 'classic',
+        : 'custom',
     );
     this.draft.set({ ...this.timer.config() });
     this.refreshPreview();
     this.reloadDailies();
-    if (this.isVigilia() && this.watchRunning()) {
+    this.reloadRoutines();
+    this.character.getProfile().subscribe({
+      next: (p) => this.consuetudoUnlocked.set(Boolean(p.consuetudoUnlocked)),
+      error: () => this.consuetudoUnlocked.set(false),
+    });
+    if (this.consuetudo.inProgress()) {
+      this.setupKind.set('consuetudo');
+      if (this.consuetudo.running() && !this.sceneryOpen()) {
+        this.enterFocus();
+      }
+    } else if (this.isVigilia() && this.watchRunning()) {
       this.enterFocus();
     } else if (this.mode() === 'adhoc' && this.running()) {
       this.enterFocus();
@@ -280,6 +393,16 @@ export class HorologiumPage implements OnInit {
     if (kind === 'vigilia') {
       this.watches.pauseSolo();
       this.setupKind.set('vigilia');
+      return;
+    }
+    if (kind === 'consuetudo') {
+      this.watches.pauseSolo();
+      this.setupKind.set('consuetudo');
+      const current = this.selectedRoutine();
+      if (current) {
+        this.consuetudo.load(current);
+        this.selectedRoutineId.set(current.id);
+      }
       return;
     }
     this.setupKind.set(kind);
@@ -312,7 +435,7 @@ export class HorologiumPage implements OnInit {
     if (!this.canEdit()) {
       return;
     }
-    const preset = this.presets.find((p) => p.id === id);
+    const preset = this.presets().find((p) => p.id === id);
     if (!preset) {
       return;
     }
@@ -349,6 +472,18 @@ export class HorologiumPage implements OnInit {
   }
 
   protected start(): void {
+    if (this.isConsuetudo()) {
+      const routine = this.selectedRoutine();
+      if (!routine) {
+        return;
+      }
+      this.consuetudo.load(routine);
+      this.consuetudo.start();
+      if (!this.sceneryOpen()) {
+        this.enterFocus();
+      }
+      return;
+    }
     if (this.isVigilia()) {
       this.watches.startSolo();
       if (!this.sceneryOpen()) {
@@ -375,6 +510,11 @@ export class HorologiumPage implements OnInit {
   }
 
   protected pause(): void {
+    if (this.isConsuetudo()) {
+      this.consuetudo.pause();
+      this.exitFocus();
+      return;
+    }
     if (this.isVigilia()) {
       this.watches.pauseSolo();
       this.exitFocus();
@@ -387,6 +527,13 @@ export class HorologiumPage implements OnInit {
   }
 
   protected resume(): void {
+    if (this.isConsuetudo()) {
+      this.consuetudo.resume();
+      if (!this.sceneryOpen()) {
+        this.enterFocus();
+      }
+      return;
+    }
     if (this.isVigilia()) {
       this.watches.startSolo();
       if (!this.sceneryOpen()) {
@@ -405,6 +552,16 @@ export class HorologiumPage implements OnInit {
   }
 
   protected reset(): void {
+    if (this.isConsuetudo()) {
+      this.finishing = false;
+      this.consuetudo.reset();
+      const routine = this.selectedRoutine();
+      if (routine) {
+        this.consuetudo.load(routine);
+      }
+      this.exitFocus();
+      return;
+    }
     if (this.isVigilia()) {
       this.watches.pauseSolo();
       this.exitFocus();
@@ -577,6 +734,78 @@ export class HorologiumPage implements OnInit {
     this.watches.archive(id);
   }
 
+  protected selectRoutine(raw: string): void {
+    if (!this.canEdit()) {
+      return;
+    }
+    const id = Number(raw);
+    const row = this.routines().find((r) => r.id === id) ?? null;
+    this.selectedRoutineId.set(row?.id ?? null);
+    this.consuetudo.load(row);
+  }
+
+  protected completeConsuetudoStep(): void {
+    this.consuetudo.completeCurrent();
+  }
+
+  protected skipConsuetudoStep(): void {
+    this.consuetudo.skipCurrent();
+  }
+
+  private finishing = false;
+
+  private finishConsuetudo(): void {
+    if (this.finishing) {
+      return;
+    }
+    const routine = this.consuetudo.routine();
+    const payload = this.consuetudo.payload();
+    this.finishing = true;
+    if (!routine || routine.id < 1 || !payload) {
+      return;
+    }
+    this.consuetudo.awarding.set(true);
+    this.routinesApi.complete(routine.id, payload).subscribe({
+      next: (res) => {
+        for (const award of res.awards ?? []) {
+          this.xpFeedback.publishAward(award);
+        }
+        const bonus =
+          res.bonusXp > 0 ? ` · +${res.bonusXp} bonus` : ' · no bonus';
+        this.consuetudoToast.set(`Consuetudo +${res.xpAwarded} XP${bonus}`);
+        this.consuetudo.reset();
+        this.finishing = false;
+        this.reloadRoutines();
+        this.exitFocus();
+        void this.quests.refreshActive().subscribe();
+        this.character.getProfile().subscribe({
+          next: (p) =>
+            this.consuetudoUnlocked.set(Boolean(p.consuetudoUnlocked)),
+        });
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.consuetudo.awarding.set(false);
+        this.consuetudoToast.set(err.error?.message ?? 'Could not log practice');
+      },
+    });
+  }
+
+  private reloadRoutines(): void {
+    this.routinesApi.list().subscribe({
+      next: (rows) => {
+        this.routines.set(rows);
+        const current = this.selectedRoutineId();
+        const next =
+          rows.find((r) => r.id === current) ?? rows[0] ?? null;
+        this.selectedRoutineId.set(next?.id ?? null);
+        if (this.isConsuetudo() && !this.consuetudo.inProgress()) {
+          this.consuetudo.load(next);
+        }
+      },
+      error: () => this.routines.set([]),
+    });
+  }
+
   private enterFocus(): void {
     if (this.sceneryOpen()) {
       return;
@@ -649,23 +878,27 @@ export class HorologiumPage implements OnInit {
                   subtaskId: null,
                   questId: 0,
                   name: slot.title,
-                  journeyLabel: slot.skill
-                    ? `${slot.title} · ${slot.skill.name}`
-                    : slot.title,
+                  journeyLabel: slot.skillShares?.length
+                    ? `${slot.title} · ${slot.skillShares.map((s) => s.name).join(' · ')}`
+                    : slot.skill
+                      ? `${slot.title} · ${slot.skill.name}`
+                      : slot.title,
                   kind: 'BOARD',
                   totalXp: slot.projectedXp,
                   durationDays: null,
                   elapsedMs: slot.elapsedMs ?? 0,
-                  skillShares: slot.skill
-                    ? [
-                        {
-                          slug: slot.skill.slug,
-                          name: slot.skill.name,
-                          weight: 1,
-                          xp: slot.projectedXp,
-                        },
-                      ]
-                    : [],
+                  skillShares: (slot.skillShares?.length
+                    ? slot.skillShares
+                    : slot.skill
+                      ? [
+                          {
+                            slug: slot.skill.slug,
+                            name: slot.skill.name,
+                            weight: 10,
+                            xp: slot.projectedXp,
+                          },
+                        ]
+                      : []),
                 }))
             : [];
         const available = [...boardRows, ...subtaskRows, ...questRows];
@@ -683,6 +916,10 @@ export class HorologiumPage implements OnInit {
         /* keep prior list */
       },
     });
+  }
+
+  protected formatDate(iso: string): string {
+    return this.character.formatDate(iso);
   }
 
   private reloadSessions(): void {

@@ -76,8 +76,12 @@ model DailyTask {
   skill           Skill?    @relation(fields: [skillId], references: [id], onDelete: SetNull)
   habitId         Int?
   habit           Habit?    @relation(fields: [habitId], references: [id], onDelete: SetNull)
-  /// When set, completion awards this XP instead of the importance formula.
+  /// Unused for new tasks; XP is always calculated from effort × duration.
   fixedXp         Int?
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10.
+  skillWeightsJson String?
+  /// Activity ids created on complete (for multi-skill undo).
+  activityIdsJson  String?
   effortLevel     Int       @default(5)
   durationMinutes Int       @default(45)
   /// Work time from Horologium (rest and pause excluded).
@@ -86,6 +90,9 @@ model DailyTask {
   xpAwarded       Int?
   activityId      Int?
   completedAt     DateTime?
+  /// Literal cash awarded on complete when Finance is among skill weights.
+  wealthCents     Int       @default(0)
+  wealthAwardedCents Int?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -94,35 +101,45 @@ model DailyTask {
   @@index([habitId])
 }
 
-/// Reusable daily presets (not habits) — quick-fill for repetitive chores.
+/// Reusable daily presets — fill title, skill, effort, duration, optional habit.
 model DailyTaskTemplate {
   id              Int      @id @default(autoincrement())
   name            String
   icon            String?
   skillId         Int
   skill           Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  fixedXp         Int
+  habitId         Int?
+  habit           Habit?   @relation(fields: [habitId], references: [id], onDelete: SetNull)
+  /// Unused for new presets; XP is calculated from effort × duration.
+  fixedXp         Int      @default(0)
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10.
+  skillWeightsJson String?
   effortLevel     Int      @default(5)
   durationMinutes Int      @default(30)
+  /// Literal cash copied onto the daily when Finance is among skill weights.
+  wealthCents     Int      @default(0)
   sortOrder       Int      @default(0)
   createdByUser   Boolean  @default(false)
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
 
   @@index([skillId])
+  @@index([habitId])
   @@index([active])
 }
 
 /// Immutable day archive — full board + skill tree at seal time.
 model DailyLog {
-  id             Int      @id @default(autoincrement())
-  date           String   @unique
-  sealedAt       DateTime @default(now())
-  filledCount    Int
-  completedCount Int
-  earnedXp       Int
-  projectedXp    Int
-  snapshotJson   String
+  id                  Int      @id @default(autoincrement())
+  date                String   @unique
+  sealedAt            DateTime @default(now())
+  filledCount         Int
+  completedCount      Int
+  earnedXp            Int
+  projectedXp         Int
+  snapshotJson        String
+  /// True after Carry Over copied leftover tasks off this sealed day.
+  incompletesCarried  Boolean  @default(false)
 }
 
 /// Recorded whenever a skill gains one or more levels.
@@ -188,14 +205,55 @@ model HorologiumWatch {
   @@index([status])
 }
 
+/// Saved Sessio (pomodoro) splits for Horologium.
+model HorologiumPreset {
+  id            Int      @id @default(autoincrement())
+  label         String
+  workMinutes   Int
+  restMinutes   Int
+  iterations    Int
+  restAfterLast Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 /// Singleton player profile (titles, informative status).
 model Character {
-  id        Int      @id @default(1)
-  title     String   @default("Peasant")
-  nickname  String   @default("")
-  timezone  String   @default("Europe/Tallinn")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(1)
+  title        String   @default("Peasant")
+  nickname     String   @default("")
+  timezone     String   @default("Europe/Tallinn")
+  /// DMY 18.08.2026 · MDY 08/18/2026 · YMD 2026-08-18
+  dateFormat   String   @default("DMY")
+  /// 0 = Sunday, 1 = Monday
+  weekStartsOn Int      @default(1)
+  /// Close the sidebar after a menu click on compact viewports
+  menuAutoToggleMobile Boolean @default(true)
+  /// Close the sidebar after a menu click on desktop viewports
+  menuAutoToggleDesktop Boolean @default(true)
+  /// Purse balance in minor units (cents). Default 0.
+  wealthCents  Int      @default(0)
+  /// EUR | USD | GBP
+  currency     String   @default("EUR")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Purse ledger — every add/remove, including daily/habit/quest awards.
+model WealthEntry {
+  id           Int      @id @default(autoincrement())
+  date         String
+  deltaCents   Int
+  balanceCents Int
+  note         String?
+  /// manual | daily | habit | quest
+  source       String
+  sourceId     Int?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([date])
 }
 
 /// App feature gates (e.g. Habitus / streaks).
@@ -231,6 +289,8 @@ model Quest {
   totalXp         Int       @default(0)
   /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10 when any skills are set.
   skillWeightsJson String?
+  /// Literal cash awarded once on quest complete when Finance is among weights.
+  wealthCents      Int       @default(0)
   skillReqsJson  String?
   unlockReqsJson String?
   questReqsJson  String?
@@ -325,9 +385,12 @@ model Habit {
   cadence     String            @default("DAILY")
   everyNDays  Int               @default(1)
   active      Boolean           @default(true)
+  /// Literal cash awarded on a manual complete when the linked skill is Finance.
+  wealthCents Int               @default(0)
   createdAt   DateTime          @default(now())
-  completions HabitCompletion[]
-  dailyTasks  DailyTask[]
+  completions   HabitCompletion[]
+  dailyTasks    DailyTask[]
+  taskTemplates DailyTaskTemplate[]
 }
 
 model HabitCompletion {
@@ -337,8 +400,74 @@ model HabitCompletion {
   date        String
   source      String   @default("manual")
   dailyTaskId Int?
+  wealthAwardedCents Int @default(0)
   createdAt   DateTime @default(now())
 
   @@unique([habitId, date])
   @@index([date])
+}
+
+model Routine {
+  id               Int           @id @default(autoincrement())
+  name             String
+  icon             String?
+  effortLevel      Int           @default(5)
+  skillWeightsJson String?
+  sortOrder        Int           @default(0)
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  steps            RoutineStep[]
+  runs             RoutineRun[]
+}
+
+model RoutineStep {
+  id              Int               @id @default(autoincrement())
+  routineId       Int
+  routine         Routine           @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  title           String
+  icon            String?
+  durationMinutes Int
+  sortOrder       Int               @default(0)
+  logs            RoutineStepLog[]
+
+  @@index([routineId])
+}
+
+model RoutineRun {
+  id              Int              @id @default(autoincrement())
+  routineId       Int
+  routine         Routine          @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  date            String
+  startedAt       DateTime
+  completedAt     DateTime?
+  skippedCount    Int              @default(0)
+  completedCount  Int              @default(0)
+  plannedSeconds  Int              @default(0)
+  elapsedMs       BigInt           @default(0)
+  baseXp          Int              @default(0)
+  bonusXp         Int              @default(0)
+  xpAwarded       Int              @default(0)
+  activityIdsJson String?
+  steps           RoutineStepLog[]
+
+  @@index([routineId])
+  @@index([date])
+}
+
+model RoutineStepLog {
+  id             Int          @id @default(autoincrement())
+  runId          Int
+  run            RoutineRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepId         Int?
+  step           RoutineStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  title          String
+  icon           String?
+  plannedSeconds Int
+  elapsedMs      BigInt       @default(0)
+  outcome        String
+  deltaMs        Int          @default(0)
+  sortOrder      Int          @default(0)
+
+  @@index([runId])
 }

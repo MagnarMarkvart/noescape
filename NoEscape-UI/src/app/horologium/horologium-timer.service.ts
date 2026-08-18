@@ -408,7 +408,9 @@ export class HorologiumTimerService {
     this.dailies.complete(taskId).subscribe({
       next: (result) => {
         this.skillsService.invalidateTree();
-        this.xpFeedback.publishAward(result.award);
+        for (const award of result.awards ?? (result.award ? [result.award] : [])) {
+          this.xpFeedback.publishAward(award);
+        }
         this.taskCompleted.set(true);
         this.sessionsVersion.update((n) => n + 1);
         if (endSession && this.phase() !== 'complete' && this.phase() !== 'idle') {

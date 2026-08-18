@@ -31,7 +31,12 @@
     <div class="timer-stack">
     <section class="dial-panel" aria-live="polite">
       <div class="ring-wrap">
-        <div class="ring" [attr.data-phase]="phase()" [class.vigilia]="isVigilia()">
+        <div
+          class="ring"
+          [attr.data-phase]="isConsuetudo() ? 'consuetudo' : phase()"
+          [class.vigilia]="isVigilia()"
+          [class.overtime]="isConsuetudo() && consuetudoOvertime()"
+        >
           <svg class="ring-svg" viewBox="0 0 120 120" aria-hidden="true">
             <circle class="ring-track" cx="60" cy="60" r="54" />
             <circle
@@ -47,6 +52,18 @@
               <p class="phase-tag">Vigilia</p>
               <p class="clock">{{ watchElapsedLabel() }}</p>
               <p class="session-meta">{{ selectedWatch()?.name || 'No project' }}</p>
+            } @else if (isConsuetudo()) {
+              <p class="phase-tag">Consuetudo</p>
+              @if (consuetudoStep(); as step) {
+                <p class="practice-step">
+                  <span aria-hidden="true">{{ step.icon || '◆' }}</span>
+                  {{ step.title }}
+                </p>
+              }
+              <p class="clock" [class.overtime]="consuetudoOvertime()">{{ remainingLabel() }}</p>
+              <p class="session-meta">
+                {{ sessionLabel() }} · {{ selectedRoutine()?.name ?? 'No practice' }}
+              </p>
             } @else {
               <p class="phase-tag">{{ phaseLabel() }}</p>
               <p class="clock">{{ remainingLabel() }}</p>
@@ -71,6 +88,34 @@
               [disabled]="!selectedWatch()"
             >
               Start Vigilia
+            </button>
+          }
+        } @else if (isConsuetudo()) {
+          @if (consuetudoFinished()) {
+            <button type="button" class="primary" disabled>
+              {{ awarding() ? 'Logging…' : 'Complete' }}
+            </button>
+          } @else if (running()) {
+            <button type="button" class="primary" (click)="pause()">Pause</button>
+            <button type="button" class="ghost" (click)="completeConsuetudoStep()">
+              Completed
+            </button>
+            <button type="button" class="ghost" (click)="skipConsuetudoStep()">Skip</button>
+          } @else if (consuetudoInProgress()) {
+            <button type="button" class="primary" (click)="resume()">Resume</button>
+            <button type="button" class="ghost" (click)="completeConsuetudoStep()">
+              Completed
+            </button>
+            <button type="button" class="ghost" (click)="skipConsuetudoStep()">Skip</button>
+            <button type="button" class="ghost" (click)="reset()">Stop</button>
+          } @else {
+            <button
+              type="button"
+              class="primary"
+              (click)="start()"
+              [disabled]="!selectedRoutine()"
+            >
+              Start Consuetudo
             </button>
           }
         } @else if (phase() === 'idle') {
@@ -136,7 +181,7 @@
         </button>
       }
 
-      @if (!isVigilia() && !focusMode() && preview(); as xp) {
+      @if (!isVigilia() && !isConsuetudo() && !focusMode() && preview(); as xp) {
         <ul class="xp-preview">
           @if (xp.mode === 'adhoc') {
             <li>
@@ -200,7 +245,24 @@
         </ul>
       }
 
-      @if (!isVigilia() && (isActive() || phase() === 'complete')) {
+      @if (isConsuetudo() && !focusMode() && consuetudoXpPreview(); as xp) {
+        <ul class="xp-preview">
+          <li>
+            <span class="xp-label">Completed steps</span>
+            <span class="xp-value">~{{ xp.baseXp | number }} XP</span>
+          </li>
+          <li>
+            <span class="xp-label">Finish bonus (0 skips)</span>
+            <span class="xp-value">+{{ xp.bonusXp | number }} XP</span>
+          </li>
+          <li class="xp-total">
+            <span class="xp-label">Total if finished</span>
+            <span class="xp-value">{{ xp.totalXp | number }} XP</span>
+          </li>
+        </ul>
+      }
+
+      @if (!isVigilia() && !isConsuetudo() && (isActive() || phase() === 'complete')) {
         <dl class="live-stats">
           <div>
             <dt>Work</dt>
@@ -241,7 +303,7 @@
             @for (row of sessions(); track row.id) {
               <li>
                 <div class="log-top">
-                  <strong>{{ row.date }}</strong>
+                  <strong>{{ formatDate(row.date) }}</strong>
                   <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
                     {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
                   </span>
@@ -298,13 +360,24 @@
           >
             Vigilia
           </button>
+          @if (showConsuetudoMode()) {
+            <button
+              type="button"
+              class="ghost chip"
+              [class.selected]="isConsuetudo()"
+              (click)="setSetupKind('consuetudo')"
+            >
+              Consuetudo
+            </button>
+          }
         </fieldset>
 
-        @if (!isVigilia() && mode() === 'planned') {
+        @if (!isVigilia() && !isConsuetudo() && mode() === 'planned') {
+          <a routerLink="/settings/pomodoro" class="preset-manage">Edit presets in Settings</a>
           <fieldset class="picker-block" [disabled]="!canEdit()">
             <legend>Presets</legend>
             <div class="preset-grid" role="listbox" aria-label="Timer presets">
-              @for (preset of presets; track preset.id) {
+              @for (preset of presets(); track preset.id) {
                 <button
                   type="button"
                   class="pick-tile"
@@ -332,7 +405,7 @@
           </fieldset>
         }
 
-        @if (!isVigilia()) {
+        @if (!isVigilia() && !isConsuetudo()) {
         <form class="custom-form" (submit)="$event.preventDefault()">
           <fieldset class="duration-fields" [disabled]="!canEdit()">
             <legend class="sr-only">Durations</legend>
@@ -366,7 +439,7 @@
         </form>
         }
 
-        @if (!isVigilia() && (dailies().length > 0 || boundDaily())) {
+        @if (!isVigilia() && !isConsuetudo() && (dailies().length > 0 || boundDaily())) {
         <fieldset class="task-bind" [disabled]="!canEdit()">
           <legend>Task</legend>
           <select
@@ -404,6 +477,25 @@
         </fieldset>
         }
 
+        @if (isConsuetudo()) {
+        <fieldset class="task-bind" [disabled]="!canEdit()">
+          <legend>Practice</legend>
+          <select
+            [value]="selectedRoutineId() ?? ''"
+            (change)="selectRoutine($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (r of routines(); track r.id) {
+              <option [value]="r.id">{{ r.icon || '🌅' }} {{ r.name }}</option>
+            }
+          </select>
+          <a routerLink="/consuetudo" class="preset-manage">Edit practices →</a>
+          @if (routines().length === 0) {
+            <p class="muted">Forge a Consuetudo first, then start it here.</p>
+          }
+        </fieldset>
+        }
+
         @if (isVigilia()) {
         <fieldset class="task-bind" [disabled]="!canEdit()">
           <legend>Vigilia</legend>
@@ -437,7 +529,7 @@
             <p class="muted">{{ watchHint() }}</p>
           }
         </fieldset>
-        } @else if (projectWatches().length > 0) {
+        } @else if (!isConsuetudo() && projectWatches().length > 0) {
         <fieldset class="task-bind" [disabled]="!canEdit()">
           <legend>Vigilia</legend>
           <select
@@ -507,6 +599,9 @@
     [setupKind]="setupKind()"
     [widgetVisible]="watchWidgetVisible()"
     [blockEscape]="sessionPrompt() !== null"
+    [showConsuetudo]="showConsuetudoMode()"
+    [routines]="routines()"
+    [selectedRoutineId]="selectedRoutineId()"
     (closed)="exitScenery()"
     (taskDone)="completeBoundTask()"
     (started)="startFromScenery()"
@@ -514,6 +609,7 @@
     (sceneChange)="selectScenery($event)"
     (dailyChange)="selectDaily($event)"
     (setupKindChange)="setSetupKind($event)"
+    (routineChange)="selectRoutine($event)"
   />
 }
 

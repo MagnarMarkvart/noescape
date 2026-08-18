@@ -64,6 +64,11 @@
   color: var(--rs-accent);
 }
 
+app-date-nav {
+  display: block;
+  margin-bottom: 1.15rem;
+}
+
 .muted {
   color: var(--rs-muted);
 }

@@ -3,57 +3,63 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  HostListener,
   inject,
   OnInit,
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { CharacterService } from '../character/character.service';
+import { DateNav } from '../shared/date-nav';
+import { CalendarMarks } from '../shared/rune-calendar';
+import { todayInZone } from '../shared/time';
 import { HorologiumApiService } from './horologium-api.service';
 import {
   HorologiumSessionRecord,
   HorologiumSkillXp,
 } from './horologium.model';
 
-const PAGE_SIZE = 15;
-const TZ = 'Europe/Tallinn';
-
 @Component({
   selector: 'app-horologium-log-page',
-  imports: [RouterLink, DecimalPipe],
+  imports: [RouterLink, DecimalPipe, DateNav],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './horologium-log-page.html',
   styleUrl: './horologium-log-page.css',
+  host: {
+    '(document:keydown.escape)': 'onEscape()',
+  },
 })
 export class HorologiumLogPage implements OnInit {
   private readonly api = inject(HorologiumApiService);
+  private readonly character = inject(CharacterService);
 
   protected readonly items = signal<HorologiumSessionRecord[]>([]);
   protected readonly total = signal(0);
-  protected readonly page = signal(0);
   protected readonly loading = signal(true);
   protected readonly selected = signal<HorologiumSessionRecord | null>(null);
+  protected readonly selectedDate = signal(this.character.todayIso());
+  protected readonly calendarMarks = signal<CalendarMarks>({});
 
-  protected readonly pageCount = computed(() =>
-    Math.max(1, Math.ceil(this.total() / PAGE_SIZE)),
-  );
+  protected readonly todayIso = computed(() => this.character.todayIso());
 
   ngOnInit(): void {
-    this.load(0);
+    this.loadDay(this.selectedDate());
   }
 
-  protected prev(): void {
-    if (this.page() <= 0) {
-      return;
-    }
-    this.load(this.page() - 1);
+  protected onDateNav(iso: string): void {
+    this.selectedDate.set(iso);
+    this.loadDay(iso);
   }
 
-  protected next(): void {
-    if (this.page() + 1 >= this.pageCount()) {
-      return;
-    }
-    this.load(this.page() + 1);
+  protected loadCalendar(range: { from: string; to: string }): void {
+    this.api.sessionCalendar(range.from, range.to).subscribe({
+      next: (rows) => {
+        const marks: CalendarMarks = {};
+        for (const row of rows) {
+          marks[row.date] = { stars: row.count };
+        }
+        this.calendarMarks.set(marks);
+      },
+    });
   }
 
   protected open(row: HorologiumSessionRecord): void {
@@ -64,7 +70,6 @@ export class HorologiumLogPage implements OnInit {
     this.selected.set(null);
   }
 
-  @HostListener('document:keydown.escape')
   protected onEscape(): void {
     this.close();
   }
@@ -79,9 +84,13 @@ export class HorologiumLogPage implements OnInit {
     ).toISOString();
   }
 
+  protected formatDate(iso: string): string {
+    return this.character.formatDate(iso);
+  }
+
   protected clock(iso: string): string {
     return new Intl.DateTimeFormat('en-GB', {
-      timeZone: TZ,
+      timeZone: this.character.timezone(),
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
@@ -89,16 +98,8 @@ export class HorologiumLogPage implements OnInit {
   }
 
   protected stamp(iso: string): string {
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: TZ,
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date(iso));
+    const date = todayInZone(this.character.timezone(), new Date(iso));
+    return `${this.character.formatDate(date)} ${this.clock(iso)}`;
   }
 
   protected minutesLabel(mins: number): string {
@@ -173,14 +174,13 @@ export class HorologiumLogPage implements OnInit {
     }
   }
 
-  private load(page: number): void {
+  private loadDay(date: string): void {
     this.loading.set(true);
     this.selected.set(null);
-    this.api.listSessions(PAGE_SIZE, page * PAGE_SIZE).subscribe({
+    this.api.listSessions(50, 0, date).subscribe({
       next: (res) => {
         this.items.set(res.items);
         this.total.set(res.total);
-        this.page.set(page);
         this.loading.set(false);
       },
       error: () => this.loading.set(false),

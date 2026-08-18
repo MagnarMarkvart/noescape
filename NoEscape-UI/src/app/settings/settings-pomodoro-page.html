@@ -1,0 +1,62 @@
+@if (toast()) {
+  <p class="toast" role="status">{{ toast() }}</p>
+}
+
+<p class="lede">
+  Sessio splits used on Horologium. Add your own, or edit and delete the
+  built-in ones.
+</p>
+
+<ul class="preset-list">
+  @for (row of rows(); track row.id) {
+    <li [class.editing]="editingId() === row.id">
+      <button type="button" class="pick" (click)="edit(row)">
+        <strong>{{ row.label }}</strong>
+        <small>
+          {{ row.workMinutes }} / {{ row.restMinutes }} · {{ row.iterations }}
+          @if (row.restAfterLast) {
+            · rest after last
+          }
+        </small>
+      </button>
+      <button type="button" class="danger" (click)="remove(row)">Delete</button>
+    </li>
+  } @empty {
+    <li class="empty">No presets yet.</li>
+  }
+</ul>
+
+<form class="editor" (submit)="$event.preventDefault(); save()">
+  <h2>{{ editingId() == null ? 'New preset' : 'Edit preset' }}</h2>
+  <label>
+    Name
+    <input type="text" [formField]="editor.label" />
+  </label>
+  <div class="row">
+    <label>
+      Work (min)
+      <input type="number" [formField]="editor.workMinutes" />
+    </label>
+    <label>
+      Rest (min)
+      <input type="number" [formField]="editor.restMinutes" />
+    </label>
+    <label>
+      Iterations
+      <input type="number" [formField]="editor.iterations" />
+    </label>
+  </div>
+  <app-rune-check
+    label="Rest after the last work block"
+    [checked]="model().restAfterLast"
+    (checkedChange)="setRestAfterLast($event)"
+  />
+  <div class="actions">
+    <button type="submit" [disabled]="saving() || editor().invalid()">
+      {{ saving() ? '…' : editingId() == null ? 'Add preset' : 'Save changes' }}
+    </button>
+    @if (editingId() != null) {
+      <button type="button" class="ghost" (click)="startCreate()">Cancel</button>
+    }
+  </div>
+</form>

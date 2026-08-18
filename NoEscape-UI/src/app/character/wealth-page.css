@@ -1,0 +1,203 @@
+:host {
+  --rs-bg: #2b2518;
+  --rs-border: #8a7340;
+  --rs-text: #f0e6c8;
+  --rs-muted: #b8a878;
+  --rs-accent: #d4a84b;
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
+  --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  display: block;
+  min-height: 100dvh;
+  color: var(--rs-text);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(ellipse at 30% 0%, rgba(212, 168, 75, 0.14), transparent 50%),
+    linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 50%, #221c12 100%);
+}
+
+.wealth-shell {
+  max-width: 32rem;
+  padding: 0.85rem 1rem 2rem;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.toolbar h1 {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  color: var(--rs-accent);
+}
+
+.lede {
+  margin: 0.35rem 0 0;
+  color: var(--rs-muted);
+  font-size: 0.92rem;
+}
+
+.links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.links a {
+  color: var(--rs-muted);
+}
+
+.toast,
+.state {
+  padding: 0.65rem;
+  margin-bottom: 0.85rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(30, 24, 14, 0.7);
+}
+
+.balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(20, 16, 10, 0.45);
+}
+
+.balance span {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.balance strong {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  color: var(--rs-accent);
+}
+
+.adjust {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.adjust label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.adjust input {
+  padding: 0.55rem 0.65rem;
+  color: var(--rs-text);
+  background: rgba(20, 16, 10, 0.55);
+  border: 1px solid var(--rs-border);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 0.55rem;
+}
+
+button {
+  padding: 0.5rem 0.95rem;
+  font-family: var(--font-display);
+  color: #1a1408;
+  background: linear-gradient(180deg, #e0c06a, #d4a84b);
+  border: 1px solid #8a6a28;
+  cursor: pointer;
+}
+
+button.ghost {
+  color: var(--rs-text);
+  background: transparent;
+  border-color: var(--rs-border);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.ledger h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--rs-accent);
+}
+
+.ledger ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ledger li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'when delta after'
+    'what what what';
+  gap: 0.15rem 0.65rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(138, 115, 64, 0.45);
+  background: rgba(18, 14, 8, 0.4);
+}
+
+.when {
+  grid-area: when;
+  font-size: 0.78rem;
+  color: var(--rs-muted);
+}
+
+.what {
+  grid-area: what;
+  font-size: 0.88rem;
+}
+
+.delta {
+  grid-area: delta;
+  font-family: var(--font-display);
+  color: #8fbc7a;
+}
+
+.delta.loss {
+  color: #c45c4a;
+}
+
+.after {
+  grid-area: after;
+  font-size: 0.82rem;
+  color: var(--rs-muted);
+}
+
+.empty {
+  margin: 0;
+  color: var(--rs-muted);
+}

@@ -1,0 +1,82 @@
+<section class="wealth-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Purse</p>
+      <h1>Wealth</h1>
+      <p class="lede">Add income or subtract a bill. Completions that boost Finance also land here.</p>
+    </div>
+    <nav class="links">
+      <a routerLink="/character">← Character</a>
+      <a routerLink="/status">Dashboard</a>
+    </nav>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  @if (loading()) {
+    <p class="state">Loading…</p>
+  } @else {
+    <p class="balance" aria-label="Current wealth">
+      <span>Balance</span>
+      <strong>{{ wealthLabel() }}</strong>
+    </p>
+
+    <form class="adjust" (submit)="$event.preventDefault()">
+      <label>
+        Amount ({{ symbol() }})
+        <input
+          type="text"
+          inputmode="decimal"
+          [value]="amount()"
+          (input)="setAmount($event)"
+          placeholder="0.00"
+        />
+      </label>
+      <label>
+        Note
+        <input
+          type="text"
+          maxlength="160"
+          [value]="note()"
+          (input)="setNote($event)"
+          placeholder="Rent, paycheck…"
+        />
+      </label>
+      <div class="actions">
+        <button type="button" [disabled]="saving()" (click)="adjust('add')">
+          {{ saving() ? '…' : 'Add' }}
+        </button>
+        <button type="button" class="ghost" [disabled]="saving()" (click)="adjust('remove')">
+          Remove
+        </button>
+      </div>
+    </form>
+
+    <section class="ledger" aria-label="Recent changes">
+      <h2>Ledger</h2>
+      @if (entries().length === 0) {
+        <p class="empty">No changes yet.</p>
+      } @else {
+        <ul>
+          @for (row of entries(); track row.id) {
+            <li>
+              <span class="when">{{ row.date }}</span>
+              <span class="what">
+                {{ sourceLabel(row.source) }}
+                @if (row.note) {
+                  · {{ row.note }}
+                }
+              </span>
+              <span class="delta" [class.loss]="row.deltaCents < 0">
+                {{ formatDelta(row.deltaCents) }}
+              </span>
+              <span class="after">{{ formatBalance(row.balanceCents) }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</section>

@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   signal,
 } from '@angular/core';
@@ -9,33 +10,40 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { API_BASE_URL } from '../core/api.config';
 import { CharacterService } from '../character/character.service';
+import { RuneCheck } from '../shared/rune-check';
+import { RuneLoader } from '../shared/rune-loader';
 import { formatElapsedShort } from '../shared/time';
 import { TimedToast } from '../shared/timed-toast';
 import { LogActivityResponse } from '../skills/skill.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import { QuestView, chronicleKindLabel, questCoverBg, weekdayLabel } from './quest.model';
+import { QuestRevealService } from './quest-reveal.service';
 import { QuestsService } from './quests.service';
 
 @Component({
   selector: 'app-quest-run-page',
-  imports: [RouterLink],
+  imports: [RouterLink, RuneCheck, RuneLoader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-run-page.html',
   styleUrl: './quest-run-page.css',
   host: {
-    '[style.background-image]': 'coverBg()',
+    '[style.background-image]': 'ready() ? coverBg() : null',
   },
 })
 export class QuestRunPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly questsService = inject(QuestsService);
+  private readonly reveal = inject(QuestRevealService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly character = inject(CharacterService);
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly timed = new TimedToast();
 
   protected readonly quest = signal<QuestView | null>(null);
   protected readonly loading = signal(true);
+  protected readonly ready = signal(false);
+  protected readonly showLoader = signal(false);
   protected readonly toast = this.timed.value;
   protected readonly logging = signal(false);
   protected readonly weekdayLabel = weekdayLabel;
@@ -60,8 +68,10 @@ export class QuestRunPage {
   });
 
   private loadSeq = 0;
+  private loaderTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.clearLoaderTimer());
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       const id = Number(params.get('id'));
       if (!Number.isFinite(id)) {
@@ -94,6 +104,7 @@ export class QuestRunPage {
           this.xpFeedback.publishAward(award);
         }
         if (res.completed) {
+          void this.character.getProfile().subscribe();
           this.timed.set(
             `Quest complete! ${res.unlocked?.join(', ') || 'Rewards granted.'}`,
           );
@@ -172,6 +183,7 @@ export class QuestRunPage {
         this.timed.set(
           `Quest complete! ${res.unlocked?.join(', ') || 'Destination reached.'}`,
         );
+        void this.character.getProfile().subscribe();
       },
       error: (err: { error?: { message?: string } }) => {
         this.logging.set(false);
@@ -189,27 +201,55 @@ export class QuestRunPage {
 
   private load(id: number): void {
     const seq = ++this.loadSeq;
-    this.loading.set(true);
     this.logging.set(false);
-    this.questsService.getOne(id).subscribe({
-      next: (q) => {
+    this.armLoader(seq);
+    this.reveal.open(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: ({ quest }) => {
         if (seq !== this.loadSeq) {
           return;
         }
-        this.quest.set(q);
-        this.loading.set(false);
-        if (q.availability !== 'active' && q.run?.status !== 'ACTIVE') {
-          void this.router.navigate(['/quests', q.id], { replaceUrl: true });
+        this.revealNow(quest);
+        if (quest.availability !== 'active' && quest.run?.status !== 'ACTIVE') {
+          void this.router.navigate(['/quests', quest.id], { replaceUrl: true });
         }
       },
       error: () => {
         if (seq !== this.loadSeq) {
           return;
         }
+        this.clearLoaderTimer();
         this.loading.set(false);
+        this.showLoader.set(false);
         this.timed.set('Could not load quest run');
       },
     });
+  }
+
+  private armLoader(seq: number): void {
+    this.clearLoaderTimer();
+    this.ready.set(false);
+    this.showLoader.set(false);
+    this.loading.set(true);
+    this.loaderTimer = setTimeout(() => {
+      if (seq === this.loadSeq && !this.ready()) {
+        this.showLoader.set(true);
+      }
+    }, 70);
+  }
+
+  private revealNow(quest: QuestView): void {
+    this.clearLoaderTimer();
+    this.quest.set(quest);
+    this.ready.set(true);
+    this.showLoader.set(false);
+    this.loading.set(false);
+  }
+
+  private clearLoaderTimer(): void {
+    if (this.loaderTimer != null) {
+      clearTimeout(this.loaderTimer);
+      this.loaderTimer = null;
+    }
   }
 
   private todayIso(): string {

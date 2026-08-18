@@ -15,6 +15,7 @@
   overflow: hidden;
   color: var(--ink);
   font-family: var(--font-body);
+  background: #120e08;
 }
 
 .quest-slide {
@@ -229,6 +230,11 @@
 .panel em {
   font-style: normal;
   color: var(--gold);
+}
+
+.panel a {
+  color: var(--gold);
+  text-underline-offset: 0.18em;
 }
 
 .open {

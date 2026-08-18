@@ -44,7 +44,7 @@
                 </small>
                 <small class="range">
                   @if (h.firstLog) {
-                    {{ h.firstLog }} → {{ h.lastLog }}
+                    {{ formatDate(h.firstLog) }} → {{ formatDate(h.lastLog) }}
                   } @else {
                     No logs yet
                   }
@@ -110,6 +110,12 @@
 
           @if (month(); as m) {
             <div class="month-grid" role="grid">
+              @for (wd of weekdays(); track wd) {
+                <span class="wd">{{ wd }}</span>
+              }
+              @for (pad of leadPads(); track pad) {
+                <span class="day pad" aria-hidden="true"></span>
+              }
               @for (day of m.days; track day.date) {
                 <div
                   class="day"

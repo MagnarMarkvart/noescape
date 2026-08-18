@@ -137,3 +137,91 @@
   color: var(--rs-text);
   cursor: pointer;
 }
+
+.search {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.85rem;
+  color: var(--rs-muted);
+}
+
+.search input {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--rs-border);
+  background: #1a1610;
+  color: var(--rs-text);
+  font: inherit;
+}
+
+.template-list .empty {
+  color: var(--rs-muted);
+  border-style: dashed;
+}
+
+.create fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.create legend {
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--rs-muted);
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.chip {
+  min-width: 2.2rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--rs-border);
+  background: #1a1610;
+  color: var(--rs-text);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+}
+
+.chip.selected {
+  border-color: var(--rs-accent);
+  background: rgba(212, 168, 75, 0.16);
+}
+
+.xp-preview {
+  margin: 0;
+  color: var(--rs-accent);
+  font-size: 0.85rem;
+}
+
+.hint {
+  margin: 0;
+  color: var(--rs-muted);
+  font-size: 0.82rem;
+}
+
+.inline-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.inline-add .grow {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.ghost-btn {
+  font-family: var(--font-display);
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-muted);
+  cursor: pointer;
+}

@@ -10,6 +10,7 @@ import {
 import {
   form,
   FormField,
+  max,
   maxLength,
   min,
   required,
@@ -23,22 +24,39 @@ import {
   DailyTaskSlot,
   DailyTaskTemplate,
   DailyTier,
+  DURATION_PRESETS,
+  EFFORT_LEVELS,
   SlotFormModel,
   TaskImportance,
+  dailySkillLine,
+  dailySkillWeights,
 } from './daily.model';
 import { HabitsService, HabitView } from '../habits/habits.service';
+import { RuneCheck } from '../shared/rune-check';
+import { DateNav } from '../shared/date-nav';
+import { CalendarMarks } from '../shared/rune-calendar';
+import { SkillWeightList } from '../shared/skill-weight-list';
+import {
+  addSkillWeight,
+  boostsWealth,
+  bumpSkillWeight,
+  primarySkillSlug,
+  removeSkillWeight,
+  skillWeightRemaining,
+  skillWeightsValid,
+} from '../shared/skill-weights';
+import { centsToInput, formatMoney, parseMoneyToCents } from '../shared/money';
 import { TimedToast } from '../shared/timed-toast';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import { CharacterService } from '../character/character.service';
-import { formatElapsedShort } from '../shared/time';
+import { formatElapsedShort, monthRange } from '../shared/time';
 import { DailiesService } from './dailies.service';
-
-export const DURATION_PRESETS = Array.from({ length: 16 }, (_, i) => 15 * (i + 1));
-export const EFFORT_LEVELS = Array.from({ length: 10 }, (_, i) => i + 1);
+import { calculateDailyTaskXp } from './daily-xp';
+import { splitQuestXp } from '../quests/quest.model';
 
 @Component({
   selector: 'app-dailies-page',
-  imports: [DecimalPipe, FormField, RouterLink],
+  imports: [DecimalPipe, FormField, RouterLink, RuneCheck, DateNav, SkillWeightList],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dailies-page.html',
   styleUrl: './dailies-page.css',
@@ -78,6 +96,9 @@ export class DailiesPage implements OnInit {
   protected readonly historyUnlocked = signal(false);
   /** When true, skip auto-hide after the base 1/3/5 board is filled. */
   private setupPinned = false;
+  protected readonly defaultQuery = signal('');
+  protected readonly defaultSearchOpen = signal(false);
+  protected readonly calendarMarks = signal<CalendarMarks>({});
 
   protected readonly slotModel = signal<SlotFormModel>(this.blankModel());
   protected readonly slotForm = form(this.slotModel, (p) => {
@@ -87,6 +108,7 @@ export class DailiesPage implements OnInit {
     min(p.effortLevel, 1);
     min(p.durationMinutes, 1);
     min(p.customDurationMinutes, 1);
+    max(p.customDurationMinutes, 24 * 60);
   });
 
   protected readonly categories = computed(
@@ -129,6 +151,59 @@ export class DailiesPage implements OnInit {
     const slot = this.editingSlot();
     return Boolean(slot?.id && slot.isFilled && !slot.completed);
   });
+
+  protected readonly filteredDefaults = computed(() => {
+    const q = this.defaultQuery().trim().toLowerCase();
+    const rows = this.templates();
+    const matched = q
+      ? rows.filter((t) => this.templateMatches(t, q))
+      : rows;
+    return matched.slice(0, 12);
+  });
+
+  protected readonly previewXp = computed(() => {
+    const slot = this.editingSlot();
+    const model = this.slotModel();
+    if (!slot) {
+      return 0;
+    }
+    const duration = model.customDuration
+      ? model.customDurationMinutes
+      : model.durationMinutes;
+    return calculateDailyTaskXp({
+      importance: slot.importance,
+      effortLevel: model.effortLevel,
+      durationMinutes: duration > 0 ? duration : 1,
+    });
+  });
+
+  protected readonly weightShares = computed(() => {
+    const weights = this.slotModel().skillWeights;
+    const xp = this.previewXp();
+    return splitQuestXp(xp, weights).map((share) => ({
+      ...share,
+      name: this.skillName(share.slug),
+    }));
+  });
+
+  protected readonly weightRemaining = computed(() =>
+    skillWeightRemaining(this.slotModel().skillWeights),
+  );
+
+  protected readonly weightsValid = computed(() =>
+    skillWeightsValid(this.slotModel().skillWeights),
+  );
+
+  protected readonly showWealth = computed(() =>
+    boostsWealth(this.slotModel().skillWeights) ||
+    parseMoneyToCents(this.slotModel().wealthAmount) > 0,
+  );
+
+  protected readonly currencyLabel = computed(() => this.character.currency());
+
+  protected readonly allSkills = computed(() =>
+    this.categories().flatMap((c) => c.skills),
+  );
 
   protected readonly filledSlots = computed(() => {
     const current = this.board();
@@ -198,28 +273,28 @@ export class DailiesPage implements OnInit {
     }
   }
 
-  protected shiftDate(delta: number): void {
-    const next = new Date(`${this.selectedDate()}T12:00:00`);
-    next.setDate(next.getDate() + delta);
-    const yyyy = next.getFullYear();
-    const mm = String(next.getMonth() + 1).padStart(2, '0');
-    const dd = String(next.getDate()).padStart(2, '0');
-    this.setDate(`${yyyy}-${mm}-${dd}`);
+  protected onDateNav(iso: string): void {
+    this.setDate(iso);
+  }
+
+  protected loadCalendar(range: { from: string; to: string }): void {
+    this.dailiesService.calendar(range.from, range.to).subscribe({
+      next: (rows) => {
+        const marks: CalendarMarks = {};
+        for (const row of rows) {
+          marks[row.date] = { status: row.status };
+        }
+        this.calendarMarks.set(marks);
+      },
+    });
+  }
+
+  private refreshCalendar(): void {
+    this.loadCalendar(monthRange(this.selectedDate()));
   }
 
   protected goToday(): void {
     this.setDate(this.todayIso());
-  }
-
-  protected goTomorrow(): void {
-    this.setDate(this.offsetIso(1, this.todayIso()));
-  }
-
-  protected onDatePicked(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    if (value) {
-      this.setDate(value);
-    }
   }
 
   protected startEdit(slot: DailyTaskSlot): void {
@@ -232,18 +307,23 @@ export class DailiesPage implements OnInit {
     this.slotModel.set({
       title: slot.title,
       skillId: slot.skillId ?? 0,
+      skillWeights: dailySkillWeights(slot),
       habitId: slot.habitId ?? 0,
-      fixedXp: slot.fixedXp ?? null,
       effortLevel: slot.effortLevel,
       durationMinutes: custom ? 45 : slot.durationMinutes,
       customDuration: custom,
       customDurationMinutes: slot.durationMinutes || 45,
+      saveAsDefault: false,
+      loadedTemplateId: 0,
+      wealthAmount: centsToInput(slot.wealthCents),
     });
     this.selectedCategory.set(slot.skill?.category ?? '');
     this.editingSlot.set(slot);
     this.editingKey.set(this.slotKey(slot.importance, slot.slotIndex));
     this.postponePickerOpen.set(false);
     this.postponeDate.set(this.offsetIso(1));
+    this.defaultQuery.set('');
+    this.defaultSearchOpen.set(false);
     this.timed.set(null);
   }
 
@@ -253,20 +333,44 @@ export class DailiesPage implements OnInit {
     this.selectedCategory.set('');
     this.slotModel.set(this.blankModel());
     this.postponePickerOpen.set(false);
+    this.defaultQuery.set('');
+    this.defaultSearchOpen.set(false);
   }
 
   protected selectCategory(category: string): void {
     this.selectedCategory.set(category);
-    const currentSkill = this.slotModel().skillId;
-    const stillValid = this.subskills().some((s) => s.id === currentSkill);
-    if (!stillValid) {
-      this.slotForm.skillId().value.set(0);
-    }
   }
 
   protected selectSkill(skillId: number): void {
-    this.slotForm.skillId().value.set(skillId);
-    this.slotModel.update((m) => ({ ...m, fixedXp: null }));
+    const skill = this.findSkillById(skillId);
+    if (!skill) {
+      return;
+    }
+    this.setSkillWeights(addSkillWeight(this.slotModel().skillWeights, skill.slug));
+  }
+
+  protected bumpSkillWeight(event: { slug: string; delta: number }): void {
+    this.setSkillWeights(
+      bumpSkillWeight(this.slotModel().skillWeights, event.slug, event.delta),
+    );
+  }
+
+  protected removeSkillWeight(slug: string): void {
+    this.setSkillWeights(removeSkillWeight(this.slotModel().skillWeights, slug));
+  }
+
+  protected hasSkill(skillId: number): boolean {
+    const skill = this.findSkillById(skillId);
+    return Boolean(
+      skill && this.slotModel().skillWeights.some((row) => row.slug === skill.slug),
+    );
+  }
+
+  protected skillLine(input: {
+    skillShares?: Array<{ name: string }> | null;
+    skill?: { name: string } | null;
+  } | null | undefined): string {
+    return dailySkillLine(input);
   }
 
   protected applyTemplate(templateId: number): void {
@@ -274,17 +378,25 @@ export class DailiesPage implements OnInit {
     if (!t) {
       return;
     }
+    const custom = !DURATION_PRESETS.includes(t.durationMinutes);
+    const habitStillActive =
+      t.habitId != null && this.habits().some((h) => h.id === t.habitId);
     this.slotModel.update((m) => ({
       ...m,
       title: t.name,
       skillId: t.skillId,
-      fixedXp: t.fixedXp,
+      skillWeights: dailySkillWeights(t),
+      habitId: habitStillActive ? (t.habitId ?? 0) : 0,
       effortLevel: t.effortLevel,
-      durationMinutes: t.durationMinutes,
-      customDuration: !DURATION_PRESETS.includes(t.durationMinutes),
+      durationMinutes: custom ? 45 : t.durationMinutes,
+      customDuration: custom,
       customDurationMinutes: t.durationMinutes,
+      loadedTemplateId: t.id,
+      wealthAmount: centsToInput(t.wealthCents),
     }));
     this.selectedCategory.set(t.skill.category);
+    this.defaultQuery.set('');
+    this.defaultSearchOpen.set(false);
   }
 
   protected selectEffort(level: number): void {
@@ -301,6 +413,40 @@ export class DailiesPage implements OnInit {
     this.slotForm.customDuration().value.set(true);
   }
 
+  protected customHours(): number {
+    return Math.floor(Math.max(0, this.slotModel().customDurationMinutes) / 60);
+  }
+
+  protected customMins(): number {
+    return Math.max(0, this.slotModel().customDurationMinutes) % 60;
+  }
+
+  protected setCustomHours(event: Event): void {
+    const hours = this.clampInt((event.target as HTMLInputElement).value, 0, 24);
+    const mins = hours >= 24 ? 0 : this.customMins();
+    this.setCustomTotal(hours * 60 + mins);
+  }
+
+  protected setCustomMins(event: Event): void {
+    const hours = Math.min(23, this.customHours());
+    const mins = this.clampInt((event.target as HTMLInputElement).value, 0, 59);
+    this.setCustomTotal(hours * 60 + mins);
+  }
+
+  private setCustomTotal(total: number): void {
+    this.slotForm.customDurationMinutes().value.set(
+      Math.min(24 * 60, Math.max(1, Math.round(total) || 1)),
+    );
+  }
+
+  private clampInt(raw: string, min: number, max: number): number {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      return min;
+    }
+    return Math.min(max, Math.max(min, Math.floor(n)));
+  }
+
   protected saveSlot(): void {
     const slot = this.editingSlot();
     if (!slot) {
@@ -313,8 +459,8 @@ export class DailiesPage implements OnInit {
         ? model.customDurationMinutes
         : model.durationMinutes;
 
-      if (!model.title.trim() || model.skillId < 1) {
-        this.timed.set('Title and skill are required.');
+      if (!model.title.trim() || !skillWeightsValid(model.skillWeights)) {
+        this.timed.set('Title and a full 10-point skill split are required.');
         return;
       }
 
@@ -326,18 +472,25 @@ export class DailiesPage implements OnInit {
           slotIndex: slot.slotIndex,
           title: model.title.trim(),
           skillId: model.skillId,
+          skillWeights: model.skillWeights,
           habitId: model.habitId > 0 ? model.habitId : null,
-          fixedXp: model.fixedXp,
           effortLevel: model.effortLevel,
           durationMinutes: duration,
+          wealthCents: boostsWealth(model.skillWeights)
+            ? parseMoneyToCents(model.wealthAmount)
+            : 0,
         })
         .subscribe({
           next: () => {
             this.saving.set(false);
-            this.cancelEdit();
-            this.setupPinned = false;
-            this.timed.set('Task saved.');
-            this.loadBoard(this.selectedDate(), false);
+            if (model.saveAsDefault) {
+              this.persistDefault(model, duration);
+            } else {
+              this.cancelEdit();
+              this.setupPinned = false;
+              this.timed.set('Task saved.');
+              this.loadBoard(this.selectedDate(), false);
+            }
           },
           error: (err: { error?: { message?: string | string[] } }) => {
             this.saving.set(false);
@@ -374,8 +527,11 @@ export class DailiesPage implements OnInit {
       next: (result) => {
         this.completingId.set(null);
         this.skillsService.invalidateTree();
-        this.xpFeedback.publishAward(result.award);
+        for (const award of result.awards ?? (result.award ? [result.award] : [])) {
+          this.xpFeedback.publishAward(award);
+        }
         this.loadBoard(this.selectedDate(), false, true);
+        void this.character.getProfile().subscribe();
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.completingId.set(null);
@@ -392,11 +548,16 @@ export class DailiesPage implements OnInit {
     this.dailiesService.uncomplete(slot.id).subscribe({
       next: (result) => {
         this.uncompletingId.set(null);
-        if (result.reversal) {
+        const reversals =
+          result.reversals ?? (result.reversal ? [result.reversal] : []);
+        if (reversals.length) {
           this.skillsService.invalidateTree();
-          this.xpFeedback.publishReversal(result.reversal);
+          for (const reversal of reversals) {
+            this.xpFeedback.publishReversal(reversal);
+          }
         }
         this.loadBoard(this.selectedDate(), false, true);
+        void this.character.getProfile().subscribe();
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.uncompletingId.set(null);
@@ -481,6 +642,7 @@ export class DailiesPage implements OnInit {
         this.timed.set(
           `Copied ${result.copied} incomplete dailies from ${result.sourceDate}.`,
         );
+        this.refreshCalendar();
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.timed.set(this.readError(err, 'Copy failed'));
@@ -543,6 +705,7 @@ export class DailiesPage implements OnInit {
         this.applyBoard(board);
         this.loading.set(false);
         this.error.set(null);
+        this.refreshCalendar();
       },
       error: () => {
         this.loading.set(false);
@@ -603,13 +766,37 @@ export class DailiesPage implements OnInit {
     this.applyHabit(Number(raw) || 0);
   }
 
-  protected onTemplateSelect(event: Event): void {
-    const raw = (event.target as HTMLSelectElement).value;
-    if (!raw) {
+  protected onDefaultQuery(event: Event): void {
+    this.defaultQuery.set((event.target as HTMLInputElement).value);
+    this.defaultSearchOpen.set(true);
+  }
+
+  protected onDefaultSearchKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.defaultSearchOpen.set(false);
+      (event.target as HTMLInputElement).blur();
       return;
     }
-    this.applyTemplate(Number(raw));
-    (event.target as HTMLSelectElement).value = '';
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const first = this.filteredDefaults()[0];
+      if (first) {
+        this.applyTemplate(first.id);
+      }
+    }
+  }
+
+  protected onDefaultBlur(): void {
+    setTimeout(() => this.defaultSearchOpen.set(false), 150);
+  }
+
+  protected setSaveAsDefault(checked: boolean): void {
+    this.slotModel.update((m) => ({ ...m, saveAsDefault: checked }));
+  }
+
+  protected setWealthAmount(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.slotModel.update((m) => ({ ...m, wealthAmount: value }));
   }
 
   protected applyHabit(habitId: number): void {
@@ -622,7 +809,12 @@ export class DailiesPage implements OnInit {
       this.slotForm.title().value.set(habit.name);
     }
     if (habit.skillId) {
-      this.slotForm.skillId().value.set(habit.skillId);
+      const skill = this.findSkillById(habit.skillId);
+      if (skill) {
+        this.setSkillWeights(
+          addSkillWeight(this.slotModel().skillWeights, skill.slug),
+        );
+      }
       const cat = this.skillTree()?.categories.find((c) =>
         c.skills.some((s) => s.id === habit.skillId),
       );
@@ -630,19 +822,115 @@ export class DailiesPage implements OnInit {
         this.selectedCategory.set(cat.category);
       }
     }
+    if (habit.wealthCents > 0) {
+      this.slotModel.update((m) => ({
+        ...m,
+        wealthAmount: centsToInput(habit.wealthCents),
+      }));
+    }
+  }
+
+  private persistDefault(model: SlotFormModel, duration: number): void {
+    const primary =
+      this.findSkillBySlug(primarySkillSlug(model.skillWeights)) ??
+      this.findSkillById(model.skillId);
+    const payload = {
+      name: model.title.trim(),
+      icon: primary?.icon ?? '◆',
+      skillId: primary?.id ?? model.skillId,
+      skillWeights: model.skillWeights,
+      habitId: model.habitId > 0 ? model.habitId : null,
+      effortLevel: model.effortLevel,
+      durationMinutes: duration,
+      wealthCents: boostsWealth(model.skillWeights)
+        ? parseMoneyToCents(model.wealthAmount)
+        : 0,
+    };
+    const req =
+      model.loadedTemplateId > 0
+        ? this.dailiesService.updateTemplate(model.loadedTemplateId, payload)
+        : this.dailiesService.createTemplate(payload);
+    req.subscribe({
+      next: () => {
+        this.reloadTemplates();
+        this.cancelEdit();
+        this.setupPinned = false;
+        this.timed.set('Task saved and stored as a default.');
+        this.loadBoard(this.selectedDate(), false);
+      },
+      error: (err: { error?: { message?: string | string[] } }) => {
+        this.cancelEdit();
+        this.setupPinned = false;
+        this.loadBoard(this.selectedDate(), false);
+        this.timed.set(
+          `Task saved, but the default was not: ${this.readError(err, 'save failed')}`,
+        );
+      },
+    });
+  }
+
+  private reloadTemplates(): void {
+    this.dailiesService.listTemplates().subscribe({
+      next: (rows) => this.templates.set(rows),
+    });
+  }
+
+  private templateMatches(t: DailyTaskTemplate, q: string): boolean {
+    const hay = [
+      t.name,
+      t.skill.name,
+      t.skill.category,
+      t.habit?.name ?? '',
+      ...(t.skillShares ?? []).map((s) => s.name),
+    ]
+      .join(' ')
+      .toLowerCase();
+    return hay.includes(q);
+  }
+
+  private setSkillWeights(rows: Array<{ slug: string; weight: number }>): void {
+    const primary = this.findSkillBySlug(primarySkillSlug(rows));
+    this.slotModel.update((model) => ({
+      ...model,
+      skillWeights: rows,
+      skillId: primary?.id ?? 0,
+    }));
+  }
+
+  private findSkillById(id: number): Skill | undefined {
+    return this.allSkills().find((skill) => skill.id === id);
+  }
+
+  private findSkillBySlug(slug: string | null): Skill | undefined {
+    if (!slug) {
+      return undefined;
+    }
+    return this.allSkills().find((skill) => skill.slug === slug);
+  }
+
+  private skillName(slug: string): string {
+    return this.findSkillBySlug(slug)?.name ?? slug;
   }
 
   private blankModel(): SlotFormModel {
     return {
       title: '',
       skillId: 0,
+      skillWeights: [],
       habitId: 0,
-      fixedXp: null,
       effortLevel: 5,
       durationMinutes: 45,
       customDuration: false,
       customDurationMinutes: 45,
+      saveAsDefault: false,
+      loadedTemplateId: 0,
+      wealthAmount: '',
     };
+  }
+
+  protected formatWealth(cents: number | null | undefined): string {
+    const n = Math.round(Number(cents) || 0);
+    return n > 0 ? formatMoney(n, this.character.currency()) : '';
   }
 
   protected formatElapsed(ms: number | null | undefined): string {
@@ -650,7 +938,7 @@ export class DailiesPage implements OnInit {
     return n > 0 ? formatElapsedShort(n) : '—';
   }
 
-  private todayIso(): string {
+  protected todayIso(): string {
     return this.character.todayIso();
   }
 
