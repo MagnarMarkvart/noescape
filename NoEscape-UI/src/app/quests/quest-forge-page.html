@@ -1,26 +1,13 @@
-<section class="forge-shell">
-  <header class="toolbar">
-    <div>
-      <p class="kicker">Workshop</p>
-      <h1>{{ isEdit() ? 'Amend quest' : 'Forge a quest' }}</h1>
-      <p class="lede">
-        @if (isEdit()) {
-          Changes apply even while the quest is in progress. Progress, timestamps, and missed days stay.
-        } @else {
-          Structure the path: prerequisites, a daily journey, subtasks, and a destination.
-        }
-      </p>
-    </div>
-    <a
-      class="back"
-      [routerLink]="isEdit() ? ['/quests', editId()] : '/quests'"
-    >← Catalogue</a>
-  </header>
-
-  @if (toast()) {
-    <p class="toast" role="status">{{ toast() }}</p>
-  }
-
+<app-forge-shell
+  kicker="Workshop"
+  [title]="heading()"
+  [lede]="lede()"
+  [backHref]="backHref()"
+  [backQuery]="backQuery()"
+  backLabel="Back to catalogue"
+  [toast]="toast()"
+  layout="wide"
+>
   <form class="forge-form" (submit)="$event.preventDefault(); saveQuest()">
     <fieldset>
       <legend>Identity</legend>
@@ -79,12 +66,12 @@
         </label>
         <label>
           Level
-          <input
-            type="number"
-            min="1"
-            max="99"
+          <app-number-field
+            ariaLabel="Required level"
+            [min]="1"
+            [max]="99"
             [value]="skillReqLevel()"
-            (input)="setSkillReqLevel($event)"
+            (valueChange)="setSkillReqLevel($event)"
           />
         </label>
         <button type="button" class="ghost-btn" (click)="addSkillReq()">Add</button>
@@ -211,72 +198,32 @@
       </p>
       <label>
         Total completion XP
-        <input
-          type="number"
-          min="0"
-          step="100"
+        <app-number-field
+          ariaLabel="Total completion XP"
+          [min]="0"
+          [max]="1000000"
           [value]="createModel().totalXp"
-          (input)="setTotalXp($event)"
+          (valueChange)="setTotalXp($event)"
         />
       </label>
-      <div class="inline-add">
-        <label class="grow">
-          Add skill
-          <select [value]="skillPick()" (change)="setSkillPick($event)">
-            <option value="">— none —</option>
-            @for (s of availableSkills(); track s.slug) {
-              <option [value]="s.slug">{{ s.icon }} {{ s.name }}</option>
-            }
-          </select>
-        </label>
-        <button type="button" class="ghost-btn" (click)="addSkillShare()">Add</button>
-      </div>
+      <app-skill-weight-list
+        [shares]="weightShares()"
+        [remaining]="weightRemaining()"
+        [valid]="weightsValid()"
+        (bump)="bumpWeight($event)"
+        (remove)="removeSkillShare($event)"
+      />
       @if (skillWeights().length === 0) {
         <p class="hint">No skills — completion awards no skill XP.</p>
-      } @else {
-        <ul class="weight-list">
-          @for (share of xpShares(); track share.slug) {
-            <li>
-              <span class="weight-name">{{ skillName(share.slug) }}</span>
-              <span class="weight-controls">
-                <button
-                  type="button"
-                  (click)="bumpWeight(share.slug, -1)"
-                  [disabled]="share.weight <= 1"
-                  aria-label="Decrease weight"
-                >
-                  −
-                </button>
-                <strong>{{ share.weight }}/{{ weightTotal }}</strong>
-                <button
-                  type="button"
-                  (click)="bumpWeight(share.slug, 1)"
-                  [disabled]="weightRemaining() <= 0"
-                  aria-label="Increase weight"
-                >
-                  +
-                </button>
-              </span>
-              <span class="weight-xp">{{ share.xp | number }} XP</span>
-              <button
-                type="button"
-                class="ghost-btn"
-                (click)="removeSkillShare(share.slug)"
-                aria-label="Remove skill"
-              >
-                ×
-              </button>
-            </li>
-          }
-        </ul>
-        <p class="commit-label" [class.warn]="!weightsValid()">
-          @if (weightsValid()) {
-            All {{ weightTotal }} points assigned
-          } @else {
-            {{ weightRemaining() }} point{{ weightRemaining() === 1 ? '' : 's' }} left to assign
-          }
-        </p>
       }
+      <app-skill-tree-picker
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
     </fieldset>
 
     <fieldset>
@@ -307,7 +254,7 @@
           {{ isEdit() ? 'Save changes' : 'Forge quest' }}
         }
       </button>
-      <a routerLink="/quests" class="ghost">Cancel</a>
+      <a [routerLink]="backHref()" [queryParams]="backQuery()" class="ghost">Cancel</a>
     </div>
   </form>
-</section>
+</app-forge-shell>

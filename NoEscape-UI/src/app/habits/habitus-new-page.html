@@ -1,83 +1,55 @@
-<section class="new-shell">
-  <header class="toolbar">
-    <div>
-      <p class="kicker">Habitus</p>
-      <h1>New habit</h1>
-      <p class="lede">Configure cadence and icon. Logs stay in Progression forever.</p>
-    </div>
-    <a routerLink="/habitus" class="back">← Habitus</a>
-  </header>
-
-  @if (toast()) {
-    <p class="toast" role="status">{{ toast() }}</p>
-  }
-
+<app-forge-shell
+  kicker="Habitus"
+  title="New habit"
+  lede="Configure cadence and icon. Logs stay in Progression forever."
+  backHref="/habitus"
+  backLabel="Back to Habitus"
+  [toast]="toast()"
+>
   <form class="create" (submit)="$event.preventDefault(); create()">
-    <label>
-      Name
+    <fieldset>
+      <legend>Name</legend>
       <input type="text" [formField]="createForm.name" />
-    </label>
+    </fieldset>
 
-    <div class="icon-picker">
-      <div class="icon-picker-head">
-        <span>Icon</span>
-        <span class="icon-preview" aria-hidden="true">{{ createModel().icon }}</span>
-      </div>
-      <div class="icon-tabs" role="tablist" aria-label="Icon categories">
-        @for (group of iconGroups; track group.id) {
-          <button
-            type="button"
-            role="tab"
-            class="icon-tab"
-            [class.selected]="iconGroupId() === group.id"
-            (click)="setIconGroup(group.id)"
-          >
-            {{ group.label }}
-          </button>
-        }
-      </div>
-      <div class="icon-grid" role="listbox">
-        @for (opt of activeIconGroup().icons; track opt.glyph) {
-          <button
-            type="button"
-            role="option"
-            class="icon-tile"
-            [class.selected]="createModel().icon === opt.glyph"
-            [title]="opt.label"
-            (click)="pickIcon(opt.glyph)"
-          >
-            <span class="glyph" aria-hidden="true">{{ opt.glyph }}</span>
-            <span class="icon-label">{{ opt.label }}</span>
-          </button>
-        }
-      </div>
-    </div>
+    <app-icon-picker
+      [selected]="createModel().icon"
+      (picked)="pickIcon($event)"
+    />
 
-    <label>
-      Cadence
+    <fieldset>
+      <legend>Cadence</legend>
       <select [formField]="createForm.cadence">
         <option value="DAILY">Daily</option>
         <option value="EVERY_N_DAYS">Every N days</option>
       </select>
-    </label>
-    <label>
-      Every N days
-      <input type="number" [formField]="createForm.everyNDays" />
-    </label>
+    </fieldset>
+    <fieldset>
+      <legend>Every N days</legend>
+      <app-number-field
+        ariaLabel="Every N days"
+        [min]="1"
+        [max]="365"
+        [value]="createModel().everyNDays"
+        (valueChange)="setEveryNDays($event)"
+      />
+    </fieldset>
 
-    <label>
-      Skill (optional)
-      <select [value]="createModel().skillId" (change)="setSkill($event)">
-        <option [value]="0">— none —</option>
-        @for (s of skills(); track s.id) {
-          <option [value]="s.id">{{ s.icon }} {{ s.name }}</option>
-        }
-      </select>
-    </label>
+    <fieldset>
+      <legend>Skill (optional)</legend>
+      <app-skill-tree-picker
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
+    </fieldset>
 
     @if (showWealth()) {
-      <label>
-        Wealth gained ({{ currencyLabel() }})
+      <fieldset>
+        <legend>Wealth gained ({{ currencyLabel() }})</legend>
         <input
           type="text"
           inputmode="decimal"
@@ -85,7 +57,7 @@
           (input)="setWealthAmount($event)"
           placeholder="0.00"
         />
-      </label>
+      </fieldset>
     }
 
     <div class="actions">
@@ -95,4 +67,4 @@
       <a routerLink="/habitus">Cancel</a>
     </div>
   </form>
-</section>
+</app-forge-shell>

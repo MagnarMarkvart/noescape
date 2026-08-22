@@ -80,12 +80,55 @@
 }
 
 .practice-step {
-  margin: 0.35rem 0 0;
-  font-size: 1rem;
-  display: flex;
-  gap: 0.4rem;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  margin: 0.35rem auto 0;
+  color: var(--rs-accent);
+  font-family: var(--font-display);
+  width: 100%;
+  max-width: 100%;
+}
+
+.practice-step .step-icon {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.practice-step .step-title,
+.task-line {
+  margin: 0;
+  color: var(--rs-accent);
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  width: 100%;
+  max-width: 100%;
+  text-align: center;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.task-line {
+  margin: 0.35rem auto 0;
+}
+
+button.task-line {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+button.task-line:hover,
+button.task-line:focus-visible {
+  color: #e0c06a;
+  outline: none;
 }
 
 .clock {
@@ -100,6 +143,17 @@
   text-align: center;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.routine-name {
+  margin: 0.65rem auto 0;
+  color: var(--rs-accent);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .meta {
@@ -142,14 +196,6 @@
   font-variant-numeric: tabular-nums;
   font-size: 1.15rem;
   min-width: 3ch;
-}
-
-.task-line {
-  margin: 0.85rem 0 0;
-  color: var(--rs-muted);
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
-  min-height: 1.2em;
 }
 
 .setup {
@@ -219,6 +265,55 @@
   gap: 0.5rem;
 }
 
+.session.notes-open,
+.scenery.notes-open .session {
+  padding-bottom: 12.5rem;
+}
+
+.notes-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 0.85rem 0 0;
+}
+
+.notes-dock {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 5.35rem;
+  transform: translateX(-50%);
+  width: min(22rem, calc(100vw - 2rem));
+  pointer-events: auto;
+}
+
+.live-notes {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 8.5rem;
+  resize: none;
+  overflow: auto;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(198, 168, 90, 0.55);
+  border-radius: 0.4rem;
+  background: rgba(10, 8, 4, 0.72);
+  color: var(--rs-text);
+  font: inherit;
+  line-height: 1.4;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 899px) {
+  .notes-dock {
+    width: calc(100vw - 1.5rem);
+    bottom: 5.1rem;
+  }
+
+  .live-notes {
+    height: 7rem;
+  }
+}
+
 .sound-dock {
   position: absolute;
   z-index: 2;
@@ -284,15 +379,23 @@
   animation: fade-in 0.2s ease both;
 }
 
+.sound-block {
+  display: grid;
+  gap: 0.28rem;
+  padding-bottom: 0.45rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid rgba(180, 180, 180, 0.16);
+}
+
 .sound-panel header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.45rem;
-  margin-bottom: 0.2rem;
 }
 
-.sound-panel header p {
+.sound-panel header p,
+.sound-block header p {
   margin: 0;
   font-family: var(--font-display);
   font-size: 0.72rem;
@@ -323,23 +426,28 @@
   accent-color: var(--rs-accent);
 }
 
-.sound-pick {
-  width: 100%;
-  padding: 0.42rem 0.55rem;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #d8d0be;
-  font-family: var(--font-body);
-  font-size: 0.82rem;
-  text-align: left;
-  cursor: pointer;
+.sound-block.scene-pick {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
 }
 
-.sound-pick.selected,
-.sound-pick:hover,
-.sound-pick:focus-visible {
-  border-color: rgba(210, 210, 210, 0.4);
-  color: #f2ead8;
+.scene-select {
+  width: 100%;
+  min-height: 2.2rem;
+  padding: 0.4rem 0.45rem;
+  color: var(--rs-text);
+  background: rgba(18, 16, 12, 0.7);
+  border: 1px solid rgba(180, 180, 180, 0.28);
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  color-scheme: dark;
+}
+
+.scene-select:hover,
+.scene-select:focus-visible {
+  border-color: rgba(212, 168, 75, 0.7);
   outline: none;
 }
 
@@ -402,10 +510,6 @@
 .exit.slim {
   padding: 0.28rem 0.55rem;
   font-size: 0.72rem;
-}
-
-.chime-toggle {
-  width: 100%;
 }
 
 .exit.leave {

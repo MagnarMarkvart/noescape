@@ -134,6 +134,59 @@ export class RoutinesService {
     return this.toView(created);
   }
 
+  async listRuns(
+    date?: string,
+    limit = 50,
+    offset = 0,
+    devBypass = false,
+  ) {
+    await this.assertOpen(devBypass);
+    const day = date?.trim();
+    if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      throw new BadRequestException('date must be YYYY-MM-DD');
+    }
+    const take = Math.min(100, Math.max(1, Math.round(limit) || 50));
+    const skip = Math.max(0, Math.round(offset) || 0);
+    const where = day ? { date: day } : {};
+    const [items, total] = await Promise.all([
+      this.prisma.routineRun.findMany({
+        where,
+        orderBy: { completedAt: 'desc' },
+        take,
+        skip,
+        include: {
+          routine: { select: { id: true, name: true, icon: true } },
+          steps: { orderBy: { sortOrder: 'asc' } },
+        },
+      }),
+      this.prisma.routineRun.count({ where }),
+    ]);
+    return {
+      items: items.map((row) => ({
+        ...this.toRunView(row),
+        routineId: row.routineId,
+        routineName: row.routine.name,
+        routineIcon: row.routine.icon,
+      })),
+      total,
+      limit: take,
+      offset: skip,
+    };
+  }
+
+  async runCalendar(from: string, to: string, devBypass = false) {
+    await this.assertOpen(devBypass);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      throw new BadRequestException('from and to must be YYYY-MM-DD');
+    }
+    const rows = await this.prisma.routineRun.groupBy({
+      by: ['date'],
+      where: { date: { gte: from, lte: to } },
+      _count: { _all: true },
+    });
+    return rows.map((row) => ({ date: row.date, count: row._count._all }));
+  }
+
   async update(id: number, input: RoutineWriteInput, devBypass = false) {
     await this.assertOpen(devBypass);
     const existing = await this.prisma.routine.findFirst({
@@ -186,7 +239,7 @@ export class RoutinesService {
 
   async completeRun(
     id: number,
-    input: { steps: RoutineStepLogInput[] },
+    input: { steps: RoutineStepLogInput[]; notes?: string },
     devBypass = false,
   ) {
     await this.assertOpen(devBypass);
@@ -269,6 +322,7 @@ export class RoutinesService {
         activityIdsJson: activityIds.length
           ? JSON.stringify(activityIds)
           : null,
+        notes: String(input.notes ?? '').trim().slice(0, 4000),
         steps: {
           create: logs.map((step, i) => ({
             stepId: this.resolveStepId(routine.steps, step.stepId),
@@ -422,6 +476,7 @@ export class RoutinesService {
       baseXp: number;
       bonusXp: number;
       xpAwarded: number;
+      notes?: string;
       steps: Array<{
         id: number;
         stepId: number | null;
@@ -468,6 +523,7 @@ export class RoutinesService {
     baseXp: number;
     bonusXp: number;
     xpAwarded: number;
+    notes?: string;
     steps: Array<{
       id: number;
       stepId?: number | null;
@@ -492,6 +548,7 @@ export class RoutinesService {
       baseXp: run.baseXp,
       bonusXp: run.bonusXp,
       xpAwarded: run.xpAwarded,
+      notes: run.notes ?? '',
       steps: run.steps.map((s) => ({
         id: s.id,
         stepId: s.stepId ?? null,

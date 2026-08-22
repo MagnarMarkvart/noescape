@@ -444,6 +444,31 @@ export class QuestsService {
     return this.getOne(questId);
   }
 
+  async remove(questId: number) {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: { id: true },
+    });
+    if (!quest) {
+      throw new NotFoundException(`Quest #${questId} not found`);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      const runs = await tx.questRun.findMany({
+        where: { questId },
+        select: { id: true },
+      });
+      const runIds = runs.map((r) => r.id);
+      if (runIds.length) {
+        await tx.horologiumSession.updateMany({
+          where: { questRunId: { in: runIds } },
+          data: { questRunId: null },
+        });
+      }
+      await tx.quest.delete({ where: { id: questId } });
+    });
+    return { deleted: true, id: questId };
+  }
+
   async start(questId: number) {
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },

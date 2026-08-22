@@ -7,6 +7,7 @@ export interface SkillWeightShareView {
   name: string;
   weight: number;
   xp?: number;
+  icon?: string | null;
 }
 
 /** 10-point skill split editor used by dailies and defaults. */
@@ -19,7 +20,12 @@ export interface SkillWeightShareView {
       <ul class="weight-list">
         @for (share of shares(); track share.slug) {
           <li>
-            <span class="weight-name">{{ share.name }}</span>
+            <span class="weight-name">
+              @if (share.icon) {
+                <span aria-hidden="true">{{ share.icon }}</span>
+              }
+              {{ share.name }}
+            </span>
             <span class="weight-controls">
               <button
                 type="button"
@@ -94,15 +100,22 @@ export interface SkillWeightShareView {
 
     .weight-list li {
       display: grid;
-      grid-template-columns: 1fr auto auto auto;
+      grid-template-columns: minmax(0, 1fr) auto auto auto;
       gap: 0.5rem;
       align-items: center;
       padding: 0.4rem 0.5rem;
       border: 1px solid rgba(138, 115, 64, 0.45);
+      min-width: 0;
     }
 
     .weight-name {
       color: #f0e6c8;
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .weight-controls {
@@ -131,6 +144,19 @@ export interface SkillWeightShareView {
       color: #8fbc7a;
       font-size: 0.85rem;
       white-space: nowrap;
+    }
+
+    @media (max-width: 640px) {
+      .weight-list li {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 0.3rem;
+      }
+      .weight-name {
+        font-size: 0.72rem;
+      }
+      .weight-xp {
+        display: none;
+      }
     }
   `,
 })

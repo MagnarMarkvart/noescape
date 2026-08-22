@@ -116,7 +116,58 @@ export class HorologiumWatchesService {
     return this.view(row);
   }
 
-  async archive(id: number) {
+  async startRunning(id: number) {
+    const existing = await this.prisma.horologiumWatch.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Watch #${id} not found`);
+    }
+    if (existing.status !== 'ACTIVE') {
+      throw new BadRequestException('Watch is archived');
+    }
+    if (existing.running && existing.lastStartedAt) {
+      return this.view(existing);
+    }
+    const row = await this.prisma.horologiumWatch.update({
+      where: { id },
+      data: { running: true, lastStartedAt: new Date() },
+    });
+    return this.view(row);
+  }
+
+  async pauseRunning(id: number) {
+    const existing = await this.prisma.horologiumWatch.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Watch #${id} not found`);
+    }
+    const elapsed = this.elapsedNow(existing);
+    const row = await this.prisma.horologiumWatch.update({
+      where: { id },
+      data: {
+        running: false,
+        lastStartedAt: null,
+        elapsedMs: BigInt(elapsed),
+      },
+    });
+    return this.view(row);
+  }
+
+  elapsedNow(row: {
+    elapsedMs: bigint;
+    running: boolean;
+    lastStartedAt: Date | null;
+  }): number {
+    let ms = Number(row.elapsedMs);
+    if (row.running && row.lastStartedAt) {
+      ms += Math.max(0, Date.now() - row.lastStartedAt.getTime());
+    }
+    return ms;
+  }
+
+  async archive(id: number): Promise<HorologiumWatchDto> {
     return this.update(id, { status: 'ARCHIVED', running: false });
   }
 

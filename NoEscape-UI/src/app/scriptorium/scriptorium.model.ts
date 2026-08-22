@@ -52,6 +52,7 @@ export interface ScriptoriumUpsertPayload {
   durationMinutes?: number | null;
   effort?: number;
   skillWeights?: Array<{ slug: string; weight: number }>;
+  subtasks?: string[];
   status?: 'OPEN' | 'ARCHIVED';
 }
 

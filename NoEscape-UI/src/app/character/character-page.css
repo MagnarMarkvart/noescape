@@ -124,6 +124,22 @@
   gap: 0.85rem;
 }
 
+.skills-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.skills-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rs-accent);
+}
+
 .skill-group h2 {
   margin: 0 0 0.45rem;
   font-family: var(--font-display);

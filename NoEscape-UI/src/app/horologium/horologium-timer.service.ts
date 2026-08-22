@@ -5,10 +5,10 @@ import {
   NgZone,
   signal,
 } from '@angular/core';
-import { DailiesService } from '../dailies/dailies.service';
-import { SkillsService } from '../skills/skills.service';
-import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
-import { HorologiumApiService } from './horologium-api.service';
+import { ClockApiService } from '../clocks/clock-api.service';
+import { ClockBoundDaily, ClockEvent, ClockKind, ClockSnapshot } from '../clocks/clock.model';
+import { clockNow } from '../clocks/clock-now';
+import { SoundSettingsService } from '../shared/sound-settings.service';
 import {
   DEFAULT_HOROLOGIUM_CONFIG,
   HorologiumBoundDaily,
@@ -39,19 +39,41 @@ function saveFlag(key: string, value: boolean): void {
   }
 }
 
+function slimBound(daily: HorologiumBoundDaily): ClockBoundDaily {
+  return {
+    source: daily.source,
+    runId: daily.runId,
+    dailyTaskId: daily.dailyTaskId,
+    subtaskId: daily.subtaskId,
+    questId: daily.questId,
+    name: daily.name,
+    journeyLabel: daily.journeyLabel,
+  };
+}
+
+function sameBind(
+  current: HorologiumBoundDaily | null,
+  incoming: ClockBoundDaily,
+): boolean {
+  return (
+    !!current &&
+    current.source === incoming.source &&
+    current.runId === incoming.runId &&
+    current.dailyTaskId === incoming.dailyTaskId &&
+    current.subtaskId === incoming.subtaskId
+  );
+}
+
 @Injectable({ providedIn: 'root' })
 export class HorologiumTimerService {
-  private readonly api = inject(HorologiumApiService);
-  private readonly dailies = inject(DailiesService);
-  private readonly xpFeedback = inject(XpFeedbackService);
-  private readonly skillsService = inject(SkillsService);
+  private readonly clockApi = inject(ClockApiService);
   private readonly ngZone = inject(NgZone);
+  private readonly sound = inject(SoundSettingsService);
   private workEndAudio: HTMLAudioElement | null = null;
   private restEndAudio: HTMLAudioElement | null = null;
   private tickHandle: number | null = null;
   private endAtMs: number | null = null;
   private pausedRemainingMs = 0;
-  private awardingBlock = false;
 
   readonly config = signal<HorologiumConfig>({ ...DEFAULT_HOROLOGIUM_CONFIG });
   readonly mode = signal<HorologiumMode>('planned');
@@ -75,6 +97,8 @@ export class HorologiumTimerService {
   readonly boundDaily = signal<HorologiumBoundDaily | null>(null);
   readonly taskCompleted = signal(false);
   readonly disciplineGranted = signal(false);
+  /** Paused between phases until the user starts rest / the next lap. */
+  readonly awaitingContinue = signal(false);
   /** Leftover rest skipped this sessio — added onto the next rest phase. */
   readonly restCarryMs = signal(0);
   private sessionStartedAt: number | null = null;
@@ -102,6 +126,13 @@ export class HorologiumTimerService {
   readonly canSkipRest = computed(
     () => this.phase() === 'rest' && !this.awarding(),
   );
+
+  readonly continueLabel = computed(() => {
+    if (!this.awaitingContinue()) {
+      return 'Resume';
+    }
+    return this.phase() === 'rest' ? 'Start rest' : 'Start next lap';
+  });
 
   readonly progressPercent = computed(() => {
     const total = this.totalPhaseMs();
@@ -171,11 +202,33 @@ export class HorologiumTimerService {
   }
 
   setBoundDaily(daily: HorologiumBoundDaily | null): void {
-    if (this.running() || this.phase() === 'work' || this.phase() === 'rest') {
+    this.rebindDaily(daily);
+  }
+
+  rebindDaily(daily: HorologiumBoundDaily | null): void {
+    const kind = this.activeKind();
+    if (!kind) {
+      this.boundDaily.set(daily);
+      this.taskCompleted.set(false);
       return;
     }
-    this.boundDaily.set(daily);
-    this.taskCompleted.set(false);
+    this.clockApi.patchBoundDaily(kind, daily ? slimBound(daily) : null).subscribe({
+      next: (event) => {
+        this.applyEvent(event);
+        if (daily) {
+          this.boundDaily.set(daily);
+        }
+        this.taskCompleted.set(false);
+      },
+      error: (err: { error?: { message?: string | string[] } }) => {
+        const message = err.error?.message;
+        this.setToast(
+          Array.isArray(message)
+            ? message.join(', ')
+            : (message ?? 'Could not change the focused task'),
+        );
+      },
+    });
   }
 
   applyConfig(config: HorologiumConfig): void {
@@ -202,60 +255,203 @@ export class HorologiumTimerService {
     if (mode) {
       this.mode.set(mode);
     }
-    this.stopTicker();
-    this.setToast(null);
-    this.currentIteration.set(1);
-    this.completedBlocks.set(0);
-    this.taskCompleted.set(false);
-    this.disciplineGranted.set(false);
-    this.sessionStartedAt = Date.now();
-    this.beginPhase('work', this.config().workMinutes);
+    const cfg = this.config();
+    const kind: 'sessio' | 'track' =
+      (mode ?? this.mode()) === 'adhoc' ? 'track' : 'sessio';
+    const daily = this.boundDaily();
+    this.awarding.set(true);
+    this.clockApi
+      .startSessio(kind, {
+        ...cfg,
+        presetId:
+          this.presetId() === 'custom' || this.presetId() === 'track'
+            ? undefined
+            : this.presetId(),
+        watchName: this.linkedWatchName(),
+        boundDaily: daily
+          ? {
+              source: daily.source,
+              runId: daily.runId,
+              dailyTaskId: daily.dailyTaskId,
+              subtaskId: daily.subtaskId,
+              questId: daily.questId,
+              name: daily.name,
+              journeyLabel: daily.journeyLabel,
+            }
+          : null,
+      })
+      .subscribe({
+        next: (event) => {
+          this.awarding.set(false);
+          this.applyEvent(event);
+        },
+        error: (err: { error?: { message?: string | string[] } }) => {
+          this.awarding.set(false);
+          const message = err.error?.message;
+          this.setToast(
+            Array.isArray(message)
+              ? message.join(', ')
+              : (message ?? 'Could not start the timer'),
+          );
+        },
+      });
   }
 
-  /** Sessio start clock + bound Vigilia name, attached to every log write. */
-  private sessionStamp(): { startedAt?: string; watchName?: string } {
-    const startedAt = this.sessionStartedAt
-      ? new Date(this.sessionStartedAt).toISOString()
-      : undefined;
-    const watchName = this.linkedWatchName()?.trim();
-    return {
-      ...(startedAt ? { startedAt } : {}),
-      ...(watchName ? { watchName } : {}),
-    };
+  applyEvent(event: ClockEvent): void {
+    this.applySnapshot(event.snapshot, event.kind);
+    this.handleClockFx(event);
+  }
+
+  applySnapshot(snapshot: ClockSnapshot | null, kind?: ClockKind): void {
+    if (!snapshot) {
+      const current = this.activeKind();
+      if (!kind || kind === current || kind === 'sessio' || kind === 'track') {
+        if (kind && current && kind !== current) {
+          return;
+        }
+        if (current || this.phase() === 'complete') {
+          this.resetLocal();
+        }
+      }
+      return;
+    }
+    if (snapshot.kind !== 'sessio' && snapshot.kind !== 'track') {
+      return;
+    }
+    const payload = snapshot.sessio;
+    if (payload) {
+      this.mode.set(payload.mode === 'adhoc' ? 'adhoc' : 'planned');
+      this.config.set({
+        workMinutes: payload.workMinutes,
+        restMinutes: payload.restMinutes,
+        iterations: payload.iterations,
+        restAfterLast: payload.restAfterLast,
+      });
+      this.currentIteration.set(payload.currentIteration);
+      this.completedBlocks.set(payload.completedBlocks);
+      this.restCarryMs.set(payload.restCarryMs);
+      this.taskCompleted.set(payload.taskCompleted);
+      this.disciplineGranted.set(!!payload.disciplineGranted);
+      this.sessionStartedAt = Date.parse(payload.sessionStartedAt) || Date.now();
+      this.presetId.set(
+        payload.presetId ||
+          (payload.mode === 'adhoc' ? 'track' : this.presetId()),
+      );
+      if (payload.boundDaily) {
+        const current = this.boundDaily();
+        const keep = sameBind(current, payload.boundDaily);
+        this.boundDaily.set({
+          source: payload.boundDaily.source,
+          runId: payload.boundDaily.runId,
+          dailyTaskId: payload.boundDaily.dailyTaskId,
+          subtaskId: payload.boundDaily.subtaskId,
+          questId: payload.boundDaily.questId,
+          name: payload.boundDaily.name,
+          journeyLabel: payload.boundDaily.journeyLabel,
+          kind: keep ? current!.kind : 'daily',
+          totalXp: keep ? current!.totalXp : 0,
+          durationDays: keep ? current!.durationDays : null,
+          elapsedMs: keep ? current!.elapsedMs : 0,
+          skillShares: keep ? current!.skillShares : [],
+        });
+      } else {
+        this.boundDaily.set(null);
+      }
+    }
+    const phase =
+      snapshot.phase === 'work' ||
+      snapshot.phase === 'rest' ||
+      snapshot.phase === 'complete'
+        ? snapshot.phase
+        : 'idle';
+    this.phase.set(phase);
+    this.running.set(snapshot.status === 'running');
+    this.awaitingContinue.set(
+      snapshot.status === 'paused' && !!payload?.awaitingContinue,
+    );
+    this.totalPhaseMs.set(snapshot.totalPhaseMs);
+    this.pausedRemainingMs = Math.max(0, snapshot.remainingMs);
+    if (snapshot.status === 'running' && snapshot.endsAt) {
+      this.endAtMs = Date.parse(snapshot.endsAt);
+      this.remainingMs.set(Math.max(0, this.endAtMs - clockNow()));
+      this.startTicker();
+    } else {
+      this.endAtMs = null;
+      this.remainingMs.set(Math.max(0, snapshot.remainingMs));
+      this.stopTicker();
+    }
+  }
+
+  handleClockFx(event: ClockEvent): void {
+    if (event.jingle === 'work' || event.jingle === 'rest') {
+      this.playPhaseJingle(event.jingle);
+    }
+    if (event.toast) {
+      this.setToast(event.toast);
+    }
+    const complete = event.complete as { session?: HorologiumSessionRecord } | undefined;
+    if (complete?.session) {
+      this.lastSession.set(complete.session);
+    }
+  }
+
+  private activeKind(): 'sessio' | 'track' | null {
+    const phase = this.phase();
+    if (phase === 'idle') {
+      return null;
+    }
+    return this.mode() === 'adhoc' ? 'track' : 'sessio';
   }
 
   pause(): void {
-    if (!this.running()) {
+    const kind = this.activeKind();
+    if (!kind || !this.running()) {
       return;
     }
-    this.pausedRemainingMs = Math.max(0, this.remainingMs());
-    this.endAtMs = null;
-    this.running.set(false);
-    this.stopTicker();
+    this.clockApi.pause(kind).subscribe({
+      next: (event) => this.applyEvent(event),
+    });
   }
 
   resume(): void {
-    if (
-      this.running() ||
-      (this.phase() !== 'work' && this.phase() !== 'rest')
-    ) {
+    const kind = this.activeKind() ?? (this.mode() === 'adhoc' ? 'track' : 'sessio');
+    if (this.running() || (this.phase() !== 'work' && this.phase() !== 'rest')) {
       return;
     }
-    this.endAtMs = Date.now() + this.pausedRemainingMs;
-    this.running.set(true);
-    this.startTicker();
+    this.clockApi.resume(kind).subscribe({
+      next: (event) => this.applyEvent(event),
+    });
   }
 
   skipRest(): void {
     if (this.phase() !== 'rest') {
       return;
     }
-    const leftover = Math.ceil(Math.max(0, this.remainingMs()) / 1000) * 1000;
-    this.restCarryMs.update((carry) => carry + leftover);
-    this.advancePhase(false, false);
+    const kind = this.activeKind();
+    if (!kind) {
+      return;
+    }
+    this.clockApi.skip(kind).subscribe({
+      next: (event) => this.applyEvent(event),
+    });
   }
 
   reset(): void {
+    const kind = this.activeKind();
+    if (kind && (this.phase() === 'work' || this.phase() === 'rest')) {
+      this.abandonSession();
+      return;
+    }
+    if (kind === 'sessio' || kind === 'track') {
+      this.clockApi.stop(kind).subscribe({
+        next: (event) => this.applyEvent(event),
+      });
+      return;
+    }
+    this.resetLocal();
+  }
+
+  private resetLocal(): void {
     this.stopTicker();
     this.running.set(false);
     this.phase.set('idle');
@@ -263,6 +459,7 @@ export class HorologiumTimerService {
     this.completedBlocks.set(0);
     this.taskCompleted.set(false);
     this.disciplineGranted.set(false);
+    this.awaitingContinue.set(false);
     this.remainingMs.set(0);
     this.totalPhaseMs.set(0);
     this.endAtMs = null;
@@ -277,150 +474,23 @@ export class HorologiumTimerService {
    * Track (adhoc) has no goal, so it just resets (or close-early if the task settled).
    */
   abandonSession(): void {
-    if (this.taskCompleted()) {
-      this.closeEarlyAfterTask();
-      return;
-    }
-    if (this.mode() !== 'planned') {
-      this.reset();
-      return;
-    }
-    const cfg = this.config();
-    const unfinished = Math.max(0, cfg.iterations - this.completedBlocks());
-    if (unfinished <= 0) {
-      this.reset();
-      return;
-    }
-    const presetId = this.presetId();
+    const kind = this.activeKind() ?? (this.mode() === 'adhoc' ? 'track' : 'sessio');
     this.awarding.set(true);
-    this.api
-      .abandonSession({
-        workMinutes: cfg.workMinutes,
-        restMinutes: cfg.restMinutes,
-        iterations: cfg.iterations,
-        completedBlocks: this.completedBlocks(),
-        presetId:
-          presetId === 'custom' || presetId === 'track' ? undefined : presetId,
-        ...this.sessionStamp(),
-      })
-      .subscribe({
-        next: (result) => {
-          this.awarding.set(false);
-          this.lastSession.set(result.session);
-          this.skillsService.invalidateTree();
-          if (result.reversal && result.xpRemoved > 0) {
-            this.xpFeedback.publishReversal(result.reversal);
-          }
-          this.sessionsVersion.update((n) => n + 1);
-          this.setToast(
-            result.xpRemoved > 0
-              ? `Stopped — −${result.xpRemoved} Focus XP (${result.unfinishedSplits} unfinished split${result.unfinishedSplits === 1 ? '' : 's'})`
-              : 'Sessio stopped',
-          );
-          this.reset();
-        },
-        error: (err: { error?: { message?: string | string[] } }) => {
-          this.awarding.set(false);
-          const message = err.error?.message;
-          this.setToast(
-            Array.isArray(message)
-              ? message.join(', ')
-              : (message ?? 'Could not apply abandon penalty'),
-          );
-        },
-      });
-  }
-
-  completeBoundTask(decideEnd: () => boolean): void {
-    const daily = this.boundDaily();
-    if (!daily || this.taskCompleted() || this.awarding()) {
-      return;
-    }
-    if (daily.source === 'daily') {
-      this.completeBoundBoardDaily(daily, decideEnd);
-      return;
-    }
-    const endSession = this.phase() === 'complete' ? false : decideEnd();
-    const cfg = this.config();
-    const presetId = this.presetId();
-    this.awarding.set(true);
-    this.api
-      .completeTask({
-        workMinutes: cfg.workMinutes,
-        restMinutes: cfg.restMinutes,
-        iterations: this.billedLaps(),
-        mode: this.mode(),
-        completedBlocks: this.completedBlocks(),
-        elapsedMinutes: this.elapsedMinutes(),
-        questRunId: daily.runId,
-        questSubtaskId: daily.source === 'subtask' ? daily.subtaskId ?? undefined : undefined,
-        endSession,
-        disciplineGranted: this.disciplineGranted(),
-        specialLapsAwarded: Math.min(this.completedBlocks(), this.billedLaps()),
-        presetId:
-          presetId === 'custom' || presetId === 'track' ? undefined : presetId,
-        ...this.sessionStamp(),
-      })
-      .subscribe({
-        next: (result) => {
-          this.awarding.set(false);
-          this.lastSession.set(result.session);
-          this.skillsService.invalidateTree();
-          this.publishAwards(result.awards);
-          this.sessionsVersion.update((n) => n + 1);
-          this.taskCompleted.set(true);
-          this.disciplineGranted.set(true);
-          if (result.endedEarly) {
-            this.setToast(
-              `${result.taskLabel} done · ended early in ${
-                result.elapsedMinutes < 1 ? '<1' : result.elapsedMinutes
-              }m · full session XP kept`,
-            );
-            this.reset();
-            return;
-          }
-          this.setToast(
-            `${result.taskLabel} done · full session XP granted. Remaining blocks are extra Focus.`,
-          );
-        },
-        error: (err: { error?: { message?: string | string[] } }) => {
-          this.awarding.set(false);
-          const message = err.error?.message;
-          this.setToast(
-            Array.isArray(message)
-              ? message.join(', ')
-              : (message ?? 'Could not complete the task'),
-          );
-        },
-      });
-  }
-
-  private completeBoundBoardDaily(
-    daily: HorologiumBoundDaily,
-    decideEnd: () => boolean,
-  ): void {
-    const taskId = daily.dailyTaskId;
-    if (!taskId) {
-      return;
-    }
-    const endSession = this.phase() === 'complete' ? false : decideEnd();
-    this.awarding.set(true);
-    this.dailies.complete(taskId).subscribe({
-      next: (result) => {
-        this.skillsService.invalidateTree();
-        for (const award of result.awards ?? (result.award ? [result.award] : [])) {
-          this.xpFeedback.publishAward(award);
-        }
-        this.taskCompleted.set(true);
-        this.sessionsVersion.update((n) => n + 1);
-        if (endSession && this.phase() !== 'complete' && this.phase() !== 'idle') {
-          this.closeEarlyAfterTask();
-          return;
-        }
+    this.clockApi.stop(kind).subscribe({
+      next: (event) => {
         this.awarding.set(false);
-        this.setToast(
-          `${this.taskLabel()} done · daily XP granted. Remaining blocks are extra Focus.`,
-        );
+        this.applyEvent(event);
+        const complete = event.complete as {
+          xpRemoved?: number;
+          unfinishedSplits?: number;
+        } | undefined;
+        if (complete && typeof complete.xpRemoved === 'number') {
+          this.setToast(
+            complete.xpRemoved > 0
+              ? `Stopped — −${complete.xpRemoved} Focus XP (${complete.unfinishedSplits} unfinished split${complete.unfinishedSplits === 1 ? '' : 's'})`
+              : event.toast || 'Sessio stopped',
+          );
+        }
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.awarding.set(false);
@@ -428,7 +498,31 @@ export class HorologiumTimerService {
         this.setToast(
           Array.isArray(message)
             ? message.join(', ')
-            : (message ?? 'Could not complete the daily'),
+            : (message ?? 'Could not apply abandon penalty'),
+        );
+      },
+    });
+  }
+
+  completeBoundTask(decideEnd: () => boolean): void {
+    if (!this.boundDaily() || this.taskCompleted() || this.awarding()) {
+      return;
+    }
+    const kind = this.activeKind() ?? (this.mode() === 'adhoc' ? 'track' : 'sessio');
+    const endSession = this.phase() === 'complete' ? false : decideEnd();
+    this.awarding.set(true);
+    this.clockApi.completeTask(kind, endSession).subscribe({
+      next: (event) => {
+        this.awarding.set(false);
+        this.applyEvent(event);
+      },
+      error: (err: { error?: { message?: string | string[] } }) => {
+        this.awarding.set(false);
+        const message = err.error?.message;
+        this.setToast(
+          Array.isArray(message)
+            ? message.join(', ')
+            : (message ?? 'Could not complete the task'),
         );
       },
     });
@@ -450,233 +544,6 @@ export class HorologiumTimerService {
     });
   }
 
-  private beginPhase(
-    phase: 'work' | 'rest',
-    minutes: number,
-    extraMs = 0,
-  ): void {
-    const ms = Math.max(
-      1,
-      Math.round(minutes * 60_000) + Math.max(0, extraMs),
-    );
-    this.phase.set(phase);
-    this.totalPhaseMs.set(ms);
-    this.remainingMs.set(ms);
-    this.pausedRemainingMs = ms;
-    this.endAtMs = Date.now() + ms;
-    this.running.set(true);
-    this.startTicker();
-  }
-
-  private takeRestCarry(): number {
-    const extra = this.restCarryMs();
-    this.restCarryMs.set(0);
-    return extra;
-  }
-
-  private advancePhase(playSound: boolean, awardWorkXp: boolean): void {
-    const cfg = this.config();
-    const phase = this.phase();
-    const iteration = this.currentIteration();
-    const mode = this.mode();
-
-    if (playSound && (phase === 'work' || phase === 'rest')) {
-      this.playPhaseJingle(phase);
-    }
-
-    if (phase === 'work') {
-      if (awardWorkXp) {
-        this.completedBlocks.update((n) => n + 1);
-        this.awardBlockXp();
-      }
-
-      if (mode === 'adhoc') {
-        this.beginPhase('rest', cfg.restMinutes, this.takeRestCarry());
-        return;
-      }
-
-      const isLast = iteration >= cfg.iterations;
-      if (isLast && !cfg.restAfterLast) {
-        this.finishPlannedGoal();
-        return;
-      }
-      this.beginPhase('rest', cfg.restMinutes, this.takeRestCarry());
-      return;
-    }
-
-    if (phase === 'rest') {
-      if (mode === 'adhoc') {
-        this.currentIteration.set(iteration + 1);
-        this.beginPhase('work', cfg.workMinutes);
-        return;
-      }
-
-      if (iteration >= cfg.iterations) {
-        this.finishPlannedGoal();
-        return;
-      }
-      this.currentIteration.set(iteration + 1);
-      this.beginPhase('work', cfg.workMinutes);
-    }
-  }
-
-  private finishPlannedGoal(): void {
-    this.stopTicker();
-    this.running.set(false);
-    this.phase.set('complete');
-    this.remainingMs.set(0);
-    this.endAtMs = null;
-    this.pausedRemainingMs = 0;
-    if (this.disciplineGranted()) {
-      return;
-    }
-    this.awardGoalBonus();
-  }
-
-  private awardBlockXp(): void {
-    if (this.awardingBlock) {
-      return;
-    }
-    this.awardingBlock = true;
-    this.awarding.set(true);
-    const cfg = this.config();
-    const mode = this.mode();
-    const presetId = this.presetId();
-    const daily = this.boundDaily();
-    const laps = this.billedLaps();
-    const lapIndex = this.completedBlocks();
-    this.api
-      .awardBlock({
-        workMinutes: cfg.workMinutes,
-        restMinutes: cfg.restMinutes,
-        mode,
-        presetId:
-          presetId === 'custom' || presetId === 'track' ? undefined : presetId,
-        questRunId:
-          daily?.source === 'quest' || daily?.source === 'subtask'
-            ? daily.runId
-            : undefined,
-        questSubtaskId:
-          daily?.source === 'subtask' ? daily.subtaskId ?? undefined : undefined,
-        lapIndex,
-        laps,
-        specialDrops:
-          (daily?.source === 'quest' || daily?.source === 'subtask') &&
-          !this.taskCompleted(),
-        ...this.sessionStamp(),
-      })
-      .subscribe({
-        next: (result) => {
-          this.awardingBlock = false;
-          this.awarding.set(false);
-          this.lastSession.set(result.session);
-          this.skillsService.invalidateTree();
-          this.xpFeedback.publishAward(result.award);
-          this.publishAwards(
-            (result.awards ?? []).filter(
-              (a) => a.activity.id !== result.award.activity.id,
-            ),
-          );
-          this.sessionsVersion.update((n) => n + 1);
-        },
-        error: (err: { error?: { message?: string | string[] } }) => {
-          this.awardingBlock = false;
-          this.awarding.set(false);
-          const message = err.error?.message;
-          this.setToast(
-            Array.isArray(message)
-              ? message.join(', ')
-              : (message ?? 'Could not log block XP'),
-          );
-        },
-      });
-  }
-
-  private awardGoalBonus(): void {
-    this.awarding.set(true);
-    const cfg = this.config();
-    const presetId = this.presetId();
-    this.api
-      .awardGoalBonus({
-        workMinutes: cfg.workMinutes,
-        restMinutes: cfg.restMinutes,
-        iterations: cfg.iterations,
-        restAfterLast: cfg.restAfterLast,
-        presetId:
-          presetId === 'custom' || presetId === 'track' ? undefined : presetId,
-        ...this.sessionStamp(),
-      })
-      .subscribe({
-        next: (result) => {
-          this.awarding.set(false);
-          this.lastSession.set(result.session);
-          if (result.award) {
-            this.skillsService.invalidateTree();
-            this.xpFeedback.publishAward(result.award);
-            this.disciplineGranted.set(true);
-          }
-          this.sessionsVersion.update((n) => n + 1);
-        },
-        error: (err: { error?: { message?: string | string[] } }) => {
-          this.awarding.set(false);
-          const message = err.error?.message;
-          this.setToast(
-            Array.isArray(message)
-              ? message.join(', ')
-              : (message ?? 'Could not log goal bonus'),
-          );
-        },
-      });
-  }
-
-  private closeEarlyAfterTask(): void {
-    const cfg = this.config();
-    const daily = this.boundDaily();
-    const presetId = this.presetId();
-    this.awarding.set(true);
-    this.api
-      .closeEarly({
-        workMinutes: cfg.workMinutes,
-        restMinutes: cfg.restMinutes,
-        iterations: this.billedLaps(),
-        elapsedMinutes: this.elapsedMinutes(),
-        completedBlocks: this.completedBlocks(),
-        questRunId: daily?.source === 'quest' ? daily.runId : undefined,
-        taskLabel: this.taskLabel() || undefined,
-        presetId:
-          presetId === 'custom' || presetId === 'track' ? undefined : presetId,
-        ...this.sessionStamp(),
-      })
-      .subscribe({
-        next: (result) => {
-          this.awarding.set(false);
-          this.lastSession.set(result.session);
-          this.sessionsVersion.update((n) => n + 1);
-          this.setToast('Sessio closed — task was already done, no penalty');
-          this.reset();
-        },
-        error: () => {
-          this.awarding.set(false);
-          this.reset();
-        },
-      });
-  }
-
-  private publishAwards(
-    awards: Array<{
-      activity: { xpGained: number };
-      skill: import('../skills/skill.model').Skill;
-      leveledUp: boolean;
-      levelsGained: number;
-      previousLevel?: number;
-      previousProgress?: import('../skills/skill.model').Skill['progress'];
-    }>,
-  ): void {
-    for (const award of awards) {
-      this.xpFeedback.publishAward(award);
-    }
-  }
-
   private setToast(message: string | null): void {
     if (this.toastTimer) {
       clearTimeout(this.toastTimer);
@@ -695,12 +562,8 @@ export class HorologiumTimerService {
     if (!this.running() || this.endAtMs == null) {
       return;
     }
-    const left = Math.max(0, this.endAtMs - Date.now());
+    const left = Math.max(0, this.endAtMs - clockNow());
     this.remainingMs.set(left);
-    if (left <= 0) {
-      // Phase transitions touch awards / audio — run inside Angular.
-      this.ngZone.run(() => this.advancePhase(true, true));
-    }
   }
 
   private startTicker(): void {
@@ -726,6 +589,16 @@ export class HorologiumTimerService {
     }
   }
 
+  applyJingleVolume(): void {
+    const gain = this.sound.feedbackVolume() / 100;
+    if (this.workEndAudio) {
+      this.workEndAudio.volume = gain;
+    }
+    if (this.restEndAudio) {
+      this.restEndAudio.volume = gain;
+    }
+  }
+
   private playPhaseJingle(endingPhase: 'work' | 'rest'): void {
     if (this.jinglesMuted()) {
       return;
@@ -735,6 +608,7 @@ export class HorologiumTimerService {
       return;
     }
     try {
+      audio.volume = this.sound.feedbackVolume() / 100;
       audio.currentTime = 0;
       void audio.play();
     } catch {

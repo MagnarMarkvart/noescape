@@ -14,5 +14,6 @@ import { HorologiumWatchesService } from './horologium-watches.service';
     HorologiumWatchesService,
     HorologiumPresetsService,
   ],
+  exports: [HorologiumService, HorologiumWatchesService],
 })
 export class HorologiumModule {}

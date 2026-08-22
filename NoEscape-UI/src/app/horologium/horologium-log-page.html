@@ -1,44 +1,46 @@
-<section class="log-shell">
-  <header class="toolbar">
-    <div>
-      <p class="kicker">Archive</p>
-      <h1>Horo Log</h1>
-      <p class="lede">
-        {{ total() }} session{{ total() === 1 ? '' : 's' }} on
-        {{ formatDate(selectedDate()) }}
-      </p>
-    </div>
-    <a routerLink="/horologium" class="back">← Horologium</a>
-  </header>
-
-  <app-date-nav
-    [date]="selectedDate()"
-    [today]="todayIso()"
-    [marks]="calendarMarks()"
-    (dateChange)="onDateNav($event)"
-    (rangeChange)="loadCalendar($event)"
-  />
-
-  @if (loading()) {
-    <p class="muted">Loading…</p>
-  } @else if (items().length === 0) {
-    <p class="muted">No sessions on this day.</p>
-  } @else {
-    <ul class="session-log">
-      @for (row of items(); track row.id) {
-        <li>
-          <button
-            type="button"
-            class="session-card"
-            (click)="open(row)"
-            [attr.aria-pressed]="selected()?.id === row.id"
-          >
-            <div class="log-top">
-              <strong>{{ clock(startIso(row)) }} – {{ clock(row.completedAt) }}</strong>
-              <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
-                {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
-              </span>
-            </div>
+<app-history-log
+  kicker="Archive"
+  title="Horo Log"
+  [lede]="lede()"
+  backHref="/horologium"
+  backLabel="Back to Horologium"
+  [date]="selectedDate()"
+  [today]="todayIso()"
+  [marks]="calendarMarks()"
+  [loading]="loading()"
+  [empty]="!loading() && items().length === 0"
+  emptyText="No sessions on this day."
+  [detailTitle]="detailTitle()"
+  [detailKicker]="detailKicker()"
+  detailTitleId="horo-detail-title"
+  (dateChange)="onDateNav($event)"
+  (rangeChange)="loadCalendar($event)"
+  (close)="close()"
+>
+  <ul class="session-log">
+    @for (row of items(); track (row.kind || 'session') + ':' + row.id) {
+      <li>
+        <button
+          type="button"
+          class="session-card"
+          (click)="open(row)"
+          [attr.aria-pressed]="
+            selected()?.id === row.id &&
+            (selected()?.kind || 'session') === (row.kind || 'session')
+          "
+        >
+          <div class="log-top">
+            <strong>{{ clock(startIso(row)) }} – {{ clock(row.completedAt) }}</strong>
+            <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
+              {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
+            </span>
+          </div>
+          @if (row.kind === 'consuetudo') {
+            <p class="log-meta">
+              <span aria-hidden="true">{{ row.routineIcon || '◆' }}</span>
+              Consuetudo · {{ row.routineName || row.taskLabel || 'Practice' }}
+            </p>
+          } @else {
             @if (row.endedEarly) {
               <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
             }
@@ -46,30 +48,14 @@
               <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
               {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
             </p>
-          </button>
-        </li>
-      }
-    </ul>
-  }
-</section>
+          }
+        </button>
+      </li>
+    }
+  </ul>
 
-@if (selected(); as row) {
-  <div class="detail-layer" (click)="close()">
-    <article
-      class="detail-card"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="horo-detail-title"
-      (click)="$event.stopPropagation()"
-    >
-      <header class="detail-head">
-        <div>
-          <p class="kicker">{{ outcomeLabel(row) }}</p>
-          <h2 id="horo-detail-title">{{ formatDate(row.date) }}</h2>
-        </div>
-        <button type="button" class="ghost" (click)="close()">Close</button>
-      </header>
-
+  <div scrollBody>
+    @if (selected(); as row) {
       <div class="timeline" aria-label="Session span">
         <div>
           <p class="when-label">Start</p>
@@ -85,6 +71,24 @@
       </div>
 
       <dl class="facts">
+        @if (row.kind === 'consuetudo') {
+          <div>
+            <dt>Practice</dt>
+            <dd>{{ row.routineName || row.taskLabel || 'Consuetudo' }}</dd>
+          </div>
+          <div>
+            <dt>Elapsed</dt>
+            <dd>{{ minutesLabel(row.elapsedMinutes ?? row.durationMinutes) }}</dd>
+          </div>
+          <div>
+            <dt>Planned</dt>
+            <dd>{{ minutesLabel(row.workMinutes) }}</dd>
+          </div>
+          <div>
+            <dt>Steps</dt>
+            <dd>{{ row.iterations }}</dd>
+          </div>
+        } @else {
         <div>
           <dt>Work blocks</dt>
           <dd>{{ row.iterations }}</dd>
@@ -101,7 +105,15 @@
           <dt>Rest total</dt>
           <dd>{{ minutesLabel(restTotal(row)) }}</dd>
         </div>
+        }
       </dl>
+
+      @if (row.kind === 'consuetudo') {
+        <section class="bind-row">
+          <p class="kicker">Walk log</p>
+          <a class="bind-name walk-link" routerLink="/consuetudo/log">Open walk log →</a>
+        </section>
+      }
 
       @if (row.watchName) {
         <section class="bind-row">
@@ -110,13 +122,14 @@
         </section>
       }
 
-      @if (row.taskLabel) {
+      @if (row.kind !== 'consuetudo' && row.taskLabel) {
         <section class="bind-row">
           <p class="kicker">Bound daily</p>
           <p class="bind-name">{{ row.taskLabel }}</p>
         </section>
       }
 
+      @if (row.kind !== 'consuetudo') {
       <section class="xp-block" aria-label="XP by skill">
         <p class="kicker">XP by skill</p>
         @if (skillXp(row).length === 0) {
@@ -137,10 +150,11 @@
           </ul>
         }
       </section>
+      }
 
-      @if (row.note) {
+      @if (row.kind !== 'consuetudo' && row.note) {
         <p class="detail-note">{{ row.note }}</p>
       }
-    </article>
+    }
   </div>
-}
+</app-history-log>

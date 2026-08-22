@@ -1,4 +1,10 @@
-<section class="horologium-shell" [attr.data-phase]="phase()" [class.focus]="focusMode()">
+<section
+  class="horologium-shell"
+  [attr.data-phase]="phase()"
+  [class.focus]="focusMode()"
+  [class.nav-open]="!shell.collapsed()"
+  [class.notes-open]="focusMode() && notesOpen()"
+>
   <header class="toolbar">
     <div class="brand-block">
       <p class="kicker">Deep work</p>
@@ -29,7 +35,8 @@
 
   <div class="layout">
     <div class="timer-stack">
-    <section class="dial-panel" aria-live="polite">
+    <section class="dial-panel" [class.notes-open]="focusMode() && notesOpen()" aria-live="polite">
+      <div class="dial-board">
       <div class="ring-wrap">
         <div
           class="ring"
@@ -54,16 +61,8 @@
               <p class="session-meta">{{ selectedWatch()?.name || 'No project' }}</p>
             } @else if (isConsuetudo()) {
               <p class="phase-tag">Consuetudo</p>
-              @if (consuetudoStep(); as step) {
-                <p class="practice-step">
-                  <span aria-hidden="true">{{ step.icon || '◆' }}</span>
-                  {{ step.title }}
-                </p>
-              }
               <p class="clock" [class.overtime]="consuetudoOvertime()">{{ remainingLabel() }}</p>
-              <p class="session-meta">
-                {{ sessionLabel() }} · {{ selectedRoutine()?.name ?? 'No practice' }}
-              </p>
+              <p class="session-meta">{{ sessionLabel() }}</p>
             } @else {
               <p class="phase-tag">{{ phaseLabel() }}</p>
               <p class="clock">{{ remainingLabel() }}</p>
@@ -75,6 +74,28 @@
           </div>
         </div>
       </div>
+
+      @if (!isVigilia()) {
+        <div class="dial-task">
+          @if (isConsuetudo()) {
+            <p class="routine-name">{{ selectedRoutine()?.name ?? 'No practice' }}</p>
+            @if (consuetudoStep(); as step) {
+              <p class="practice-step">
+                <span class="step-icon" aria-hidden="true">{{ step.icon || '◆' }}</span>
+                <span class="step-title">{{ step.title }}</span>
+              </p>
+            }
+          } @else {
+            <button
+              type="button"
+              class="task-line"
+              (click)="openTaskFocus()"
+            >
+              {{ taskLabel() || 'Focus a task' }}{{ taskLabel() && !canCompleteTask() ? ' · done' : '' }}
+            </button>
+          }
+        </div>
+      }
 
       <div class="controls">
         @if (isVigilia()) {
@@ -140,7 +161,7 @@
           @if (running()) {
             <button type="button" class="primary" (click)="pause()">Pause</button>
           } @else {
-            <button type="button" class="primary" (click)="resume()">Resume</button>
+            <button type="button" class="primary" (click)="resume()">{{ continueLabel() }}</button>
           }
           @if (canSkipRest()) {
             <button type="button" class="ghost" (click)="skipRest()" [disabled]="awarding()">
@@ -160,6 +181,29 @@
           }
         }
       </div>
+
+      @if (focusMode()) {
+      <div class="notes-toggle">
+        <app-ui-icon-btn
+          icon="note"
+          label="Toggle notes"
+          [round]="true"
+          [expanded]="notesOpen()"
+          (clicked)="toggleNotes()"
+        />
+      </div>
+      }
+      </div>
+
+      @if (focusMode() && notesOpen()) {
+        <textarea
+          class="live-notes"
+          [value]="notes()"
+          (input)="setLiveNotes($any($event.target).value)"
+          maxlength="4000"
+          placeholder="Live notes"
+        ></textarea>
+      }
 
       <div class="focus-props">
       @if (showWatchWidget()) {
@@ -300,7 +344,7 @@
           <p class="log-empty muted">—</p>
         } @else {
           <ul class="session-log">
-            @for (row of sessions(); track row.id) {
+            @for (row of sessions(); track (row.kind || 'session') + ':' + row.id) {
               <li>
                 <div class="log-top">
                   <strong>{{ formatDate(row.date) }}</strong>
@@ -308,13 +352,20 @@
                     {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
                   </span>
                 </div>
-                @if (row.endedEarly) {
-                  <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
+                @if (row.kind === 'consuetudo') {
+                  <p class="log-meta">
+                    <span aria-hidden="true">{{ row.routineIcon || '◆' }}</span>
+                    Consuetudo · {{ row.routineName || row.taskLabel || 'Practice' }}
+                  </p>
+                } @else {
+                  @if (row.endedEarly) {
+                    <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
+                  }
+                  <p class="log-meta">
+                    <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
+                    {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
+                  </p>
                 }
-                <p class="log-meta">
-                  <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
-                  {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
-                </p>
               </li>
             }
           </ul>
@@ -411,27 +462,33 @@
             <legend class="sr-only">Durations</legend>
             <label>
               Work (min)
-              <input
-                type="number"
-                [formField]="draftForm.workMinutes"
-                (change)="syncCustom()"
+              <app-number-field
+                ariaLabel="Work minutes"
+                [min]="1"
+                [max]="180"
+                [value]="draft().workMinutes"
+                (valueChange)="setDraftWork($event)"
               />
             </label>
             <label>
               Rest (min)
-              <input
-                type="number"
-                [formField]="draftForm.restMinutes"
-                (change)="syncCustom()"
+              <app-number-field
+                ariaLabel="Rest minutes"
+                [min]="0"
+                [max]="60"
+                [value]="draft().restMinutes"
+                (valueChange)="setDraftRest($event)"
               />
             </label>
             @if (mode() === 'planned') {
               <label>
                 Iterations (min 2)
-                <input
-                  type="number"
-                  [formField]="draftForm.iterations"
-                  (change)="syncCustom()"
+                <app-number-field
+                  ariaLabel="Iterations"
+                  [min]="2"
+                  [max]="12"
+                  [value]="draft().iterations"
+                  (valueChange)="setDraftIterations($event)"
                 />
               </label>
             }
@@ -481,12 +538,19 @@
         <fieldset class="task-bind" [disabled]="!canEdit()">
           <legend>Practice</legend>
           <select
-            [value]="selectedRoutineId() ?? ''"
+            [value]="routineSelectValue()"
             (change)="selectRoutine($any($event.target).value)"
           >
-            <option value="">None</option>
+            @if (routines().length === 0) {
+              <option value="">None</option>
+            }
             @for (r of routines(); track r.id) {
-              <option [value]="r.id">{{ r.icon || '🌅' }} {{ r.name }}</option>
+              <option
+                [value]="'' + r.id"
+                [selected]="routineSelectValue() === '' + r.id"
+              >
+                {{ r.icon || '🌅' }} {{ r.name }}
+              </option>
             }
           </select>
           <a routerLink="/consuetudo" class="preset-manage">Edit practices →</a>
@@ -574,20 +638,16 @@
         <header class="pane-head">
           <h2>Scenery</h2>
         </header>
-        <div class="preset-grid" role="listbox" aria-label="Scenery loops">
+        <select
+          class="scenery-select"
+          [value]="sceneryId()"
+          (change)="selectScenery($any($event.target).value)"
+          aria-label="Scenery loops"
+        >
           @for (scene of scenery; track scene.id) {
-            <button
-              type="button"
-              class="pick-tile"
-              role="option"
-              [class.selected]="sceneryId() === scene.id"
-              [attr.aria-selected]="sceneryId() === scene.id"
-              (click)="selectScenery(scene.id)"
-            >
-              <span class="pick-label">{{ scene.name }}</span>
-            </button>
+            <option [value]="scene.id">{{ scene.name }}</option>
           }
-        </div>
+        </select>
         <button type="button" class="ghost chip" (click)="enterScenery()">
           Enter Scenery
         </button>
@@ -610,13 +670,14 @@
     [canEdit]="canEdit()"
     [setupKind]="setupKind()"
     [widgetVisible]="watchWidgetVisible()"
-    [blockEscape]="sessionPrompt() !== null"
+    [blockEscape]="sessionPrompt() !== null || taskFocusOpen()"
     [showConsuetudo]="showConsuetudoMode()"
     [routines]="routines()"
     [selectedRoutineId]="selectedRoutineId()"
     [scriptoriumWorks]="scriptoriumWorks()"
     (closed)="exitScenery()"
     (taskDone)="completeBoundTask()"
+    (taskFocus)="openTaskFocus()"
     (started)="startFromScenery()"
     (stopped)="reset()"
     (sceneChange)="selectScenery($event)"
@@ -626,35 +687,30 @@
   />
 }
 
+@if (taskFocusOpen()) {
+  <app-horologium-task-focus
+    [heading]="taskLabel() || 'Focus a task'"
+    [dailies]="dailies()"
+    [selectedKey]="boundDailyId()"
+    [canComplete]="canCompleteTask()"
+    (closed)="closeTaskFocus()"
+    (picked)="selectDaily($event)"
+    (complete)="completeFromFocus()"
+  />
+}
+
 @if (sessionPrompt(); as prompt) {
-  <div class="confirm-layer" (click)="closePrompt()">
-    <div
-      class="confirm-card"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="horo-confirm-title"
-      aria-describedby="horo-confirm-body"
-      (click)="$event.stopPropagation()"
-    >
-      <p class="confirm-kicker">Horologium</p>
-      <h2 id="horo-confirm-title">{{ prompt.title }}</h2>
-      <p id="horo-confirm-body">{{ prompt.body }}</p>
-      @if (prompt.penalty > 0) {
-        <p class="confirm-penalty">−{{ prompt.penalty | number }} Focus XP</p>
-      }
-      <div class="confirm-actions">
-        <button type="button" class="ghost" (click)="secondaryPrompt()">
-          {{ prompt.cancelLabel }}
-        </button>
-        <button
-          type="button"
-          class="danger"
-          (click)="acceptPrompt()"
-          [disabled]="awarding()"
-        >
-          {{ prompt.confirmLabel }}
-        </button>
-      </div>
-    </div>
-  </div>
+  <app-ui-confirm
+    kicker="Horologium"
+    [title]="prompt.title"
+    [body]="prompt.body"
+    [penalty]="prompt.penalty"
+    [cancelLabel]="prompt.cancelLabel"
+    [confirmLabel]="prompt.confirmLabel"
+    [tone]="prompt.tone ?? 'danger'"
+    [busy]="awarding()"
+    (dismiss)="closePrompt()"
+    (secondary)="secondaryPrompt()"
+    (confirm)="acceptPrompt()"
+  />
 }

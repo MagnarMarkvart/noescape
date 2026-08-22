@@ -17,6 +17,8 @@ import { HorologiumTimerService } from './horologium-timer.service';
 import { HorologiumWatchService } from './horologium-watch.service';
 import { HorologiumPresetsService } from './horologium-presets.service';
 import { ConsuetudoClockService } from './consuetudo-clock.service';
+import { HorologiumNotesService } from './horologium-notes.service';
+import { SoundSettingsService } from '../shared/sound-settings.service';
 import {
   HorologiumBoundDaily,
   HorologiumConfig,
@@ -24,6 +26,8 @@ import {
   horologiumBindKey,
 } from './horologium.model';
 import { RoutineView } from '../consuetudo/routines.service';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
+import { NumberField } from '../shared/ui/number-field';
 import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
 
 export interface HorologiumScene {
@@ -64,6 +68,42 @@ export const HOROLOGIUM_SCENERY: HorologiumScene[] = [
     src: '/assets/scenery/videos/334438_medium.mp4',
     audio: '/assets/scenery/audio/398953_garden-tea-hour.mp3?v=2',
   },
+  {
+    id: 'candlelit-rain-cafe',
+    name: 'Candlelit Rain Cafe',
+    src: '/assets/scenery/videos/201947-916877801_medium.mp4',
+    audio: '/assets/scenery/audio/346946_candlelit-rain-cafe.mp3',
+  },
+  {
+    id: 'scholars-hearth',
+    name: "Scholar's Hearth",
+    src: '/assets/scenery/videos/204117-923594068_medium.mp4',
+    audio: '/assets/scenery/audio/533428_scholars-hearth.mp3',
+  },
+  {
+    id: 'fireside-lodge-night',
+    name: 'Fireside Lodge Night',
+    src: '/assets/scenery/videos/208856_medium.mp4',
+    audio: '/assets/scenery/audio/580921_fireside-lodge-night.mp3',
+  },
+  {
+    id: 'rainwood-hermitage',
+    name: 'Rainwood Hermitage',
+    src: '/assets/scenery/videos/213923_medium.mp4',
+    audio: '/assets/scenery/audio/695571_rainwood-hermitage.mp3',
+  },
+  {
+    id: 'golden-ripple-tide',
+    name: 'Golden Ripple Tide',
+    src: '/assets/scenery/videos/284518_medium.mp4',
+    audio: '/assets/scenery/audio/573191_golden-ripple-tide.mp3',
+  },
+  {
+    id: 'lumenwing-night-grove',
+    name: 'Lumenwing Night Grove',
+    src: '/assets/scenery/videos/42197-429661458_medium.mp4',
+    audio: '/assets/scenery/audio/825635_lumenwing-night-grove.mp3',
+  },
 ];
 
 const STORAGE_KEY = 'noescape.horologium.scenery';
@@ -103,6 +143,7 @@ export function saveSceneryId(id: string): void {
 
 @Component({
   selector: 'app-horologium-scenery',
+  imports: [UiIconBtn, NumberField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './horologium-scenery.html',
   styleUrl: './horologium-scenery.css',
@@ -112,6 +153,8 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   private readonly watches = inject(HorologiumWatchService);
   private readonly presetStore = inject(HorologiumPresetsService);
   private readonly consuetudo = inject(ConsuetudoClockService);
+  private readonly liveNotes = inject(HorologiumNotesService);
+  private readonly sound = inject(SoundSettingsService);
 
   @Input({ required: true }) src = '';
   @Input() name = '';
@@ -131,6 +174,7 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   @Input() scriptoriumWorks: ScriptoriumWorkView[] = [];
   @Output() readonly closed = new EventEmitter<void>();
   @Output() readonly taskDone = new EventEmitter<void>();
+  @Output() readonly taskFocus = new EventEmitter<void>();
   @Output() readonly started = new EventEmitter<void>();
   @Output() readonly stopped = new EventEmitter<void>();
   @Output() readonly sceneChange = new EventEmitter<string>();
@@ -144,6 +188,7 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   protected readonly presets = this.presetStore.list;
   protected readonly soundOpen = signal(false);
   protected readonly bedVolume = signal(loadAmbienceVolume());
+  protected readonly generalVolume = this.sound.feedbackVolume;
   private htmlOverflow = '';
   private bodyOverflow = '';
 
@@ -167,6 +212,7 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   protected readonly nextRestLabel = this.timer.nextRestLabel;
   protected readonly restStatLabel = this.timer.restStatLabel;
   protected readonly canSkipRest = this.timer.canSkipRest;
+  protected readonly continueLabel = this.timer.continueLabel;
   protected readonly timerPreset = this.timer.presetId;
   protected readonly projectWatches = this.watches.watches;
   protected readonly selectedWatch = this.watches.selected;
@@ -184,10 +230,23 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   protected readonly consuetudoFinished = this.consuetudo.finished;
   protected readonly consuetudoMeta = this.consuetudo.stepMeta;
   protected readonly consuetudoAwarding = this.consuetudo.awarding;
+  protected readonly notes = this.liveNotes.text;
+  protected readonly notesOpen = this.liveNotes.open;
+
+  protected routineName(): string {
+    return (
+      this.consuetudo.routine()?.name ||
+      this.routines.find((r) => r.id === this.selectedRoutineId)?.name ||
+      ''
+    );
+  }
   protected readonly statusLine = computed(() => {
     const phase = this.phase();
     const label = this.phaseLabel();
     if ((phase === 'work' || phase === 'rest') && !this.running()) {
+      if (this.timer.awaitingContinue()) {
+        return `${label} · waiting to start`;
+      }
       return `${label} · paused`;
     }
     return label;
@@ -245,6 +304,11 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
     } catch {
       /* private mode */
     }
+  }
+
+  protected setGeneralVolume(raw: string | number): void {
+    this.sound.setFeedbackVolume(raw);
+    this.timer.applyJingleVolume();
   }
 
   protected begin(): void {
@@ -314,16 +378,16 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
     this.timer.applyConfig({ ...this.timer.config(), ...patch });
   }
 
-  protected setWork(raw: string): void {
-    this.patchConfig({ workMinutes: Number(raw) });
+  protected setWork(minutes: number): void {
+    this.patchConfig({ workMinutes: minutes });
   }
 
-  protected setRest(raw: string): void {
-    this.patchConfig({ restMinutes: Number(raw) });
+  protected setRest(minutes: number): void {
+    this.patchConfig({ restMinutes: minutes });
   }
 
-  protected setIterations(raw: string): void {
-    this.patchConfig({ iterations: Number(raw) });
+  protected setIterations(n: number): void {
+    this.patchConfig({ iterations: n });
   }
 
   protected pickDaily(raw: string): void {
@@ -346,6 +410,14 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
 
   protected skipStep(): void {
     this.consuetudo.skipCurrent();
+  }
+
+  protected toggleSceneryNotes(): void {
+    this.liveNotes.toggleOpen();
+  }
+
+  protected setLiveNotes(value: string): void {
+    this.liveNotes.setText(value);
   }
 
   protected toggleWatchWidget(): void {
@@ -421,5 +493,9 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
 
   protected markTaskDone(): void {
     this.taskDone.emit();
+  }
+
+  protected openTaskFocus(): void {
+    this.taskFocus.emit();
   }
 }

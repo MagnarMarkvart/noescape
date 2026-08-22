@@ -1,0 +1,177 @@
+<app-forge-shell
+  kicker="Scriptorium"
+  [title]="heading()"
+  lede="Inscribe a work, pick a shelf, and bind a due day only when it has a season."
+  backHref="/scriptorium"
+  backLabel="Back to Scriptorium"
+  [toast]="toast()"
+>
+  <form class="create" (submit)="$event.preventDefault(); save()">
+    <fieldset>
+      <legend>Title</legend>
+      <input
+        type="text"
+        maxlength="120"
+        placeholder="Name the work"
+        [value]="draft().title"
+        (input)="setDraftTitle($any($event.target).value)"
+      />
+    </fieldset>
+
+    <app-icon-picker
+      [selected]="draft().icon"
+      (picked)="pickIcon($event)"
+    />
+
+    <fieldset>
+      <legend>Shelf</legend>
+      <div class="chip-row">
+        @for (t of tiers; track t.id) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().tier === t.id"
+            (click)="setDraftTier(t.id)"
+          >
+            {{ t.name }}
+          </button>
+        }
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Due day</legend>
+      <app-date-field
+        label=""
+        placeholder="None"
+        [value]="draft().dueDate"
+        (valueChange)="setDraftDue($event)"
+      />
+    </fieldset>
+
+    <app-effort-field
+      legend="Complexity"
+      [value]="draft().effort"
+      (valueChange)="setEffort($event)"
+    />
+
+    <app-duration-field
+      legend="Volume"
+      [allowUnset]="true"
+      [presets]="durationPresets"
+      [minutes]="draft().durationMinutes"
+      (minutesChange)="setDuration($event)"
+    />
+
+    <fieldset>
+      <legend>Notes</legend>
+      <textarea
+        rows="4"
+        maxlength="4000"
+        [value]="draft().notes"
+        (input)="setDraftNotes($any($event.target).value)"
+      ></textarea>
+    </fieldset>
+
+    <fieldset>
+      <legend>Skills</legend>
+      <app-skill-weight-list
+        [shares]="shares()"
+        [remaining]="remainingWeights()"
+        [valid]="weightsOk()"
+        (bump)="bumpWeight($event.slug, $event.delta)"
+        (remove)="removeSkill($event)"
+      />
+      <app-skill-tree-picker
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
+    </fieldset>
+
+    <fieldset>
+      <legend>Subtasks</legend>
+      <p class="hint">Optional. Break the work into smaller steps.</p>
+      @if ((work()?.subtasks?.length ?? 0) > 0 || pendingSubtasks().length) {
+        <ul class="subtasks">
+        @for (s of work()?.subtasks ?? []; track s.id) {
+          <li>
+            <app-rune-check
+              [checked]="s.done"
+              [disabled]="busyKey() === 'sub:' + s.id"
+              [label]="s.title"
+              (checkedChange)="toggleSubtask(s.id, $event)"
+            />
+            <button
+              type="button"
+              class="ghost tiny"
+              (click)="removeSubtask(s.id)"
+              aria-label="Remove subtask"
+            >
+              ×
+            </button>
+          </li>
+        }
+        @for (title of pendingSubtasks(); track $index) {
+          <li>
+            <span>{{ title }}</span>
+            <button
+              type="button"
+              class="ghost tiny"
+              (click)="removePendingSubtask($index)"
+              aria-label="Remove subtask"
+            >
+              ×
+            </button>
+          </li>
+        }
+      </ul>
+      }
+      <div class="inline-add">
+        <input
+          type="text"
+          maxlength="160"
+          placeholder="Add a subtask"
+          [value]="subtaskDraft()"
+          (input)="setSubtaskDraft($any($event.target).value)"
+          (keydown.enter)="$event.preventDefault(); addSubtask()"
+        />
+        <button
+          type="button"
+          class="ghost"
+          [disabled]="!subtaskDraft().trim()"
+          (click)="addSubtask()"
+        >
+          Add
+        </button>
+      </div>
+    </fieldset>
+
+    <div class="actions">
+      <button type="submit" [disabled]="saving()">
+        {{ saving() ? 'Sealing…' : editId() ? 'Seal' : 'Inscribe' }}
+      </button>
+      <a routerLink="/scriptorium">Cancel</a>
+      @if (work(); as current) {
+        <button type="button" class="ghost" (click)="forgeQuest()">
+          Create a Quest
+        </button>
+        <button type="button" class="ghost" (click)="openVigilia()">
+          Open in Vigilia
+        </button>
+        @if (current.questId; as qid) {
+          <a class="ghost" [routerLink]="['/quests', qid]">Open quest →</a>
+        }
+        <button type="button" class="ghost" (click)="archive()">
+          {{ current.status === 'ARCHIVED' ? 'Restore' : 'Shelve' }}
+        </button>
+        <button type="button" class="ghost danger" (click)="destroy()">
+          Erase
+        </button>
+      }
+    </div>
+  </form>
+</app-forge-shell>

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -149,5 +150,10 @@ export class QuestsController {
   @Post(':id/start')
   start(@Param('id', ParseIntPipe) id: number) {
     return this.questsService.start(id);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.questsService.remove(id);
   }
 }

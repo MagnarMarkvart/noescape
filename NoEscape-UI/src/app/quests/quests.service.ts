@@ -59,6 +59,15 @@ export class QuestsService {
     );
   }
 
+  remove(id: number) {
+    return this.http.delete<{ deleted: boolean; id: number }>(
+      `${this.baseUrl}/${id}`,
+    ).pipe(
+      tap(() => this.fullCache.delete(id)),
+      tap(() => void this.refreshActive().subscribe()),
+    );
+  }
+
   start(id: number) {
     return this.http.post<QuestView>(`${this.baseUrl}/${id}/start`, {}).pipe(
       tap((q) => this.fullCache.set(q.id, q)),

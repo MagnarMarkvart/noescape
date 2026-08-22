@@ -8,10 +8,12 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CharacterProfile, CharacterService } from './character.service';
+import { QuickTaskPanel } from '../dailies/quick-task-panel';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 
 @Component({
   selector: 'app-character-page',
-  imports: [RouterLink],
+  imports: [RouterLink, QuickTaskPanel, UiIconBtn],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './character-page.html',
   styleUrl: './character-page.css',
@@ -45,6 +47,12 @@ export class CharacterPage implements OnInit {
     this.characterService.getProfile().subscribe({
       next: (p) => this.profile.set(p),
       error: () => this.error.set('Could not load character'),
+    });
+  }
+
+  protected onQuickLogged(): void {
+    this.characterService.getProfile().subscribe({
+      next: (p) => this.profile.set(p),
     });
   }
 }

@@ -25,6 +25,7 @@ export class HorologiumTaskClockService {
   private syncTimer: ReturnType<typeof setInterval> | null = null;
   private boundKey = '';
   private bound: HorologiumBoundDaily | null = null;
+  private readonly elapsedByKey = new Map<string, number>();
 
   readonly desiredRunning = computed(() => {
     const bound = this.timer.boundDaily();
@@ -63,9 +64,13 @@ export class HorologiumTaskClockService {
       : '';
     if (key !== this.boundKey) {
       this.pauseLocal(true);
+      if (this.boundKey) {
+        this.elapsedByKey.set(this.boundKey, this.localBaseMs);
+      }
       this.bound = bound;
       this.boundKey = key;
-      this.localBaseMs = bound?.elapsedMs ?? 0;
+      this.localBaseMs =
+        (key ? this.elapsedByKey.get(key) : undefined) ?? bound?.elapsedMs ?? 0;
       this.elapsedMs.set(this.localBaseMs);
     } else {
       this.bound = bound;

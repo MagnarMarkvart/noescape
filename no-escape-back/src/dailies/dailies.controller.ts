@@ -16,6 +16,7 @@ import {
   UpdateDailyTemplateDto,
 } from './dto/daily-template.dto';
 import { PostponeDailyDto } from './dto/postpone-daily.dto';
+import { LogQuickTaskDto } from './dto/log-quick-task.dto';
 import { DailiesService } from './dailies.service';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
 
@@ -66,6 +67,16 @@ export class DailiesController {
   @Get('templates')
   listTemplates() {
     return this.dailiesService.listTemplates();
+  }
+
+  @Get('quick')
+  listQuick(@Query('limit') limit?: string) {
+    return this.dailiesService.listQuick(Number(limit) || 12);
+  }
+
+  @Post('quick')
+  logQuick(@Body() body: LogQuickTaskDto) {
+    return this.dailiesService.logQuick(body ?? {});
   }
 
   @Post('templates')

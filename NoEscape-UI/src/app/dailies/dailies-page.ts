@@ -16,7 +16,7 @@ import {
   required,
   submit,
 } from '@angular/forms/signals';
-import { RouterLink, ActivatedRoute } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import {
@@ -25,17 +25,20 @@ import {
   DailyTaskTemplate,
   DailyTier,
   DURATION_PRESETS,
-  EFFORT_LEVELS,
   SlotFormModel,
   TaskImportance,
   dailySkillLine,
   dailySkillWeights,
+  formatTaskDuration,
 } from './daily.model';
 import { HabitsService, HabitView } from '../habits/habits.service';
 import { RuneCheck } from '../shared/rune-check';
 import { DateNav } from '../shared/date-nav';
 import { CalendarMarks } from '../shared/rune-calendar';
 import { SkillWeightList } from '../shared/skill-weight-list';
+import { DurationField } from '../shared/ui/duration-field';
+import { EffortField } from '../shared/ui/effort-field';
+import { SkillTreePicker } from '../shared/ui/skill-tree-picker';
 import {
   addSkillWeight,
   boostsWealth,
@@ -47,16 +50,29 @@ import {
 } from '../shared/skill-weights';
 import { centsToInput, formatMoney, parseMoneyToCents } from '../shared/money';
 import { TimedToast } from '../shared/timed-toast';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import { CharacterService } from '../character/character.service';
 import { formatElapsedShort, monthRange } from '../shared/time';
 import { DailiesService } from './dailies.service';
+import { DefaultTaskPicker } from './default-task-picker';
 import { calculateDailyTaskXp } from './daily-xp';
 import { splitQuestXp } from '../quests/quest.model';
 
 @Component({
   selector: 'app-dailies-page',
-  imports: [DecimalPipe, FormField, RouterLink, RuneCheck, DateNav, SkillWeightList],
+  imports: [
+    DecimalPipe,
+    FormField,
+    RuneCheck,
+    DateNav,
+    SkillWeightList,
+    SkillTreePicker,
+    DurationField,
+    EffortField,
+    DefaultTaskPicker,
+    UiIconBtn,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dailies-page.html',
   styleUrl: './dailies-page.css',
@@ -74,7 +90,6 @@ export class DailiesPage implements OnInit {
   private readonly timed = new TimedToast();
 
   protected readonly durationPresets = DURATION_PRESETS;
-  protected readonly effortLevels = EFFORT_LEVELS;
 
   protected readonly board = signal<DailyBoard | null>(null);
   protected readonly skillTree = signal<SkillTree | null>(null);
@@ -96,8 +111,6 @@ export class DailiesPage implements OnInit {
   protected readonly historyUnlocked = signal(false);
   /** When true, skip auto-hide after the base 1/3/5 board is filled. */
   private setupPinned = false;
-  protected readonly defaultQuery = signal('');
-  protected readonly defaultSearchOpen = signal(false);
   protected readonly calendarMarks = signal<CalendarMarks>({});
 
   protected readonly slotModel = signal<SlotFormModel>(this.blankModel());
@@ -107,8 +120,7 @@ export class DailiesPage implements OnInit {
     min(p.skillId, 1, { message: 'Pick a skill' });
     min(p.effortLevel, 1);
     min(p.durationMinutes, 1);
-    min(p.customDurationMinutes, 1);
-    max(p.customDurationMinutes, 24 * 60);
+    max(p.durationMinutes, 24 * 60);
   });
 
   protected readonly categories = computed(
@@ -152,24 +164,13 @@ export class DailiesPage implements OnInit {
     return Boolean(slot?.id && slot.isFilled && !slot.completed);
   });
 
-  protected readonly filteredDefaults = computed(() => {
-    const q = this.defaultQuery().trim().toLowerCase();
-    const rows = this.templates();
-    const matched = q
-      ? rows.filter((t) => this.templateMatches(t, q))
-      : rows;
-    return matched.slice(0, 12);
-  });
-
   protected readonly previewXp = computed(() => {
     const slot = this.editingSlot();
     const model = this.slotModel();
     if (!slot) {
       return 0;
     }
-    const duration = model.customDuration
-      ? model.customDurationMinutes
-      : model.durationMinutes;
+    const duration = model.durationMinutes;
     return calculateDailyTaskXp({
       importance: slot.importance,
       effortLevel: model.effortLevel,
@@ -183,6 +184,7 @@ export class DailiesPage implements OnInit {
     return splitQuestXp(xp, weights).map((share) => ({
       ...share,
       name: this.skillName(share.slug),
+      icon: this.findSkillBySlug(share.slug)?.icon,
     }));
   });
 
@@ -203,6 +205,9 @@ export class DailiesPage implements OnInit {
 
   protected readonly allSkills = computed(() =>
     this.categories().flatMap((c) => c.skills),
+  );
+  protected readonly selectedSlugs = computed(() =>
+    this.slotModel().skillWeights.map((row) => row.slug),
   );
 
   protected readonly filledSlots = computed(() => {
@@ -303,16 +308,13 @@ export class DailiesPage implements OnInit {
     }
     this.setupOpen.set(true);
     this.setupPinned = true;
-    const custom = !DURATION_PRESETS.includes(slot.durationMinutes);
     this.slotModel.set({
       title: slot.title,
       skillId: slot.skillId ?? 0,
       skillWeights: dailySkillWeights(slot),
       habitId: slot.habitId ?? 0,
       effortLevel: slot.effortLevel,
-      durationMinutes: custom ? 45 : slot.durationMinutes,
-      customDuration: custom,
-      customDurationMinutes: slot.durationMinutes || 45,
+      durationMinutes: slot.durationMinutes || 45,
       saveAsDefault: false,
       loadedTemplateId: 0,
       wealthAmount: centsToInput(slot.wealthCents),
@@ -322,8 +324,6 @@ export class DailiesPage implements OnInit {
     this.editingKey.set(this.slotKey(slot.importance, slot.slotIndex));
     this.postponePickerOpen.set(false);
     this.postponeDate.set(this.offsetIso(1));
-    this.defaultQuery.set('');
-    this.defaultSearchOpen.set(false);
     this.timed.set(null);
   }
 
@@ -333,19 +333,13 @@ export class DailiesPage implements OnInit {
     this.selectedCategory.set('');
     this.slotModel.set(this.blankModel());
     this.postponePickerOpen.set(false);
-    this.defaultQuery.set('');
-    this.defaultSearchOpen.set(false);
   }
 
   protected selectCategory(category: string): void {
     this.selectedCategory.set(category);
   }
 
-  protected selectSkill(skillId: number): void {
-    const skill = this.findSkillById(skillId);
-    if (!skill) {
-      return;
-    }
+  protected pickSkill(skill: Skill): void {
     this.setSkillWeights(addSkillWeight(this.slotModel().skillWeights, skill.slug));
   }
 
@@ -359,13 +353,6 @@ export class DailiesPage implements OnInit {
     this.setSkillWeights(removeSkillWeight(this.slotModel().skillWeights, slug));
   }
 
-  protected hasSkill(skillId: number): boolean {
-    const skill = this.findSkillById(skillId);
-    return Boolean(
-      skill && this.slotModel().skillWeights.some((row) => row.slug === skill.slug),
-    );
-  }
-
   protected skillLine(input: {
     skillShares?: Array<{ name: string }> | null;
     skill?: { name: string } | null;
@@ -373,12 +360,7 @@ export class DailiesPage implements OnInit {
     return dailySkillLine(input);
   }
 
-  protected applyTemplate(templateId: number): void {
-    const t = this.templates().find((row) => row.id === templateId);
-    if (!t) {
-      return;
-    }
-    const custom = !DURATION_PRESETS.includes(t.durationMinutes);
+  protected applyTemplate(t: DailyTaskTemplate): void {
     const habitStillActive =
       t.habitId != null && this.habits().some((h) => h.id === t.habitId);
     this.slotModel.update((m) => ({
@@ -388,63 +370,19 @@ export class DailiesPage implements OnInit {
       skillWeights: dailySkillWeights(t),
       habitId: habitStillActive ? (t.habitId ?? 0) : 0,
       effortLevel: t.effortLevel,
-      durationMinutes: custom ? 45 : t.durationMinutes,
-      customDuration: custom,
-      customDurationMinutes: t.durationMinutes,
+      durationMinutes: t.durationMinutes,
       loadedTemplateId: t.id,
       wealthAmount: centsToInput(t.wealthCents),
     }));
     this.selectedCategory.set(t.skill.category);
-    this.defaultQuery.set('');
-    this.defaultSearchOpen.set(false);
   }
 
   protected selectEffort(level: number): void {
     this.slotForm.effortLevel().value.set(level);
   }
 
-  protected selectDurationPreset(minutes: number): void {
-    this.slotForm.customDuration().value.set(false);
-    this.slotForm.durationMinutes().value.set(minutes);
-    this.slotForm.customDurationMinutes().value.set(minutes);
-  }
-
-  protected enableCustomDuration(): void {
-    this.slotForm.customDuration().value.set(true);
-  }
-
-  protected customHours(): number {
-    return Math.floor(Math.max(0, this.slotModel().customDurationMinutes) / 60);
-  }
-
-  protected customMins(): number {
-    return Math.max(0, this.slotModel().customDurationMinutes) % 60;
-  }
-
-  protected setCustomHours(event: Event): void {
-    const hours = this.clampInt((event.target as HTMLInputElement).value, 0, 24);
-    const mins = hours >= 24 ? 0 : this.customMins();
-    this.setCustomTotal(hours * 60 + mins);
-  }
-
-  protected setCustomMins(event: Event): void {
-    const hours = Math.min(23, this.customHours());
-    const mins = this.clampInt((event.target as HTMLInputElement).value, 0, 59);
-    this.setCustomTotal(hours * 60 + mins);
-  }
-
-  private setCustomTotal(total: number): void {
-    this.slotForm.customDurationMinutes().value.set(
-      Math.min(24 * 60, Math.max(1, Math.round(total) || 1)),
-    );
-  }
-
-  private clampInt(raw: string, min: number, max: number): number {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) {
-      return min;
-    }
-    return Math.min(max, Math.max(min, Math.floor(n)));
+  protected setDuration(minutes: number | null): void {
+    this.slotForm.durationMinutes().value.set(Math.max(1, minutes ?? 45));
   }
 
   protected saveSlot(): void {
@@ -455,9 +393,7 @@ export class DailiesPage implements OnInit {
 
     void submit(this.slotForm, async () => {
       const model = this.slotModel();
-      const duration = model.customDuration
-        ? model.customDurationMinutes
-        : model.durationMinutes;
+      const duration = model.durationMinutes;
 
       if (!model.title.trim() || !skillWeightsValid(model.skillWeights)) {
         this.timed.set('Title and a full 10-point skill split are required.');
@@ -487,7 +423,6 @@ export class DailiesPage implements OnInit {
               this.persistDefault(model, duration);
             } else {
               this.cancelEdit();
-              this.setupPinned = false;
               this.timed.set('Task saved.');
               this.loadBoard(this.selectedDate(), false);
             }
@@ -669,12 +604,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected formatDuration(minutes: number): string {
-    if (minutes < 60) {
-      return `${minutes}m`;
-    }
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+    return formatTaskDuration(minutes);
   }
 
   private setDate(date: string): void {
@@ -766,30 +696,6 @@ export class DailiesPage implements OnInit {
     this.applyHabit(Number(raw) || 0);
   }
 
-  protected onDefaultQuery(event: Event): void {
-    this.defaultQuery.set((event.target as HTMLInputElement).value);
-    this.defaultSearchOpen.set(true);
-  }
-
-  protected onDefaultSearchKey(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
-      this.defaultSearchOpen.set(false);
-      (event.target as HTMLInputElement).blur();
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      const first = this.filteredDefaults()[0];
-      if (first) {
-        this.applyTemplate(first.id);
-      }
-    }
-  }
-
-  protected onDefaultBlur(): void {
-    setTimeout(() => this.defaultSearchOpen.set(false), 150);
-  }
-
   protected setSaveAsDefault(checked: boolean): void {
     this.slotModel.update((m) => ({ ...m, saveAsDefault: checked }));
   }
@@ -854,13 +760,11 @@ export class DailiesPage implements OnInit {
       next: () => {
         this.reloadTemplates();
         this.cancelEdit();
-        this.setupPinned = false;
         this.timed.set('Task saved and stored as a default.');
         this.loadBoard(this.selectedDate(), false);
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.cancelEdit();
-        this.setupPinned = false;
         this.loadBoard(this.selectedDate(), false);
         this.timed.set(
           `Task saved, but the default was not: ${this.readError(err, 'save failed')}`,
@@ -873,19 +777,6 @@ export class DailiesPage implements OnInit {
     this.dailiesService.listTemplates().subscribe({
       next: (rows) => this.templates.set(rows),
     });
-  }
-
-  private templateMatches(t: DailyTaskTemplate, q: string): boolean {
-    const hay = [
-      t.name,
-      t.skill.name,
-      t.skill.category,
-      t.habit?.name ?? '',
-      ...(t.skillShares ?? []).map((s) => s.name),
-    ]
-      .join(' ')
-      .toLowerCase();
-    return hay.includes(q);
   }
 
   private setSkillWeights(rows: Array<{ slug: string; weight: number }>): void {
@@ -920,8 +811,6 @@ export class DailiesPage implements OnInit {
       habitId: 0,
       effortLevel: 5,
       durationMinutes: 45,
-      customDuration: false,
-      customDurationMinutes: 45,
       saveAsDefault: false,
       loadedTemplateId: 0,
       wealthAmount: '',

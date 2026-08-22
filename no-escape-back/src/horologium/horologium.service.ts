@@ -130,19 +130,37 @@ export class HorologiumService {
       throw new BadRequestException('date must be YYYY-MM-DD');
     }
     const where = day ? { date: day } : {};
-    const [items, total] = await Promise.all([
+    const walkWhere = {
+      ...where,
+      completedAt: { not: null },
+    };
+    const fetch = Math.min(100, take + skip);
+    const [sessions, walks, sessionCount, walkCount] = await Promise.all([
       this.prisma.horologiumSession.findMany({
         where,
         orderBy: { completedAt: 'desc' },
-        take,
-        skip,
+        take: fetch,
         include: { skill: { select: SKILL_SELECT } },
       }),
+      this.prisma.routineRun.findMany({
+        where: walkWhere,
+        orderBy: { completedAt: 'desc' },
+        take: fetch,
+        include: { routine: { select: { name: true, icon: true } } },
+      }),
       this.prisma.horologiumSession.count({ where }),
+      this.prisma.routineRun.count({ where: walkWhere }),
     ]);
+    const items = [
+      ...sessions.map((row) => this.presentSession(row)),
+      ...walks.map((row) => this.presentConsuetudo(row)),
+    ].sort(
+      (a, b) =>
+        new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+    );
     return {
-      items: items.map((row) => this.presentSession(row)),
-      total,
+      items: items.slice(skip, skip + take),
+      total: sessionCount + walkCount,
       limit: take,
       offset: skip,
     };
@@ -152,12 +170,27 @@ export class HorologiumService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
       throw new BadRequestException('from and to must be YYYY-MM-DD');
     }
-    const rows = await this.prisma.horologiumSession.groupBy({
-      by: ['date'],
-      where: { date: { gte: from, lte: to } },
-      _count: { _all: true },
-    });
-    return rows.map((row) => ({ date: row.date, count: row._count._all }));
+    const range = { date: { gte: from, lte: to } };
+    const [sessions, walks] = await Promise.all([
+      this.prisma.horologiumSession.groupBy({
+        by: ['date'],
+        where: range,
+        _count: { _all: true },
+      }),
+      this.prisma.routineRun.groupBy({
+        by: ['date'],
+        where: { ...range, completedAt: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
+    const counts = new Map<string, number>();
+    for (const row of sessions) {
+      counts.set(row.date, (counts.get(row.date) ?? 0) + row._count._all);
+    }
+    for (const row of walks) {
+      counts.set(row.date, (counts.get(row.date) ?? 0) + row._count._all);
+    }
+    return [...counts.entries()].map(([date, count]) => ({ date, count }));
   }
 
   /** Focus XP for one finished work block (track or planned). */
@@ -810,6 +843,55 @@ export class HorologiumService {
       }
     }
     return [...map.values()];
+  }
+
+  private presentConsuetudo(run: {
+    id: number;
+    date: string;
+    startedAt: Date;
+    completedAt: Date | null;
+    skippedCount: number;
+    completedCount: number;
+    plannedSeconds: number;
+    elapsedMs: bigint;
+    xpAwarded: number;
+    routine: { name: string; icon: string | null };
+  }) {
+    const completedAt = run.completedAt ?? run.startedAt;
+    const elapsedMinutes = Math.max(
+      0,
+      Math.round(Number(run.elapsedMs) / 60_000),
+    );
+    const plannedMinutes = Math.max(0, Math.round(run.plannedSeconds / 60));
+    return {
+      id: run.id,
+      date: run.date,
+      workMinutes: plannedMinutes,
+      restMinutes: 0,
+      iterations: run.completedCount + run.skippedCount,
+      durationMinutes: elapsedMinutes || plannedMinutes,
+      presetId: null,
+      skillId: null,
+      skill: null,
+      xpAwarded: run.xpAwarded,
+      activityId: null,
+      note: `Consuetudo · ${run.routine.name}`,
+      completedAt,
+      outcome: 'consuetudo',
+      endedEarly: run.skippedCount > 0,
+      elapsedMinutes,
+      questRunId: null,
+      taskLabel: run.routine.name,
+      focusXpAwarded: 0,
+      disciplineXpAwarded: 0,
+      startedAt: run.startedAt,
+      watchName: null,
+      skillXp: [] as SkillXpRow[],
+      restTotalMinutes: 0,
+      kind: 'consuetudo' as const,
+      routineName: run.routine.name,
+      routineIcon: run.routine.icon,
+    };
   }
 
   private presentSession<

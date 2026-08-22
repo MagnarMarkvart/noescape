@@ -1,12 +1,15 @@
 import {
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   inject,
   OnInit,
   signal,
 } from '@angular/core';
 import { form, FormField, max, maxLength, min, required, submit } from '@angular/forms/signals';
+import { CharacterService } from '../character/character.service';
 import { RuneCheck } from '../shared/rune-check';
+import { NumberField } from '../shared/ui/number-field';
 import { TimedToast } from '../shared/timed-toast';
 import {
   HorologiumPresetPayload,
@@ -16,19 +19,23 @@ import {
 
 @Component({
   selector: 'app-settings-pomodoro-page',
-  imports: [FormField, RuneCheck],
+  imports: [FormField, RuneCheck, NumberField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings-pomodoro-page.html',
   styleUrl: './settings-pomodoro-page.css',
 })
 export class SettingsPomodoroPage implements OnInit {
   private readonly presets = inject(HorologiumPresetsService);
+  private readonly character = inject(CharacterService);
+  private readonly cdr = inject(ChangeDetectorRef);
   private readonly timed = new TimedToast();
 
   protected readonly rows = this.presets.rows;
   protected readonly toast = this.timed.value;
   protected readonly editingId = signal<number | null>(null);
   protected readonly saving = signal(false);
+  protected readonly autoContinue = signal(true);
+  protected readonly savingContinue = signal(false);
 
   protected readonly model = signal<HorologiumPresetPayload>({
     label: '',
@@ -52,6 +59,39 @@ export class SettingsPomodoroPage implements OnInit {
     this.presets.reload().subscribe({
       error: () => this.timed.set('Could not load presets'),
     });
+    this.character.getProfile().subscribe({
+      next: (p) => {
+        this.autoContinue.set(p.pomodoroAutoContinue !== false);
+      },
+      error: () => this.timed.set('Could not load session behavior'),
+    });
+  }
+
+  protected setAutoContinue(value: boolean, checked: boolean): void {
+    if (!checked || this.autoContinue() === value) {
+      this.cdr.markForCheck();
+      return;
+    }
+    this.autoContinue.set(value);
+    this.savingContinue.set(true);
+    this.character.updateSettings({ pomodoroAutoContinue: value }).subscribe({
+      next: () => {
+        this.savingContinue.set(false);
+        this.timed.set(
+          value
+            ? 'Rest and the next lap start on their own'
+            : 'Rest and the next lap wait for a click',
+        );
+        this.cdr.markForCheck();
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.autoContinue.set(!value);
+        this.savingContinue.set(false);
+        this.timed.set(err.error?.message ?? 'Could not save session behavior');
+        this.cdr.markForCheck();
+      },
+    });
+    this.cdr.markForCheck();
   }
 
   protected startCreate(): void {
@@ -78,6 +118,18 @@ export class SettingsPomodoroPage implements OnInit {
 
   protected setRestAfterLast(checked: boolean): void {
     this.model.update((m) => ({ ...m, restAfterLast: checked }));
+  }
+
+  protected setWorkMinutes(n: number): void {
+    this.model.update((m) => ({ ...m, workMinutes: n }));
+  }
+
+  protected setRestMinutes(n: number): void {
+    this.model.update((m) => ({ ...m, restMinutes: n }));
+  }
+
+  protected setIterations(n: number): void {
+    this.model.update((m) => ({ ...m, iterations: n }));
   }
 
   protected save(): void {

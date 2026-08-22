@@ -1,4 +1,3 @@
-import { DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -7,14 +6,25 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { form, FormField, required, submit } from '@angular/forms/signals';
-import { Skill } from '../skills/skill.model';
+import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import { RuneCheck } from '../shared/rune-check';
+import { SkillWeightList } from '../shared/skill-weight-list';
+import { ForgeShell } from '../shared/ui/forge-shell';
+import { NumberField } from '../shared/ui/number-field';
+import { SkillTreePicker } from '../shared/ui/skill-tree-picker';
 import { CharacterService } from '../character/character.service';
 import { TimedToast } from '../shared/timed-toast';
-import { boostsWealth } from '../shared/skill-weights';
+import {
+  addSkillWeight,
+  boostsWealth,
+  bumpSkillWeight,
+  removeSkillWeight,
+} from '../shared/skill-weights';
 import { centsToInput, parseMoneyToCents } from '../shared/money';
 import { API_BASE_URL } from '../core/api.config';
 import {
@@ -35,7 +45,15 @@ interface ForgeSubtask {
 
 @Component({
   selector: 'app-quest-forge-page',
-  imports: [RouterLink, FormField, DecimalPipe, RuneCheck],
+  imports: [
+    RouterLink,
+    FormField,
+    RuneCheck,
+    SkillWeightList,
+    ForgeShell,
+    SkillTreePicker,
+    NumberField,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-forge-page.html',
   styleUrl: './quest-forge-page.css',
@@ -54,8 +72,9 @@ export class QuestForgePage implements OnInit {
   protected readonly loading = signal(false);
   protected readonly editId = signal<number | null>(null);
   protected readonly scriptoriumWorkId = signal<number | null>(null);
-  protected readonly skills = signal<Skill[]>([]);
   protected readonly catalog = signal<QuestView[]>([]);
+  protected readonly skillTree = signal<SkillTree | null>(null);
+  protected readonly selectedCategory = signal<string | null>(null);
   protected readonly coverPreview = signal<string | null>(null);
   protected readonly coverDataUrl = signal<string | null>(null);
 
@@ -68,7 +87,6 @@ export class QuestForgePage implements OnInit {
   protected readonly skillReqSlug = signal('');
   protected readonly skillReqLevel = signal(1);
   protected readonly questReqs = signal<string[]>([]);
-  protected readonly skillPick = signal('');
   protected readonly skillWeights = signal<Array<{ slug: string; weight: number }>>(
     [],
   );
@@ -93,6 +111,46 @@ export class QuestForgePage implements OnInit {
   });
 
   protected readonly isEdit = computed(() => this.editId() !== null);
+  protected readonly fromCatalog = toSignal(
+    this.route.queryParamMap.pipe(map((p) => p.get('from') === 'catalog')),
+    {
+      initialValue: this.route.snapshot.queryParamMap.get('from') === 'catalog',
+    },
+  );
+  protected readonly heading = computed(() =>
+    this.isEdit() ? 'Amend quest' : 'Forge a quest',
+  );
+  protected readonly lede = computed(() =>
+    this.isEdit()
+      ? 'Changes apply even while the quest is in progress. Progress, timestamps, and missed days stay.'
+      : 'Structure the path: prerequisites, a daily journey, subtasks, and a destination.',
+  );
+  protected readonly backHref = computed(() => {
+    if (this.fromCatalog()) {
+      return '/quests';
+    }
+    const id = this.editId();
+    return id != null ? `/quests/${id}` : '/quests';
+  });
+  protected readonly backQuery = computed((): Record<string, string> =>
+    this.fromCatalog() ? { edit: '1' } : {},
+  );
+  protected readonly categories = computed(
+    () => this.skillTree()?.categories ?? [],
+  );
+  protected readonly skills = computed(() =>
+    this.categories().flatMap((c) => c.skills),
+  );
+  protected readonly subskills = computed(() => {
+    const category = this.selectedCategory();
+    if (!category) {
+      return [] as Skill[];
+    }
+    return this.categories().find((c) => c.category === category)?.skills ?? [];
+  });
+  protected readonly selectedSlugs = computed(() =>
+    this.skillWeights().map((row) => row.slug),
+  );
   protected readonly catalogChoices = computed(() => {
     const id = this.editId();
     return this.catalog().filter((q) => q.id !== id);
@@ -105,6 +163,16 @@ export class QuestForgePage implements OnInit {
   );
   protected readonly xpShares = computed(() =>
     splitQuestXp(this.createModel().totalXp, this.skillWeights()),
+  );
+  protected readonly weightShares = computed(() =>
+    this.xpShares().map((share) => {
+      const skill = this.skills().find((s) => s.slug === share.slug);
+      return {
+        ...share,
+        name: skill?.name ?? share.slug,
+        icon: skill?.icon,
+      };
+    }),
   );
   protected readonly weightsValid = computed(() => {
     const rows = this.skillWeights();
@@ -122,8 +190,8 @@ export class QuestForgePage implements OnInit {
   protected readonly currencyLabel = computed(() => this.character.currency());
 
   ngOnInit(): void {
-    this.skillsService.getAll().subscribe({
-      next: (rows) => this.skills.set(rows),
+    this.skillsService.getTree().subscribe({
+      next: (tree) => this.skillTree.set(tree),
     });
     this.questsService.list('all').subscribe({
       next: (rows) => this.catalog.set(rows),
@@ -142,11 +210,6 @@ export class QuestForgePage implements OnInit {
       this.loadScriptorium(workId);
     }
   }
-
-  protected readonly availableSkills = computed(() => {
-    const taken = new Set(this.skillWeights().map((s) => s.slug));
-    return this.skills().filter((s) => !taken.has(s.slug));
-  });
 
   protected onCover(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -225,21 +288,16 @@ export class QuestForgePage implements OnInit {
     this.skillReqSlug.set((event.target as HTMLSelectElement).value);
   }
 
-  protected setSkillReqLevel(event: Event): void {
-    this.skillReqLevel.set(Number((event.target as HTMLInputElement).value) || 1);
+  protected setSkillReqLevel(level: number): void {
+    this.skillReqLevel.set(Math.min(99, Math.max(1, level)));
   }
 
   protected setSubtaskDraft(event: Event): void {
     this.subtaskDraft.set((event.target as HTMLInputElement).value);
   }
 
-  protected setSkillPick(event: Event): void {
-    this.skillPick.set((event.target as HTMLSelectElement).value);
-  }
-
-  protected setTotalXp(event: Event): void {
-    const n = Math.max(0, Math.round(Number((event.target as HTMLInputElement).value) || 0));
-    this.createModel.update((m) => ({ ...m, totalXp: n }));
+  protected setTotalXp(n: number): void {
+    this.createModel.update((m) => ({ ...m, totalXp: Math.max(0, Math.round(n) || 0) }));
   }
 
   protected setWealthAmount(event: Event): void {
@@ -247,71 +305,22 @@ export class QuestForgePage implements OnInit {
     this.createModel.update((m) => ({ ...m, wealthAmount: value }));
   }
 
-  protected addSkillShare(): void {
-    const slug = this.skillPick();
-    if (!slug || this.skillWeights().some((s) => s.slug === slug)) {
-      return;
-    }
-    const remaining = this.weightRemaining();
-    this.skillWeights.update((rows) => {
-      if (rows.length === 0) {
-        return [{ slug, weight: this.weightTotal }];
-      }
-      if (remaining > 0) {
-        return [...rows, { slug, weight: remaining }];
-      }
-      const donor = rows.reduce((best, s) => (s.weight > best.weight ? s : best));
-      if (donor.weight <= 1) {
-        return rows;
-      }
-      return [
-        ...rows.map((s) =>
-          s.slug === donor.slug ? { ...s, weight: s.weight - 1 } : s,
-        ),
-        { slug, weight: 1 },
-      ];
-    });
-    this.skillPick.set('');
+  protected selectCategory(category: string): void {
+    this.selectedCategory.set(category);
   }
 
-  protected bumpWeight(slug: string, delta: number): void {
-    this.skillWeights.update((rows) => {
-      const current = rows.find((s) => s.slug === slug);
-      if (!current) {
-        return rows;
-      }
-      const next = current.weight + delta;
-      if (next < 1) {
-        return rows;
-      }
-      const spentOthers = rows
-        .filter((s) => s.slug !== slug)
-        .reduce((n, s) => n + s.weight, 0);
-      if (spentOthers + next > this.weightTotal) {
-        return rows;
-      }
-      return rows.map((s) => (s.slug === slug ? { ...s, weight: next } : s));
-    });
+  protected pickSkill(skill: Skill): void {
+    this.skillWeights.set(addSkillWeight(this.skillWeights(), skill.slug));
+  }
+
+  protected bumpWeight(event: { slug: string; delta: number }): void {
+    this.skillWeights.set(
+      bumpSkillWeight(this.skillWeights(), event.slug, event.delta),
+    );
   }
 
   protected removeSkillShare(slug: string): void {
-    this.skillWeights.update((rows) => {
-      const rest = rows.filter((s) => s.slug !== slug);
-      if (rest.length === 0) {
-        return [];
-      }
-      if (rest.length === 1) {
-        return [{ ...rest[0], weight: this.weightTotal }];
-      }
-      const spent = rest.reduce((n, s) => n + s.weight, 0);
-      const extra = this.weightTotal - spent;
-      if (extra <= 0) {
-        return rest;
-      }
-      return rest.map((s, i) =>
-        i === 0 ? { ...s, weight: s.weight + extra } : s,
-      );
-    });
+    this.skillWeights.set(removeSkillWeight(this.skillWeights(), slug));
   }
 
   protected setCommitment(event: Event): void {

@@ -33,6 +33,30 @@ export class RoutinesController {
     return this.routines.access(this.isDev(dev));
   }
 
+  @Get('runs/calendar')
+  runCalendar(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('dev') dev?: string,
+  ) {
+    return this.routines.runCalendar(from ?? '', to ?? '', this.isDev(dev));
+  }
+
+  @Get('runs')
+  listRuns(
+    @Query('date') date?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('dev') dev?: string,
+  ) {
+    return this.routines.listRuns(
+      date,
+      limit ? Number(limit) : 50,
+      offset ? Number(offset) : 0,
+      this.isDev(dev),
+    );
+  }
+
   @Post()
   create(@Body() body: RoutineWriteInput, @Query('dev') dev?: string) {
     return this.routines.create(body, this.isDev(dev));
@@ -60,12 +84,12 @@ export class RoutinesController {
   @Post(':id/complete')
   complete(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { steps?: RoutineStepLogInput[] },
+    @Body() body: { steps?: RoutineStepLogInput[]; notes?: string },
     @Query('dev') dev?: string,
   ) {
     return this.routines.completeRun(
       id,
-      { steps: body?.steps ?? [] },
+      { steps: body?.steps ?? [], notes: body?.notes },
       this.isDev(dev),
     );
   }

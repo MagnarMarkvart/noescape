@@ -8,10 +8,18 @@ import {
 } from '@angular/core';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { form, FormField, required, submit } from '@angular/forms/signals';
-import { DEFAULT_HABIT_ICON, HABIT_ICON_GROUPS } from '../habits/habit-icons';
+import { DEFAULT_HABIT_ICON } from '../habits/habit-icons';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import { SkillWeightList } from '../shared/skill-weight-list';
+import { ForgeShell } from '../shared/ui/forge-shell';
+import { ForgeRow, ForgeTable, ForgeTableColumn } from '../shared/ui/forge-table';
+import { IconField } from '../shared/ui/icon-field';
+import { EffortField } from '../shared/ui/effort-field';
+import { IconPicker } from '../shared/ui/icon-picker';
+import { NumberField } from '../shared/ui/number-field';
+import { SkillTreePicker } from '../shared/ui/skill-tree-picker';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import {
   addSkillWeight,
   bumpSkillWeight,
@@ -21,25 +29,46 @@ import {
   skillWeightsValid,
 } from '../shared/skill-weights';
 import { TimedToast } from '../shared/timed-toast';
-import { EFFORT_LEVELS } from '../dailies/daily.model';
 import { splitQuestXp } from '../quests/quest.model';
-import {
-  CONSUETUDO_DEMO_ROUTINE,
-  DEFAULT_ROUTINE_ICON,
-  SAMPLE_MORNING_STEPS,
-} from './consuetudo-demo';
+import { DEFAULT_ROUTINE_ICON } from './consuetudo-demo';
 import { calculateConsuetudoXp } from './consuetudo-xp';
 import { RoutinesService } from './routines.service';
 
 type DraftStep = {
+  id: number;
   title: string;
   icon: string;
-  durationMinutes: number;
+  durationMinutes: number | null;
 };
+
+let nextDraftStepId = 1;
+function draftStepId(): number {
+  const id = nextDraftStepId;
+  nextDraftStepId += 1;
+  return id;
+}
+function noteDraftStepId(id: number): void {
+  if (id >= nextDraftStepId) {
+    nextDraftStepId = id + 1;
+  }
+}
 
 @Component({
   selector: 'app-consuetudo-edit-page',
-  imports: [RouterLink, FormField, SkillWeightList],
+  imports: [
+    RouterLink,
+    FormField,
+    SkillWeightList,
+    ForgeShell,
+    ForgeTable,
+    ForgeRow,
+    EffortField,
+    IconField,
+    IconPicker,
+    NumberField,
+    SkillTreePicker,
+    UiIconBtn,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './consuetudo-edit-page.html',
   styleUrl: './consuetudo-edit-page.css',
@@ -52,40 +81,23 @@ export class ConsuetudoEditPage implements OnInit {
   private readonly timed = new TimedToast();
 
   protected readonly toast = this.timed.value;
-  protected readonly iconGroups = HABIT_ICON_GROUPS;
-  protected readonly iconGroupId = signal(HABIT_ICON_GROUPS[2].id);
-  protected readonly stepIconGroupId = signal(HABIT_ICON_GROUPS[2].id);
-  protected readonly stepIconIndex = signal<number | null>(null);
   protected readonly creating = signal(false);
-  protected readonly effortLevels = EFFORT_LEVELS;
   protected readonly skillTree = signal<SkillTree | null>(null);
   protected readonly selectedCategory = signal<string | null>(null);
   protected readonly skillWeights = signal<SkillWeight[]>([]);
-  protected readonly steps = signal<DraftStep[]>(
-    SAMPLE_MORNING_STEPS.map((s) => ({ ...s })),
-  );
+  protected readonly steps = signal<DraftStep[]>([]);
   protected readonly editId = signal<number | null>(null);
   protected readonly canCreate = signal(true);
 
   protected readonly createModel = signal({
-    name: 'Morning Routine',
-    icon: DEFAULT_ROUTINE_ICON,
+    name: '',
+    icon: '',
     effortLevel: 3,
   });
   protected readonly createForm = form(this.createModel, (p) => {
     required(p.name);
   });
 
-  protected readonly activeIconGroup = computed(
-    () =>
-      this.iconGroups.find((g) => g.id === this.iconGroupId()) ??
-      this.iconGroups[0],
-  );
-  protected readonly activeStepIconGroup = computed(
-    () =>
-      this.iconGroups.find((g) => g.id === this.stepIconGroupId()) ??
-      this.iconGroups[0],
-  );
   protected readonly categories = computed(
     () => this.skillTree()?.categories ?? [],
   );
@@ -103,11 +115,14 @@ export class ConsuetudoEditPage implements OnInit {
   );
   protected readonly weightShares = computed(() => {
     const xp = this.previewXp().totalXp;
-    return splitQuestXp(xp, this.skillWeights()).map((share) => ({
-      ...share,
-      name:
-        this.allSkills().find((s) => s.slug === share.slug)?.name ?? share.slug,
-    }));
+    return splitQuestXp(xp, this.skillWeights()).map((share) => {
+      const skill = this.allSkills().find((s) => s.slug === share.slug);
+      return {
+        ...share,
+        name: skill?.name ?? share.slug,
+        icon: skill?.icon,
+      };
+    });
   });
   protected readonly weightRemaining = computed(() =>
     skillWeightRemaining(this.skillWeights()),
@@ -130,6 +145,16 @@ export class ConsuetudoEditPage implements OnInit {
   protected readonly heading = computed(() =>
     this.editId() ? 'Edit practice' : 'New practice',
   );
+  protected readonly selectedSlugs = computed(() =>
+    this.skillWeights().map((row) => row.slug),
+  );
+
+  protected readonly stepColumns: ForgeTableColumn[] = [
+    { key: 'icon', label: 'Icon', width: '2.35rem' },
+    { key: 'task', label: 'Task', width: 'minmax(0, 1fr)' },
+    { key: 'time', label: 'Time (min)', width: '5.2rem' },
+    { key: 'remove', label: '', width: '2.35rem' },
+  ];
 
   ngOnInit(): void {
     const cached = this.skillsService.peekTree();
@@ -153,11 +178,16 @@ export class ConsuetudoEditPage implements OnInit {
             });
             this.skillWeights.set(row.skillWeights);
             this.steps.set(
-              row.steps.map((s) => ({
-                title: s.title,
-                icon: s.icon || DEFAULT_HABIT_ICON,
-                durationMinutes: s.durationMinutes,
-              })),
+              row.steps.map((s) => {
+                const id = s.id > 0 ? s.id : draftStepId();
+                noteDraftStepId(id);
+                return {
+                  id,
+                  title: s.title,
+                  icon: s.icon || DEFAULT_HABIT_ICON,
+                  durationMinutes: s.durationMinutes,
+                };
+              }),
             );
           },
           error: (err: { error?: { message?: string } }) => {
@@ -176,7 +206,6 @@ export class ConsuetudoEditPage implements OnInit {
           }
         },
       });
-      this.skillWeights.set(CONSUETUDO_DEMO_ROUTINE.skillWeights);
     }
   }
 
@@ -184,65 +213,50 @@ export class ConsuetudoEditPage implements OnInit {
     this.createModel.update((m) => ({ ...m, icon: glyph }));
   }
 
-  protected setEffort(raw: string): void {
-    const effortLevel = Math.min(10, Math.max(1, Math.round(Number(raw) || 3)));
+  protected setEffort(level: number): void {
+    const effortLevel = Math.min(10, Math.max(1, Math.round(level || 3)));
     this.createModel.update((m) => ({ ...m, effortLevel }));
   }
 
-  protected setIconGroup(id: string): void {
-    this.iconGroupId.set(id);
-  }
-
-  protected setStepIconGroup(id: string): void {
-    this.stepIconGroupId.set(id);
-  }
-
-  protected toggleStepIcon(index: number): void {
-    this.stepIconIndex.update((cur) => (cur === index ? null : index));
-  }
-
-  protected pickStepIcon(index: number, glyph: string): void {
+  protected setStepIcon(id: number, glyph: string): void {
     this.steps.update((rows) =>
-      rows.map((row, i) => (i === index ? { ...row, icon: glyph } : row)),
+      rows.map((row) => (row.id === id ? { ...row, icon: glyph } : row)),
     );
   }
 
-  protected setStepTitle(index: number, title: string): void {
+  protected setStepTitle(id: number, title: string): void {
     this.steps.update((rows) =>
-      rows.map((row, i) => (i === index ? { ...row, title } : row)),
+      rows.map((row) => (row.id === id ? { ...row, title } : row)),
     );
   }
 
-  protected setStepMinutes(index: number, raw: string): void {
-    const durationMinutes = Math.max(1, Math.round(Number(raw) || 1));
+  protected setStepMinutes(id: number, durationMinutes: number): void {
     this.steps.update((rows) =>
-      rows.map((row, i) => (i === index ? { ...row, durationMinutes } : row)),
+      rows.map((row) => (row.id === id ? { ...row, durationMinutes } : row)),
     );
   }
 
   protected addStep(): void {
     this.steps.update((rows) => [
       ...rows,
-      { title: '', icon: DEFAULT_ROUTINE_ICON, durationMinutes: 5 },
+      {
+        id: draftStepId(),
+        title: '',
+        icon: '',
+        durationMinutes: null,
+      },
     ]);
   }
 
-  protected removeStep(index: number): void {
-    this.steps.update((rows) => rows.filter((_, i) => i !== index));
-    if (this.stepIconIndex() === index) {
-      this.stepIconIndex.set(null);
-    }
+  protected removeStep(id: number): void {
+    this.steps.update((rows) => rows.filter((row) => row.id !== id));
   }
 
   protected selectCategory(category: string): void {
     this.selectedCategory.set(category);
   }
 
-  protected selectSkill(skillId: number): void {
-    const skill = this.allSkills().find((s) => s.id === skillId);
-    if (!skill) {
-      return;
-    }
+  protected pickSkill(skill: Skill): void {
     this.skillWeights.set(addSkillWeight(this.skillWeights(), skill.slug));
   }
 
@@ -254,13 +268,6 @@ export class ConsuetudoEditPage implements OnInit {
 
   protected removeWeight(slug: string): void {
     this.skillWeights.set(removeSkillWeight(this.skillWeights(), slug));
-  }
-
-  protected hasSkill(skillId: number): boolean {
-    const skill = this.allSkills().find((s) => s.id === skillId);
-    return Boolean(
-      skill && this.skillWeights().some((row) => row.slug === skill.slug),
-    );
   }
 
   protected save(): void {

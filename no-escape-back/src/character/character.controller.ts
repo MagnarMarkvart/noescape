@@ -37,6 +37,7 @@ export class CharacterController {
       weekStartsOn?: number;
       menuAutoToggleMobile?: boolean;
       menuAutoToggleDesktop?: boolean;
+      pomodoroAutoContinue?: boolean;
       currency?: string;
     },
   ) {

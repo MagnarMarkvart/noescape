@@ -72,6 +72,7 @@ export class CharacterService implements OnModuleInit {
       weekStartsOn: isWeekStart(character.weekStartsOn) ? character.weekStartsOn : 1,
       menuAutoToggleMobile: character.menuAutoToggleMobile !== false,
       menuAutoToggleDesktop: character.menuAutoToggleDesktop !== false,
+      pomodoroAutoContinue: character.pomodoroAutoContinue !== false,
       wealthCents: character.wealthCents ?? 0,
       currency: isCurrency(character.currency)
         ? character.currency
@@ -98,6 +99,7 @@ export class CharacterService implements OnModuleInit {
     weekStartsOn?: number;
     menuAutoToggleMobile?: boolean;
     menuAutoToggleDesktop?: boolean;
+    pomodoroAutoContinue?: boolean;
     currency?: string;
   }) {
     const data: {
@@ -107,6 +109,7 @@ export class CharacterService implements OnModuleInit {
       weekStartsOn?: number;
       menuAutoToggleMobile?: boolean;
       menuAutoToggleDesktop?: boolean;
+      pomodoroAutoContinue?: boolean;
       currency?: CurrencyId;
     } = {};
     if (input.nickname !== undefined) {
@@ -138,6 +141,9 @@ export class CharacterService implements OnModuleInit {
     }
     if (input.menuAutoToggleDesktop !== undefined) {
       data.menuAutoToggleDesktop = Boolean(input.menuAutoToggleDesktop);
+    }
+    if (input.pomodoroAutoContinue !== undefined) {
+      data.pomodoroAutoContinue = Boolean(input.pomodoroAutoContinue);
     }
     if (input.currency !== undefined) {
       const code = String(input.currency).trim().toUpperCase();

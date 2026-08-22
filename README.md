@@ -98,9 +98,22 @@ goalBonus = round(blockXp × iterations × 1.5)
 API:
 
 - `GET /horologium/preview?workMinutes=&restMinutes=&iterations=&mode=planned|adhoc`
-- `GET /horologium/sessions`
+- `GET /horologium/sessions?date=YYYY-MM-DD` — finished Sessio/Track **and** completed Consuetudo walks (`kind: 'consuetudo'`). Walk step detail stays on the Consuetudo walk log; Horo Log only links there.
+- `GET /horologium/sessions/calendar?from=&to=`
 - `POST /horologium/blocks` `{ workMinutes, restMinutes, mode, presetId? }`
 - `POST /horologium/goal-bonus` `{ workMinutes, restMinutes, iterations, presetId? }`
+
+Live timer state (pause/resume across refresh) is **not** in those session rows. It lives on `/clocks`:
+
+- `GET /clocks` — snapshots + `serverNow` (Sessio, Track, Consuetudo, running Vigilia watches)
+- `GET /clocks/stream` — SSE `clock.snapshot` events
+- `POST /clocks/sessio/start` · `POST /clocks/track/start`
+- `POST /clocks/consuetudo/start` `{ routineId }`
+- `POST /clocks/vigilia/start|pause` `{ watchId }`
+- `POST /clocks/:kind/pause|resume|skip|stop`
+- `POST /clocks/consuetudo/complete-step` · `skip-step`
+- `PATCH /clocks/:kind/notes` — live notes while a clock is running (UI shows them in the running view and Scenery only)
+- `PATCH /clocks/:kind/bound-daily`
 
 ### Dailies board structure
 
@@ -196,6 +209,8 @@ Source of truth: `no-escape-back/src/xp/consuetudo-xp.util.ts`.
 
 - `GET /dailies?date=YYYY-MM-DD` — board for a day (auto-seals any older unlogged days into Quest Logs)
 - `PUT /dailies/slots` — create/update a slot
+- `GET /dailies/templates` · `POST /dailies/templates` · `PATCH|DELETE /dailies/templates/:id` — saved default tasks
+- `GET /dailies/quick` · `POST /dailies/quick` — one-off log from Dashboard / Character (same effort × duration XP as a Regular daily)
 - `POST /dailies/:id/complete` — complete + award XP
 - `POST /dailies/:id/uncomplete` — undo completion and reverse awarded XP
 - `DELETE /dailies/:id` — clear an incomplete slot
@@ -211,4 +226,4 @@ Unsealed prior days with filled tasks **block** working ahead. Seal them manuall
 
 ### UI notes
 
-Forms use Angular **Signal Forms** (`@angular/forms/signals`) — not template-driven / reactive legacy forms. Dailies skill / effort / duration pickers are tile-based (parent skill → subskill icons; effort 1–10; duration 15m→4h + custom).
+Forms use Angular **Signal Forms** (`@angular/forms/signals`) — not template-driven / reactive legacy forms. Dailies skill pickers are tile-based (parent skill → subskill icons). **Effort / Complexity** in Forge views is a 1–10 slider dial (same values as the old chips). Duration still uses presets (15m→4h + custom). Default-tasks **Back** remembers whether you opened the list from Character, Dailies, or Dashboard.

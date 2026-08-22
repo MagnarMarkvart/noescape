@@ -18,86 +18,189 @@
     <p class="toast" role="status">{{ toast() }}</p>
   }
 
-  @if (loading() && !tree()) {
+  @if (loading() && todayDailies().length === 0 && todayQuests().length === 0) {
     <p class="state">Loading…</p>
   } @else if (error()) {
     <p class="state error">{{ error() }}</p>
   } @else {
-    <div class="dash-grid">
-      <section class="panel skills-panel" aria-label="Skill tree">
-        <header class="panel-head">
-          <h2>Skills</h2>
-          <a routerLink="/character">Character →</a>
-        </header>
-        @if (tree(); as skillTree) {
-          <div class="skill-cats">
-            @for (cat of skillTree.categories; track cat.category) {
-              <div class="skill-cat">
-                <p class="cat-label">{{ cat.label }}</p>
-                <ul class="skill-dots">
-                  @for (skill of cat.skills; track skill.id) {
-                    <li>
-                      <a
-                        class="skill-dot"
-                        routerLink="/character"
-                        [attr.aria-label]="skillTip(skill)"
-                      >
-                        <span class="dot-icon" aria-hidden="true">{{ skill.icon }}</span>
-                        <span class="dot-lv">{{ skill.level }}</span>
-                        <span class="tip" role="tooltip">
-                          <strong>{{ skill.name }}</strong>
-                          <span>Level {{ skill.level }} / {{ skill.maxLevel }}</span>
-                          <span>{{ skill.xp | number }} XP</span>
-                          @if (skill.level >= skill.maxLevel) {
-                            <span>Maxed</span>
-                          } @else {
-                            <span>{{ skill.progress.percent }}% · {{ skill.xpToNext | number }} to next</span>
-                          }
-                        </span>
-                      </a>
-                    </li>
-                  }
-                </ul>
-              </div>
-            }
+    <div class="dash-grid" [class.with-clock]="!!liveKind()">
+      @if (liveKind(); as kind) {
+        <a
+          class="panel clock-panel live"
+          routerLink="/horologium"
+          [attr.data-phase]="clockPhase()"
+          [attr.aria-label]="'Horologium, ' + clockKindLabel() + ' ' + clockTime()"
+        >
+          <header class="panel-head">
+            <h2>Horologium</h2>
+            <span class="go">Open →</span>
+          </header>
+          <div class="clock-body">
+            <div class="mini-ring" [attr.data-phase]="clockPhase()">
+              <svg viewBox="0 0 100 100" aria-hidden="true">
+                <circle class="track" cx="50" cy="50" r="42" />
+                <circle
+                  class="progress"
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  [style.stroke-dashoffset]="ringDashOffset()"
+                />
+              </svg>
+              <p class="clock-time">{{ clockTime() }}</p>
+            </div>
+            <div class="clock-meta">
+              <p class="clock-phase">{{ clockKindLabel() }}</p>
+              @if (clockTask()) {
+                <p class="clock-task">{{ clockTask() }}</p>
+              }
+              <p class="clock-session">{{ clockSession() }}</p>
+            </div>
           </div>
+        </a>
+      }
+
+      <section class="panel dailies-panel" aria-label="Today’s dailies">
+        <header class="panel-head">
+          <h2>Dailies</h2>
+          <a routerLink="/dailies">Dailies →</a>
+        </header>
+        @if (todayDailies().length === 0) {
+          <p class="empty">No dailies for today.</p>
+        } @else {
+          <ul class="rows">
+            @for (slot of todayDailies(); track slot.id) {
+              <li class="row" [class.finished]="slot.completed">
+                <span class="row-body">
+                  <strong>{{ slot.title }}</strong>
+                  <small>
+                    {{ skillLine(slot) }}
+                    · {{ (slot.completed ? slot.xpAwarded : slot.projectedXp) | number }} XP
+                    · {{ elapsedLabel(slot.elapsedMs) }}
+                  </small>
+                </span>
+                @if (slot.completed) {
+                  <span class="done-flag">Done</span>
+                } @else {
+                  <button
+                    type="button"
+                    class="done-btn"
+                    [disabled]="busyDailyId() === slot.id"
+                    (click)="completeDaily(slot)"
+                  >
+                    {{ busyDailyId() === slot.id ? '…' : 'Done' }}
+                  </button>
+                }
+              </li>
+            }
+          </ul>
         }
       </section>
 
-      <a
-        class="panel clock-panel"
-        routerLink="/horologium"
-        [attr.data-phase]="phase()"
-        [class.live]="clockLive()"
-        [attr.aria-label]="'Horologium, ' + clockCaption() + ' ' + clockTime()"
-      >
+      <section class="panel scriptorium-panel" aria-label="Approaching Scriptorium dues">
         <header class="panel-head">
-          <h2>Horologium</h2>
-          <span class="go">Open →</span>
+          <h2>Scriptorium</h2>
+          <a routerLink="/scriptorium">Vault →</a>
         </header>
-        <div class="clock-body">
-          <div class="mini-ring" [attr.data-phase]="phase()">
-            <svg viewBox="0 0 100 100" aria-hidden="true">
-              <circle class="track" cx="50" cy="50" r="42" />
-              <circle
-                class="progress"
-                cx="50"
-                cy="50"
-                r="42"
-                [style.stroke-dashoffset]="ringDashOffset()"
-              />
-            </svg>
-            <p class="clock-time">{{ clockTime() }}</p>
-          </div>
-          <div class="clock-meta">
-            <p class="clock-phase">{{ clockCaption() }}</p>
-            @if (taskLabel()) {
-              <p class="clock-task">{{ taskLabel() }}</p>
+        @if (dueWorks().length === 0) {
+          <p class="empty">No dated works approaching.</p>
+        } @else {
+          <ul class="rows">
+            @for (w of dueWorks(); track w.id) {
+              <li class="row" [attr.data-urgency]="w.urgency">
+                <span class="row-icon" aria-hidden="true">{{ w.icon || '📜' }}</span>
+                <span class="row-body">
+                  <strong>{{ w.title }}</strong>
+                  <small>
+                    {{ workDueCaption(w) }}
+                    · {{ workTierName(w.tier) }}
+                    · Effort {{ w.effort }}
+                    · {{ durationLabel(w.durationMinutes) }}
+                  </small>
+                </span>
+                <a class="done-btn log" [routerLink]="['/scriptorium', w.id]">Open</a>
+              </li>
             }
-            <p class="clock-session">{{ sessionLabel() }}</p>
+          </ul>
+        }
+      </section>
+
+      <section class="panel quests-panel" aria-label="Active quests">
+        <header class="panel-head">
+          <h2>Quests</h2>
+          <a routerLink="/quests">Quests →</a>
+        </header>
+        @if (todayQuests().length === 0) {
+          <p class="empty">No active quests.</p>
+        } @else {
+          <ul class="quest-list">
+            @for (q of todayQuests(); track q.id) {
+              <li
+                class="quest-card toned"
+                [class.due]="q.journeyDueToday"
+                [class.settled]="!q.journeyDueToday"
+              >
+                <div class="quest-line">
+                  <a class="quest-title" [routerLink]="['/quests', q.id, 'run']">
+                    <strong>{{ q.name }}</strong>
+                    <small>{{ q.progressPercent }}%</small>
+                  </a>
+                  @if (q.canLogJourney) {
+                    <app-ui-icon-btn
+                      icon="log"
+                      [label]="'Log ' + (q.journeyLabel || q.name)"
+                      [disabled]="busyQuestKey() === 'j:' + q.run?.id"
+                      (clicked)="logJourney(q)"
+                    />
+                  }
+                </div>
+                @if (q.journeyLabel || q.summary) {
+                  <p class="quest-copy">{{ q.journeyLabel || q.summary }}</p>
+                }
+                @if (dueSideCount(q); as n) {
+                  <p class="due-side">{{ n }} due today</p>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      <section class="panel skills-panel" aria-label="Recent skill levels">
+        <header class="panel-head">
+          <h2>Skills</h2>
+          <div class="panel-tools">
+            <app-ui-icon-btn
+              icon="wrench"
+              label="Default tasks"
+              href="/dailies/defaults"
+              [queryParams]="{ from: 'status' }"
+            />
+            <a routerLink="/character">Tree →</a>
           </div>
-        </div>
-      </a>
+        </header>
+        <app-quick-task-panel [compact]="true" (logged)="onQuickLogged()" />
+        @if (levelLogs().length === 0) {
+          <p class="empty">No level changes yet.</p>
+        } @else {
+          <ul class="level-log">
+            @for (row of levelLogs(); track row.id) {
+              <li [class.down]="row.toLevel < row.fromLevel">
+                <span class="row-icon" aria-hidden="true">{{ row.skill.icon || '◆' }}</span>
+                <span class="row-body">
+                  <strong>{{ row.skill.name }}</strong>
+                  <small>
+                    Lv {{ row.fromLevel }} → {{ row.toLevel }}
+                    @if (row.levelsGained > 1 || row.levelsGained < -1) {
+                      ({{ row.levelsGained > 0 ? '+' : '' }}{{ row.levelsGained }})
+                    }
+                  </small>
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
 
       <section class="panel habits-panel" aria-label="Active habits">
         <header class="panel-head">
@@ -129,130 +232,6 @@
                     (click)="completeHabit(h)"
                   >
                     {{ busyHabitId() === h.id ? '…' : 'Done' }}
-                  </button>
-                }
-              </li>
-            }
-          </ul>
-        }
-      </section>
-
-      <section class="panel quests-panel" aria-label="Active quests">
-        <header class="panel-head">
-          <h2>Quests</h2>
-          <a routerLink="/quests">Quests →</a>
-        </header>
-        @if (todayQuests().length === 0) {
-          <p class="empty">No active quests.</p>
-        } @else {
-          <ul class="quest-list">
-            @for (q of todayQuests(); track q.id) {
-              <li class="quest-card">
-                <a class="quest-title" [routerLink]="['/quests', q.id, 'run']">
-                  {{ q.name }}
-                  <small>{{ q.progressPercent }}%</small>
-                </a>
-                @if (q.journeyDueToday) {
-                  <p class="due">Due today{{ q.journeyLabel ? ' · ' + q.journeyLabel : '' }}</p>
-                }
-                @if (todayTasks(q).length) {
-                  <ul class="task-list">
-                    @for (t of todayTasks(q); track t.id) {
-                      <li class="row slim">
-                        <span class="row-body">
-                          {{ t.title }}
-                          @if (t.gatesJourney) {
-                            <em class="gate">Gate</em>
-                          }
-                          @if (t.elapsedMs) {
-                            <small>{{ elapsedLabel(t.elapsedMs) }}</small>
-                          }
-                        </span>
-                        <button
-                          type="button"
-                          class="done-btn"
-                          [disabled]="busyQuestKey() === 't:' + t.id"
-                          (click)="completeSubtask(q, t)"
-                        >
-                          {{ busyQuestKey() === 't:' + t.id ? '…' : 'Done' }}
-                        </button>
-                      </li>
-                    }
-                  </ul>
-                }
-                @if (q.canLogJourney) {
-                  <button
-                    type="button"
-                    class="done-btn log"
-                    [disabled]="busyQuestKey() === 'j:' + q.run?.id"
-                    (click)="logJourney(q)"
-                  >
-                    {{ busyQuestKey() === 'j:' + q.run?.id ? '…' : 'Log today' }}
-                  </button>
-                }
-              </li>
-            }
-          </ul>
-        }
-      </section>
-
-      <section class="panel scriptorium-panel" aria-label="Approaching Scriptorium dues">
-        <header class="panel-head">
-          <h2>Scriptorium</h2>
-          <a routerLink="/scriptorium">Vault →</a>
-        </header>
-        @if (dueWorks().length === 0) {
-          <p class="empty">No dated works approaching.</p>
-        } @else {
-          <ul class="rows">
-            @for (w of dueWorks(); track w.id) {
-              <li class="row" [attr.data-urgency]="w.urgency">
-                <span class="row-icon" aria-hidden="true">{{ w.icon || '📜' }}</span>
-                <span class="row-body">
-                  <strong>{{ w.title }}</strong>
-                  <small>
-                    {{ workDueCaption(w) }}
-                    · {{ workTierName(w.tier) }}
-                    · Effort {{ w.effort }}
-                    · {{ durationLabel(w.durationMinutes) }}
-                  </small>
-                </span>
-                <a class="done-btn log" [routerLink]="['/scriptorium']" [queryParams]="{ work: w.id }">Open</a>
-              </li>
-            }
-          </ul>
-        }
-      </section>
-
-      <section class="panel dailies-panel" aria-label="Today’s dailies">
-        <header class="panel-head">
-          <h2>Dailies</h2>
-          <a routerLink="/dailies">Dailies →</a>
-        </header>
-        @if (todayDailies().length === 0) {
-          <p class="empty">No dailies for today.</p>
-        } @else {
-          <ul class="rows">
-            @for (slot of todayDailies(); track slot.id) {
-              <li class="row" [class.finished]="slot.completed">
-                <span class="row-body">
-                  <strong>{{ slot.title }}</strong>
-                  <small>
-                    {{ skillLine(slot) }}
-                    · {{ (slot.completed ? slot.xpAwarded : slot.projectedXp) | number }} XP
-                    · {{ elapsedLabel(slot.elapsedMs) }}
-                  </small>
-                </span>
-                @if (slot.completed) {
-                  <span class="done-flag">Done</span>
-                } @else {
-                  <button
-                    type="button"
-                    class="done-btn"
-                    [disabled]="busyDailyId() === slot.id"
-                    (click)="completeDaily(slot)"
-                  >
-                    {{ busyDailyId() === slot.id ? '…' : 'Done' }}
                   </button>
                 }
               </li>

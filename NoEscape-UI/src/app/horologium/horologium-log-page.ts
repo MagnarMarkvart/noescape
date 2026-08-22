@@ -9,8 +9,8 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CharacterService } from '../character/character.service';
-import { DateNav } from '../shared/date-nav';
 import { CalendarMarks } from '../shared/rune-calendar';
+import { HistoryLog } from '../shared/ui/history-log';
 import { todayInZone } from '../shared/time';
 import { HorologiumApiService } from './horologium-api.service';
 import {
@@ -20,13 +20,10 @@ import {
 
 @Component({
   selector: 'app-horologium-log-page',
-  imports: [RouterLink, DecimalPipe, DateNav],
+  imports: [DecimalPipe, HistoryLog, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './horologium-log-page.html',
   styleUrl: './horologium-log-page.css',
-  host: {
-    '(document:keydown.escape)': 'onEscape()',
-  },
 })
 export class HorologiumLogPage implements OnInit {
   private readonly api = inject(HorologiumApiService);
@@ -40,6 +37,18 @@ export class HorologiumLogPage implements OnInit {
   protected readonly calendarMarks = signal<CalendarMarks>({});
 
   protected readonly todayIso = computed(() => this.character.todayIso());
+  protected readonly lede = computed(() => {
+    const n = this.total();
+    return `${n} session${n === 1 ? '' : 's'} on ${this.formatDate(this.selectedDate())}`;
+  });
+  protected readonly detailTitle = computed(() => {
+    const row = this.selected();
+    return row ? this.formatDate(row.date) : null;
+  });
+  protected readonly detailKicker = computed(() => {
+    const row = this.selected();
+    return row ? this.outcomeLabel(row) : '';
+  });
 
   ngOnInit(): void {
     this.loadDay(this.selectedDate());
@@ -68,10 +77,6 @@ export class HorologiumLogPage implements OnInit {
 
   protected close(): void {
     this.selected.set(null);
-  }
-
-  protected onEscape(): void {
-    this.close();
   }
 
   protected startIso(row: HorologiumSessionRecord): string {
@@ -169,6 +174,8 @@ export class HorologiumLogPage implements OnInit {
         return 'Task settled';
       case 'task_early':
         return 'Ended after task';
+      case 'consuetudo':
+        return 'Consuetudo';
       default:
         return row.endedEarly ? 'Ended early' : 'Session';
     }

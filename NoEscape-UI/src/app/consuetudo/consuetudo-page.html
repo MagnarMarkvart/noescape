@@ -19,12 +19,13 @@
     </div>
     <nav class="toolbar-links">
       @if (!demo() && access()?.canCreate) {
-        <a routerLink="/consuetudo/new">New practice</a>
+        <app-ui-icon-btn icon="wrench" label="New practice" href="/consuetudo/new" />
       }
       @if (demo()) {
         <a [routerLink]="unlockQuestPath()">Unlock via quest</a>
       } @else {
-        <a routerLink="/horologium">Horologium →</a>
+        <app-ui-icon-btn icon="log" label="Walk log" href="/consuetudo/log" />
+        <app-ui-icon-btn icon="stopwatch" label="Horologium" href="/horologium" />
       }
     </nav>
   </header>
@@ -72,25 +73,44 @@
           </ol>
           @if (r.runs[0]; as run) {
             <aside class="last-run" aria-label="Last completion">
-              <p>
-                Last walk {{ formatDate(run.date) }}
-                · +{{ run.xpAwarded }} XP
-                @if (run.bonusXp > 0) {
-                  <span class="bonus">incl. {{ run.bonusXp }} bonus</span>
-                }
-              </p>
-              <ul>
-                @for (s of run.steps; track s.id) {
-                  <li [class.skipped]="s.outcome === 'SKIPPED'">
-                    <span aria-hidden="true">{{ s.icon || '◆' }}</span>
-                    {{ s.title }}
-                    <span class="delta">{{ formatDelta(s.deltaMs) }}</span>
-                    @if (s.outcome === 'SKIPPED') {
-                      <span class="skip-flag">Skip</span>
+              <div class="last-run-bar">
+                <button
+                  type="button"
+                  class="last-toggle"
+                  [attr.aria-expanded]="isWalkOpen(r.id)"
+                  (click)="toggleWalk(r.id)"
+                >
+                  <app-ui-icon name="chevron" />
+                  <span>
+                    Last walk {{ formatDate(run.date) }}
+                    · +{{ run.xpAwarded }} XP
+                    @if (run.bonusXp > 0) {
+                      <span class="bonus">incl. {{ run.bonusXp }} bonus</span>
                     }
-                  </li>
+                  </span>
+                </button>
+                @if (run.notes) {
+                  <app-ui-icon-btn
+                    icon="note"
+                    label="Open walk notes"
+                    (clicked)="openNotes(run.notes)"
+                  />
                 }
-              </ul>
+              </div>
+              @if (isWalkOpen(r.id)) {
+                <ul>
+                  @for (s of run.steps; track s.id) {
+                    <li [class.skipped]="s.outcome === 'SKIPPED'">
+                      <span aria-hidden="true">{{ s.icon || '◆' }}</span>
+                      {{ s.title }}
+                      <span class="delta">{{ formatDelta(s.deltaMs) }}</span>
+                      @if (s.outcome === 'SKIPPED') {
+                        <span class="skip-flag">Skip</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
             </aside>
           }
         </li>
@@ -98,3 +118,14 @@
     </ul>
   }
 </section>
+
+@if (notesText(); as notes) {
+  <app-ui-scroll
+    kicker="Last walk"
+    title="Notes"
+    titleId="walk-notes-title"
+    (closed)="closeNotes()"
+  >
+    <p class="notes-body">{{ notes }}</p>
+  </app-ui-scroll>
+}

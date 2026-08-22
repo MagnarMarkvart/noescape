@@ -1,0 +1,107 @@
+<app-history-log
+  kicker="Archive"
+  title="Walk log"
+  [lede]="lede()"
+  backHref="/consuetudo"
+  backLabel="Back to Consuetudo"
+  [date]="selectedDate()"
+  [today]="todayIso()"
+  [marks]="calendarMarks()"
+  [loading]="loading()"
+  [empty]="!loading() && items().length === 0"
+  emptyText="No walks on this day."
+  [detailTitle]="detailTitle()"
+  [detailKicker]="detailKicker()"
+  detailTitleId="walk-detail-title"
+  (dateChange)="onDateNav($event)"
+  (rangeChange)="loadCalendar($event)"
+  (close)="close()"
+>
+  <ul class="session-log">
+    @for (row of items(); track row.id) {
+      <li>
+        <button
+          type="button"
+          class="session-card"
+          (click)="open(row)"
+          [attr.aria-pressed]="selected()?.id === row.id"
+        >
+          <div class="log-top">
+            <strong>{{ clock(row.startedAt) }}{{ row.completedAt ? ' – ' + clock(row.completedAt) : '' }}</strong>
+            <span class="xp-chip">
+              +{{ row.xpAwarded | number }} XP
+            </span>
+          </div>
+          <p class="log-meta">
+            <span aria-hidden="true">{{ row.routineIcon || '◆' }}</span>
+            {{ row.routineName }}
+          </p>
+          <p class="log-flags">
+            @if (row.skippedCount > 0) {
+              <span class="skip-flag">{{ row.skippedCount }} skip{{ row.skippedCount === 1 ? '' : 's' }}</span>
+            }
+            @if (row.notes) {
+              <span class="note-mark" aria-label="Has notes">
+                <app-ui-icon name="note" />
+              </span>
+            }
+          </p>
+        </button>
+      </li>
+    }
+  </ul>
+
+  <div scrollBody>
+    @if (selected(); as row) {
+      <div class="timeline" aria-label="Walk span">
+        <div>
+          <p class="when-label">Start</p>
+          <p class="when-clock">{{ clock(row.startedAt) }}</p>
+          <p class="when-date">{{ stamp(row.startedAt) }}</p>
+        </div>
+        <span class="timeline-rule" aria-hidden="true"></span>
+        <div>
+          <p class="when-label">End</p>
+          <p class="when-clock">{{ row.completedAt ? clock(row.completedAt) : '—' }}</p>
+          <p class="when-date">{{ row.completedAt ? stamp(row.completedAt) : '' }}</p>
+        </div>
+      </div>
+
+      <dl class="facts">
+        <div>
+          <dt>Completed</dt>
+          <dd>{{ row.completedCount }}</dd>
+        </div>
+        <div>
+          <dt>Skipped</dt>
+          <dd>{{ row.skippedCount }}</dd>
+        </div>
+        <div>
+          <dt>Base XP</dt>
+          <dd>{{ row.baseXp | number }}</dd>
+        </div>
+        <div>
+          <dt>Bonus</dt>
+          <dd>{{ row.bonusXp | number }}</dd>
+        </div>
+      </dl>
+
+      <ul class="steps">
+        @for (s of row.steps; track s.id) {
+          <li [class.skipped]="s.outcome === 'SKIPPED'">
+            <span aria-hidden="true">{{ s.icon || '◆' }}</span>
+            <strong>{{ s.title }}</strong>
+            <span class="delta">{{ formatDelta(s.deltaMs) }}</span>
+            @if (s.outcome === 'SKIPPED') {
+              <span class="skip-flag">Skip</span>
+            }
+          </li>
+        }
+      </ul>
+
+      @if (row.notes) {
+        <p class="detail-note">{{ row.notes }}</p>
+      }
+    }
+  </div>
+</app-history-log>

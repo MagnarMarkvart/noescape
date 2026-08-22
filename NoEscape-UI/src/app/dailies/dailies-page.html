@@ -12,12 +12,17 @@
     </div>
 
     <div class="toolbar-actions">
-      <a class="ghost linkish" routerLink="/dailies/defaults">Defaults</a>
+      <app-ui-icon-btn
+        icon="wrench"
+        label="Default tasks"
+        href="/dailies/defaults"
+        [queryParams]="{ from: 'dailies' }"
+      />
       @if (board(); as current) {
         @if (current.canCopyIncomplete && canMutate()) {
           <button type="button" (click)="copyIncomplete()">Carry Over</button>
         }
-        @if (canMutate() && current.filledCount > 0) {
+        @if (!setupOpen() && canMutate() && current.filledCount > 0) {
           <button type="button" (click)="sealDay()">Seal</button>
         }
         @if (current.sealRequired) {
@@ -93,61 +98,15 @@
                   <li class="slot" [class.editing]="isEditing(slot)" [class.filled]="slot.isFilled">
                     @if (isEditing(slot)) {
                       <form class="slot-form" (submit)="$event.preventDefault(); saveSlot()">
-                        <label class="title-field">
-                          Title
+                        <fieldset class="picker-block">
+                          <legend>Title</legend>
                           <input type="text" [formField]="slotForm.title" placeholder="Quest" />
-                        </label>
+                        </fieldset>
 
-                        <div class="default-search">
-                          <label class="title-field">
-                            Load a default
-                            <input
-                              type="search"
-                              role="combobox"
-                              autocomplete="off"
-                              placeholder="Search saved tasks"
-                              aria-autocomplete="list"
-                              aria-controls="default-hits"
-                              [attr.aria-expanded]="defaultSearchOpen()"
-                              [value]="defaultQuery()"
-                              (input)="onDefaultQuery($event)"
-                              (focus)="defaultSearchOpen.set(true)"
-                              (blur)="onDefaultBlur()"
-                              (keydown)="onDefaultSearchKey($event)"
-                            />
-                          </label>
-                          @if (defaultSearchOpen()) {
-                            <ul id="default-hits" class="default-hits" role="listbox">
-                              @if (filteredDefaults().length === 0) {
-                                <li class="default-empty">No matching defaults</li>
-                              } @else {
-                                @for (t of filteredDefaults(); track t.id) {
-                                  <li role="none">
-                                    <button
-                                      type="button"
-                                      class="default-hit"
-                                      role="option"
-                                      (mousedown)="applyTemplate(t.id)"
-                                    >
-                                      <span class="hit-title">
-                                        <span aria-hidden="true">{{ t.icon }}</span>
-                                        {{ t.name }}
-                                      </span>
-                                      <span class="hit-meta">
-                                        {{ skillLine(t) }}
-                                        · E{{ t.effortLevel }}
-                                        · {{ formatDuration(t.durationMinutes) }}
-                                        @if (t.habit) {
-                                          · {{ t.habit.icon }} {{ t.habit.name }}
-                                        }
-                                      </span>
-                                    </button>
-                                  </li>
-                                }
-                              }
-                            </ul>
-                          }
-                        </div>
+                        <app-default-task-picker
+                          [templates]="templates()"
+                          (pick)="applyTemplate($event)"
+                        />
 
                         @if (habits().length) {
                           <label class="title-field">
@@ -177,120 +136,33 @@
                             (bump)="bumpSkillWeight($event)"
                             (remove)="removeSkillWeight($event)"
                           />
-                          <div class="icon-grid parents" role="listbox" aria-label="Parent skills">
-                            @for (cat of categories(); track cat.category) {
-                              <button
-                                type="button"
-                                class="pick-tile"
-                                role="option"
-                                [class.selected]="selectedCategory() === cat.category"
-                                [attr.aria-selected]="selectedCategory() === cat.category"
-                                (click)="selectCategory(cat.category)"
-                              >
-                                <span class="pick-icon" aria-hidden="true">{{ cat.icon }}</span>
-                                <span class="pick-label">{{ cat.label }}</span>
-                              </button>
-                            }
-                          </div>
+                          <app-skill-tree-picker
+                            [showLevel]="true"
+                            [categories]="categories()"
+                            [skills]="subskills()"
+                            [selectedCategory]="selectedCategory() || null"
+                            [selectedSlugs]="selectedSlugs()"
+                            (categoryChange)="selectCategory($event)"
+                            (skillPick)="pickSkill($event)"
+                          />
                         </fieldset>
 
-                        @if (selectedCategory()) {
-                          <fieldset class="picker-block">
-                            <legend>Subskill</legend>
-                            <div class="icon-grid subs" role="listbox" aria-label="Subskills">
-                              @for (skill of subskills(); track skill.id) {
-                                <button
-                                  type="button"
-                                  class="pick-tile"
-                                  role="option"
-                                  [class.selected]="hasSkill(skill.id)"
-                                  [attr.aria-selected]="hasSkill(skill.id)"
-                                  (click)="selectSkill(skill.id)"
-                                >
-                                  <span class="pick-icon" aria-hidden="true">{{ skill.icon }}</span>
-                                  <span class="pick-label">{{ skill.name }}</span>
-                                  <span class="pick-meta">Lv {{ skill.level }}</span>
-                                </button>
-                              }
-                            </div>
-                          </fieldset>
-                        }
+                        <app-effort-field
+                          [value]="slotModel().effortLevel"
+                          (valueChange)="selectEffort($event)"
+                        />
 
-                        <fieldset class="picker-block">
-                          <legend>Effort</legend>
-                          <div class="icon-grid effort" role="listbox" aria-label="Effort level">
-                            @for (level of effortLevels; track level) {
-                              <button
-                                type="button"
-                                class="pick-tile compact"
-                                role="option"
-                                [class.selected]="slotModel().effortLevel === level"
-                                [attr.aria-selected]="slotModel().effortLevel === level"
-                                (click)="selectEffort(level)"
-                              >
-                                {{ level }}
-                              </button>
-                            }
-                          </div>
-                        </fieldset>
-
-                        <fieldset class="picker-block">
-                          <legend>Duration</legend>
-                          <div class="icon-grid duration" role="listbox" aria-label="Duration">
-                            @for (mins of durationPresets; track mins) {
-                              <button
-                                type="button"
-                                class="pick-tile compact"
-                                role="option"
-                                [class.selected]="!slotModel().customDuration && slotModel().durationMinutes === mins"
-                                [attr.aria-selected]="!slotModel().customDuration && slotModel().durationMinutes === mins"
-                                (click)="selectDurationPreset(mins)"
-                              >
-                                {{ formatDuration(mins) }}
-                              </button>
-                            }
-                            <button
-                              type="button"
-                              class="pick-tile compact custom-tile"
-                              role="option"
-                              [class.selected]="slotModel().customDuration"
-                              [attr.aria-selected]="slotModel().customDuration"
-                              (click)="enableCustomDuration()"
-                              aria-label="Custom duration"
-                              title="Custom"
-                            >
-                              <span aria-hidden="true">✎</span>
-                            </button>
-                          </div>
-                          @if (slotModel().customDuration) {
-                            <div class="form-row custom-duration">
-                              <label>
-                                Hours
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="24"
-                                  [value]="customHours()"
-                                  (input)="setCustomHours($event)"
-                                />
-                              </label>
-                              <label>
-                                Minutes
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="59"
-                                  [value]="customMins()"
-                                  (input)="setCustomMins($event)"
-                                />
-                              </label>
-                            </div>
-                          }
-                        </fieldset>
+                        <app-duration-field
+                          legend="Duration"
+                          [presets]="durationPresets"
+                          [minutes]="slotModel().durationMinutes"
+                          [maxHours]="24"
+                          (minutesChange)="setDuration($event)"
+                        />
 
                         @if (showWealth()) {
-                          <label>
-                            Wealth gained ({{ currencyLabel() }})
+                          <fieldset class="picker-block">
+                            <legend>Wealth gained ({{ currencyLabel() }})</legend>
                             <input
                               type="text"
                               inputmode="decimal"
@@ -298,7 +170,7 @@
                               (input)="setWealthAmount($event)"
                               placeholder="0.00"
                             />
-                          </label>
+                          </fieldset>
                         }
 
                         <div class="form-actions">

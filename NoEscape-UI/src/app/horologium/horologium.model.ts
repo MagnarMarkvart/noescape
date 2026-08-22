@@ -113,6 +113,9 @@ export interface HorologiumSessionRecord {
   watchName?: string | null;
   skillXp?: HorologiumSkillXp[];
   restTotalMinutes?: number;
+  kind?: 'sessio' | 'consuetudo';
+  routineName?: string | null;
+  routineIcon?: string | null;
 }
 
 export interface HorologiumXpPreview {

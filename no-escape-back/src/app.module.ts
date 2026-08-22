@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ClocksModule } from './clocks/clocks.module';
 import { CharacterModule } from './character/character.module';
 import { DailiesModule } from './dailies/dailies.module';
 import { HabitsModule } from './habits/habits.module';
@@ -26,6 +27,7 @@ import { TimeModule } from './time/time.module';
     HabitsModule,
     RoutinesModule,
     ScriptoriumModule,
+    ClocksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

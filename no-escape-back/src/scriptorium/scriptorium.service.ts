@@ -94,6 +94,7 @@ export type ScriptoriumUpsertInput = {
   durationMinutes?: number | null;
   effort?: number;
   skillWeights?: { slug: string; weight: number }[];
+  subtasks?: Array<string | { title?: string }>;
   status?: string;
   sortOrder?: number;
 };
@@ -153,6 +154,7 @@ export class ScriptoriumService {
     const dueDate = this.parseDue(input.dueDate);
     const tier = this.parseTier(input.tier, dueDate);
     const weights = this.parseWeights(input.skillWeights);
+    const subtasks = this.parseSubtasks(input.subtasks);
     const row = await this.prisma.scriptoriumWork.create({
       data: {
         title: title.slice(0, 120),
@@ -164,6 +166,14 @@ export class ScriptoriumService {
         effort: this.parseEffort(input.effort),
         skillWeightsJson: weights.length ? JSON.stringify(weights) : null,
         sortOrder: Math.max(0, Math.round(Number(input.sortOrder) || 0)),
+        subtasks: subtasks.length
+          ? {
+              create: subtasks.map((rowTitle, i) => ({
+                title: rowTitle,
+                sortOrder: i,
+              })),
+            }
+          : undefined,
       },
       include: {
         subtasks: { orderBy: { sortOrder: 'asc' } },
@@ -382,6 +392,29 @@ export class ScriptoriumService {
       return null;
     }
     return Math.min(10080, n);
+  }
+
+  private parseSubtasks(raw: unknown): string[] {
+    if (raw == null) {
+      return [];
+    }
+    if (!Array.isArray(raw)) {
+      throw new BadRequestException('subtasks must be an array');
+    }
+    const titles = raw
+      .map((row) => {
+        if (typeof row === 'string') {
+          return row.trim().slice(0, 160);
+        }
+        if (row && typeof row === 'object' && 'title' in row) {
+          return String((row as { title?: unknown }).title ?? '')
+            .trim()
+            .slice(0, 160);
+        }
+        return '';
+      })
+      .filter((title) => title.length > 0);
+    return titles;
   }
 
   private parseWeights(raw: unknown) {

@@ -8,69 +8,9 @@
   --rs-danger: #c45c4a;
   --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
   --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-
   display: block;
-  min-height: 100dvh;
   color: var(--rs-text);
   font-family: var(--font-body);
-  background: linear-gradient(180deg, #1c1810, var(--rs-bg) 50%, #221c12);
-}
-
-.log-shell {
-  width: min(72rem, 100%);
-  margin: 0 auto;
-  padding: 1.15rem 1.25rem 2.5rem;
-  box-sizing: border-box;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: end;
-  margin-bottom: 1.25rem;
-}
-
-.kicker {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--rs-muted);
-}
-
-.toolbar h1 {
-  margin: 0.2rem 0 0;
-  font-family: var(--font-display);
-  color: var(--rs-accent);
-  font-size: clamp(1.7rem, 3vw, 2.4rem);
-  letter-spacing: 0.05em;
-}
-
-.lede {
-  margin: 0.35rem 0 0;
-  color: var(--rs-muted);
-  font-size: 0.95rem;
-}
-
-.back {
-  color: var(--rs-muted);
-  text-decoration: none;
-  font-family: var(--font-display);
-  white-space: nowrap;
-}
-
-.back:hover {
-  color: var(--rs-accent);
-}
-
-app-date-nav {
-  display: block;
-  margin-bottom: 1.15rem;
-}
-
-.muted {
-  color: var(--rs-muted);
 }
 
 .session-log {
@@ -166,42 +106,16 @@ app-date-nav {
   border-color: var(--rs-border-bright);
 }
 
-.detail-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 1.25rem;
-  background: rgba(8, 6, 3, 0.72);
+.kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
 }
 
-.detail-card {
-  width: min(36rem, 100%);
-  max-height: min(92dvh, 46rem);
-  overflow: auto;
-  padding: 1.3rem 1.4rem 1.25rem;
-  border: 1px solid var(--rs-border-bright);
-  background:
-    radial-gradient(ellipse at 20% 0%, rgba(212, 168, 75, 0.14), transparent 46%),
-    linear-gradient(180deg, rgba(74, 61, 40, 0.95), rgba(22, 18, 10, 0.98));
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 0, 0, 0.4),
-    0 22px 48px rgba(0, 0, 0, 0.5);
-}
-
-.detail-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: start;
-}
-
-.detail-card h2 {
-  margin: 0.25rem 0 0;
-  font-family: var(--font-display);
-  font-size: 1.55rem;
-  color: var(--rs-accent);
+.muted {
+  color: var(--rs-muted);
 }
 
 .timeline {
@@ -285,6 +199,18 @@ app-date-nav {
   font-size: 1.05rem;
 }
 
+a.bind-name {
+  display: inline-block;
+  color: var(--rs-accent);
+  text-decoration: none;
+}
+
+a.bind-name:hover,
+a.bind-name:focus-visible {
+  color: #e0c06a;
+  outline: none;
+}
+
 .xp-block {
   margin: 1rem 0 0;
 }
@@ -326,10 +252,6 @@ app-date-nav {
 }
 
 @media (min-width: 720px) {
-  .log-shell {
-    padding: 1.5rem 1.75rem 3rem;
-  }
-
   .session-log {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -339,22 +261,9 @@ app-date-nav {
   .session-log {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .detail-card {
-    width: min(40rem, 100%);
-    padding: 1.5rem 1.6rem 1.4rem;
-  }
 }
 
 @media (max-width: 640px) {
-  .log-shell {
-    padding: 0.85rem 0.85rem 2rem;
-  }
-
-  .toolbar {
-    align-items: start;
-  }
-
   .timeline {
     grid-template-columns: 1fr;
     text-align: left;

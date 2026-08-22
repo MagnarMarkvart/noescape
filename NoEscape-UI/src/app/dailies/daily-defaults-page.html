@@ -4,11 +4,22 @@
       <p class="kicker">Dailies</p>
       <h1>Default tasks</h1>
       <p class="lede">
-        Saved recipes you can load into any daily. Reward is calculated from
-        effort and duration — tweak after loading.
+        Saved recipes you can load into a daily — or log as a one-off from
+        Dashboard and Character.
       </p>
     </div>
-    <a routerLink="/dailies" class="back">← Dailies</a>
+    <nav class="toolbar-links">
+      <app-ui-icon-btn
+        icon="back"
+        [label]="backLabel()"
+        [href]="backHref()"
+      />
+      <app-ui-icon-btn
+        icon="wrench"
+        label="New default"
+        href="/dailies/defaults/new"
+      />
+    </nav>
   </header>
 
   @if (toast()) {
@@ -56,95 +67,12 @@
             }
           </small>
         </div>
-        <button type="button" class="danger" (click)="remove(t)">Remove</button>
+        <app-ui-icon-btn
+          icon="close"
+          [label]="'Remove ' + t.name"
+          (clicked)="remove(t)"
+        />
       </li>
     }
   </ul>
-
-  <form class="create" (submit)="$event.preventDefault(); create()">
-    <h2>Create default</h2>
-    <label>
-      Title
-      <input type="text" [formField]="createForm.name" placeholder="Showering" />
-    </label>
-    <fieldset>
-      <legend>Skills</legend>
-      <div class="inline-add">
-        <label class="grow">
-          Add skill
-          <select [value]="createModel().skillPick" (change)="onSkillSelect($event)">
-            <option [value]="0">— pick —</option>
-            @for (s of availableSkills(); track s.id) {
-              <option [value]="s.id">{{ s.icon }} {{ s.name }}</option>
-            }
-          </select>
-        </label>
-        <button type="button" class="ghost-btn" (click)="addSkillShare()">Add</button>
-      </div>
-      <app-skill-weight-list
-        [shares]="weightShares()"
-        [remaining]="weightRemaining()"
-        [valid]="weightsValid()"
-        (bump)="bumpSkillWeight($event)"
-        (remove)="removeSkillWeight($event)"
-      />
-    </fieldset>
-    @if (habits().length) {
-      <label>
-        Habit (optional)
-        <select [value]="createModel().habitId" (change)="onHabitSelect($event)">
-          <option [value]="0">— none —</option>
-          @for (h of habits(); track h.id) {
-            <option [value]="h.id">{{ h.icon }} {{ h.name }}</option>
-          }
-        </select>
-      </label>
-    }
-    <fieldset>
-      <legend>Effort</legend>
-      <div class="chip-row">
-        @for (level of effortLevels; track level) {
-          <button
-            type="button"
-            class="chip"
-            [class.selected]="createModel().effortLevel === level"
-            (click)="selectEffort(level)"
-          >
-            {{ level }}
-          </button>
-        }
-      </div>
-    </fieldset>
-    <fieldset>
-      <legend>Duration</legend>
-      <div class="chip-row">
-        @for (mins of durationPresets; track mins) {
-          <button
-            type="button"
-            class="chip"
-            [class.selected]="createModel().durationMinutes === mins"
-            (click)="selectDuration(mins)"
-          >
-            {{ formatDuration(mins) }}
-          </button>
-        }
-      </div>
-    </fieldset>
-    @if (showWealth()) {
-      <label>
-        Wealth gained ({{ currencyLabel() }})
-        <input
-          type="text"
-          inputmode="decimal"
-          [value]="createModel().wealthAmount"
-          (input)="setWealthAmount($event)"
-          placeholder="0.00"
-        />
-      </label>
-    }
-    <p class="xp-preview">≈ {{ previewXp() | number }} XP as a Regular daily</p>
-    <button type="submit" [disabled]="creating() || createForm().invalid() || !weightsValid()">
-      {{ creating() ? '…' : 'Save default' }}
-    </button>
-  </form>
 </section>

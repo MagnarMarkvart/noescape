@@ -35,6 +35,7 @@ export interface RoutineRunView {
   baseXp: number;
   bonusXp: number;
   xpAwarded: number;
+  notes?: string;
   steps: RoutineStepLogView[];
 }
 
@@ -72,6 +73,12 @@ export interface RoutineWritePayload {
   }>;
 }
 
+export type RoutineWalkRow = RoutineRunView & {
+  routineId: number;
+  routineName: string;
+  routineIcon: string | null;
+};
+
 export interface RoutineCompletePayload {
   steps: Array<{
     stepId?: number | null;
@@ -81,6 +88,7 @@ export interface RoutineCompletePayload {
     elapsedMs: number;
     outcome: 'COMPLETED' | 'SKIPPED';
   }>;
+  notes?: string;
 }
 
 export interface RoutineCompleteResponse {
@@ -133,6 +141,33 @@ export class RoutinesService {
   remove(id: number) {
     return this.http.delete<{ ok: boolean }>(
       `${this.baseUrl}/${id}${this.devQuery()}`,
+    );
+  }
+
+  listRuns(date?: string, limit = 50, offset = 0) {
+    const q = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (date) {
+      q.set('date', date);
+    }
+    if (isDevMode()) {
+      q.set('dev', '1');
+    }
+    return this.http.get<{
+      items: RoutineWalkRow[];
+      total: number;
+    }>(`${this.baseUrl}/runs?${q.toString()}`);
+  }
+
+  runCalendar(from: string, to: string) {
+    const q = new URLSearchParams({ from, to });
+    if (isDevMode()) {
+      q.set('dev', '1');
+    }
+    return this.http.get<Array<{ date: string; count: number }>>(
+      `${this.baseUrl}/runs/calendar?${q.toString()}`,
     );
   }
 

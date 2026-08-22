@@ -174,9 +174,6 @@ export interface SlotFormModel {
   habitId: number;
   effortLevel: number;
   durationMinutes: number;
-  /** When true, durationMinutes is driven by customDurationMinutes */
-  customDuration: boolean;
-  customDurationMinutes: number;
   /** Persist this form as a reusable default after save. */
   saveAsDefault: boolean;
   /** Template that was loaded into the form, if any. */
@@ -222,4 +219,45 @@ export function dailySkillLine(
     return names.join(' · ');
   }
   return input?.skill?.name ?? '';
+}
+
+export function formatTaskDuration(minutes: number): string {
+  const n = Math.max(0, Math.round(Number(minutes) || 0));
+  if (n < 60) {
+    return `${n}m`;
+  }
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+export interface QuickTaskLog {
+  id: number;
+  date: string;
+  title: string;
+  icon: string | null;
+  templateId: number | null;
+  effortLevel: number;
+  durationMinutes: number;
+  xpAwarded: number;
+  wealthCents: number;
+  createdAt: string;
+  skillWeights: Array<{ slug: string; weight: number }>;
+  skillShares: Array<{
+    slug: string;
+    name: string;
+    weight: number;
+    xp: number;
+    icon?: string | null;
+  }>;
+}
+
+export interface LogQuickTaskPayload {
+  title: string;
+  skillId: number;
+  skillWeights: Array<{ slug: string; weight: number }>;
+  effortLevel: number;
+  durationMinutes: number;
+  templateId?: number | null;
+  wealthCents?: number | null;
 }

@@ -6,10 +6,14 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { map } from 'rxjs';
 import { API_BASE_URL } from '../core/api.config';
 import { ImageWarmService } from '../shared/image-warm.service';
 import { TimedToast } from '../shared/timed-toast';
+import { UiConfirm } from '../shared/ui/ui-confirm';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import {
   QuestView,
   questCoverBg,
@@ -18,10 +22,11 @@ import {
 } from './quest.model';
 import { QuestsService } from './quests.service';
 
-type QuestBoard = 'today' | 'progress' | 'schedule' | 'ready' | 'done';
+type QuestBoard = 'all' | 'today' | 'progress' | 'schedule' | 'ready' | 'done';
 
-const BOARD_KEY = 'noescape.quests.board';
+const BOARD_KEY = 'noescape.quests.board.v2';
 const BOARD_IDS: QuestBoard[] = [
+  'all',
   'today',
   'progress',
   'schedule',
@@ -38,16 +43,7 @@ function loadQuestBoard(): QuestBoard {
   } catch {
     /* private mode */
   }
-  return 'today';
-}
-
-function hasStoredQuestBoard(): boolean {
-  try {
-    const id = sessionStorage.getItem(BOARD_KEY);
-    return Boolean(id && BOARD_IDS.includes(id as QuestBoard));
-  } catch {
-    return false;
-  }
+  return 'all';
 }
 
 function saveQuestBoard(id: QuestBoard): void {
@@ -60,7 +56,7 @@ function saveQuestBoard(id: QuestBoard): void {
 
 @Component({
   selector: 'app-quests-page',
-  imports: [RouterLink],
+  imports: [RouterLink, UiConfirm, UiIconBtn],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quests-page.html',
   styleUrl: './quests-page.css',
@@ -69,15 +65,25 @@ export class QuestsPage implements OnInit {
   private readonly questsService = inject(QuestsService);
   private readonly images = inject(ImageWarmService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly timed = new TimedToast();
 
   protected readonly board = signal<QuestBoard>(loadQuestBoard());
+  protected readonly editing = toSignal(
+    this.route.queryParamMap.pipe(map((p) => p.get('edit') === '1')),
+    {
+      initialValue: this.route.snapshot.queryParamMap.get('edit') === '1',
+    },
+  );
   protected readonly quests = signal<QuestView[]>([]);
   protected readonly loading = signal(true);
+  protected readonly deleting = signal(false);
+  protected readonly pendingDelete = signal<QuestView | null>(null);
   protected readonly toast = this.timed.value;
   protected readonly weekdayLabel = weekdayLabel;
 
   protected readonly boards: Array<{ id: QuestBoard; label: string }> = [
+    { id: 'all', label: 'All' },
     { id: 'today', label: 'Today' },
     { id: 'progress', label: 'In progress' },
     { id: 'schedule', label: 'Schedule' },
@@ -103,6 +109,41 @@ export class QuestsPage implements OnInit {
     this.quests().filter((q) => q.availability === 'completed'),
   );
 
+  protected readonly listed = computed(() => {
+    if (this.editing() || this.board() === 'all') {
+      return this.quests();
+    }
+    switch (this.board()) {
+      case 'today':
+        return this.todayQuests();
+      case 'progress':
+        return this.inProgress();
+      case 'ready':
+        return this.notStarted();
+      case 'done':
+        return this.completed();
+      default:
+        return [];
+    }
+  });
+
+  protected readonly emptyCopy = computed(() => {
+    switch (this.board()) {
+      case 'all':
+        return 'No quests yet.';
+      case 'today':
+        return 'Nothing due today. In-progress quests are waiting in the next tab.';
+      case 'progress':
+        return 'No quests in progress.';
+      case 'ready':
+        return 'No waiting quests.';
+      case 'done':
+        return 'No completed quests yet.';
+      default:
+        return 'Nothing here.';
+    }
+  });
+
   ngOnInit(): void {
     this.reload();
     void this.questsService.refreshActive().subscribe();
@@ -113,6 +154,13 @@ export class QuestsPage implements OnInit {
     saveQuestBoard(id);
   }
 
+  protected toggleEditing(): void {
+    void this.router.navigate(['/quests'], {
+      queryParams: this.editing() ? {} : { edit: '1' },
+      replaceUrl: true,
+    });
+  }
+
   protected open(q: QuestView): void {
     if (q.availability === 'active') {
       void this.router.navigate(['/quests', q.id, 'run']);
@@ -121,8 +169,50 @@ export class QuestsPage implements OnInit {
     void this.router.navigate(['/quests', q.id]);
   }
 
+  protected editHref(q: QuestView): string {
+    return `/quests/${q.id}/edit`;
+  }
+
+  protected statusLabel(q: QuestView): string {
+    if (!this.editing() && this.board() === 'today') {
+      return 'Due today';
+    }
+    return q.tier;
+  }
+
   protected coverBg(q: QuestView): string | null {
     return questCoverBg(q.coverUrl, API_BASE_URL);
+  }
+
+  protected askDelete(q: QuestView): void {
+    this.pendingDelete.set(q);
+  }
+
+  protected cancelDelete(): void {
+    if (this.deleting()) {
+      return;
+    }
+    this.pendingDelete.set(null);
+  }
+
+  protected confirmDelete(): void {
+    const q = this.pendingDelete();
+    if (!q || this.deleting()) {
+      return;
+    }
+    this.deleting.set(true);
+    this.questsService.remove(q.id).subscribe({
+      next: () => {
+        this.quests.update((rows) => rows.filter((row) => row.id !== q.id));
+        this.deleting.set(false);
+        this.pendingDelete.set(null);
+        this.timed.set(`Erased “${q.name}”.`);
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.deleting.set(false);
+        this.timed.set(err.error?.message ?? 'Could not erase the quest.');
+      },
+    });
   }
 
   private reload(): void {
@@ -134,14 +224,6 @@ export class QuestsPage implements OnInit {
           rows.map((q) => resolveQuestCoverUrl(q.coverUrl, API_BASE_URL)),
         );
         this.loading.set(false);
-        if (
-          !hasStoredQuestBoard() &&
-          this.board() === 'today' &&
-          this.todayQuests().length === 0 &&
-          this.inProgress().length > 0
-        ) {
-          this.board.set('progress');
-        }
       },
       error: () => {
         this.loading.set(false);

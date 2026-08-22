@@ -1,73 +1,35 @@
-<section class="new-shell">
-  <header class="toolbar">
-    <div>
-      <p class="kicker">Consuetudo</p>
-      <h1>{{ heading() }}</h1>
-      <p class="lede">Name the practice, pick effort and skills, then sequence the steps.</p>
-    </div>
-    <a routerLink="/consuetudo" class="back">← Consuetudo</a>
-  </header>
-
-  @if (toast()) {
-    <p class="toast" role="status">{{ toast() }}</p>
-  }
-
+<app-forge-shell
+  kicker="Consuetudo"
+  [title]="heading()"
+  lede="Name the practice, pick effort and skills, then sequence the steps."
+  backHref="/consuetudo"
+  backLabel="Back to Consuetudo"
+  [toast]="toast()"
+>
   <form class="create" (submit)="$event.preventDefault(); save()">
-    <label>
-      Name
-      <input type="text" [formField]="createForm.name" />
-    </label>
+    <fieldset>
+      <legend>Name</legend>
+      <input
+        type="text"
+        placeholder="Morning routine"
+        [formField]="createForm.name"
+      />
+    </fieldset>
 
-    <div class="icon-picker">
-      <div class="icon-picker-head">
-        <span>Icon</span>
-        <span class="icon-preview" aria-hidden="true">{{ createModel().icon }}</span>
-      </div>
-      <div class="icon-tabs" role="tablist" aria-label="Icon categories">
-        @for (group of iconGroups; track group.id) {
-          <button
-            type="button"
-            role="tab"
-            class="icon-tab"
-            [class.selected]="iconGroupId() === group.id"
-            (click)="setIconGroup(group.id)"
-          >
-            {{ group.label }}
-          </button>
-        }
-      </div>
-      <div class="icon-grid" role="listbox">
-        @for (opt of activeIconGroup().icons; track opt.glyph) {
-          <button
-            type="button"
-            role="option"
-            class="icon-tile"
-            [class.selected]="createModel().icon === opt.glyph"
-            [title]="opt.label"
-            (click)="pickIcon(opt.glyph)"
-          >
-            <span class="glyph" aria-hidden="true">{{ opt.glyph }}</span>
-            <span class="icon-label">{{ opt.label }}</span>
-          </button>
-        }
-      </div>
-    </div>
+    <app-icon-picker
+      [selected]="createModel().icon"
+      (picked)="pickIcon($event)"
+    />
 
-    <label>
-      Effort
-      <select
-        [value]="createModel().effortLevel"
-        (change)="setEffort($any($event.target).value)"
-      >
-        @for (n of effortLevels; track n) {
-          <option [value]="n">{{ n }}</option>
-        }
-      </select>
-    </label>
-    <p class="xp-preview">
-      Full walk ~{{ previewXp().totalXp }} XP
-      ({{ previewXp().baseXp }} + {{ previewXp().bonusXp }} finish bonus)
-    </p>
+    <app-effort-field
+      [value]="createModel().effortLevel"
+      (valueChange)="setEffort($event)"
+    >
+      <p class="xp-preview">
+        Full walk ~{{ previewXp().totalXp }} XP
+        ({{ previewXp().baseXp }} + {{ previewXp().bonusXp }} finish bonus)
+      </p>
+    </app-effort-field>
 
     <fieldset class="picker-block">
       <legend>Skills</legend>
@@ -78,97 +40,54 @@
         (bump)="bumpWeight($event)"
         (remove)="removeWeight($event)"
       />
-      <div class="parent-grid" role="listbox" aria-label="Parent skills">
-        @for (cat of categories(); track cat.category) {
-          <button
-            type="button"
-            class="pick-tile"
-            [class.selected]="selectedCategory() === cat.category"
-            (click)="selectCategory(cat.category)"
-          >
-            <span aria-hidden="true">{{ cat.icon }}</span>
-            {{ cat.label }}
-          </button>
-        }
-      </div>
-      @if (selectedCategory()) {
-        <div class="parent-grid" role="listbox" aria-label="Subskills">
-          @for (skill of subskills(); track skill.id) {
-            <button
-              type="button"
-              class="pick-tile"
-              [class.selected]="hasSkill(skill.id)"
-              (click)="selectSkill(skill.id)"
-            >
-              <span aria-hidden="true">{{ skill.icon }}</span>
-              {{ skill.name }}
-            </button>
-          }
-        </div>
-      }
+      <app-skill-tree-picker
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
     </fieldset>
 
     <fieldset class="steps-block">
       <legend>Steps</legend>
-      @for (step of steps(); track $index) {
-        <div class="step-row">
-          <button
-            type="button"
-            class="step-icon"
-            [attr.aria-expanded]="stepIconIndex() === $index"
-            (click)="toggleStepIcon($index)"
-          >
-            {{ step.icon }}
-          </button>
-          <input
-            type="text"
-            [value]="step.title"
-            placeholder="Step name"
-            (input)="setStepTitle($index, $any($event.target).value)"
-          />
-          <label class="mins">
-            min
-            <input
-              type="number"
-              min="1"
-              max="1440"
-              [value]="step.durationMinutes"
-              (change)="setStepMinutes($index, $any($event.target).value)"
+      <app-forge-table
+        [columns]="stepColumns"
+        addLabel="+ Add step"
+        (add)="addStep()"
+      >
+        @for (step of steps(); track step.id) {
+          <app-forge-row>
+            <app-icon-field
+              [value]="step.icon"
+              label="Step icon"
+              (valueChange)="setStepIcon(step.id, $event)"
             />
-          </label>
-          <button type="button" class="ghost" (click)="removeStep($index)">×</button>
-        </div>
-        @if (stepIconIndex() === $index) {
-          <div class="icon-picker nested">
-            <div class="icon-tabs" role="tablist">
-              @for (group of iconGroups; track group.id) {
-                <button
-                  type="button"
-                  class="icon-tab"
-                  [class.selected]="stepIconGroupId() === group.id"
-                  (click)="setStepIconGroup(group.id)"
-                >
-                  {{ group.label }}
-                </button>
-              }
-            </div>
-            <div class="icon-grid">
-              @for (opt of activeStepIconGroup().icons; track opt.glyph) {
-                <button
-                  type="button"
-                  class="icon-tile"
-                  [class.selected]="step.icon === opt.glyph"
-                  [title]="opt.label"
-                  (click)="pickStepIcon($index, opt.glyph)"
-                >
-                  <span class="glyph">{{ opt.glyph }}</span>
-                </button>
-              }
-            </div>
-          </div>
+            <input
+              type="text"
+              [value]="step.title"
+              placeholder="Step name"
+              aria-label="Task"
+              (input)="setStepTitle(step.id, $any($event.target).value)"
+            />
+            <app-number-field
+              class="trail"
+              ariaLabel="Time in minutes"
+              [min]="1"
+              [max]="1440"
+              [value]="step.durationMinutes"
+              (valueChange)="setStepMinutes(step.id, $event)"
+            />
+            <app-ui-icon-btn
+              class="trail"
+              icon="close"
+              label="Remove step"
+              (clicked)="removeStep(step.id)"
+            />
+          </app-forge-row>
         }
-      }
-      <button type="button" class="ghost add" (click)="addStep()">+ Add step</button>
+      </app-forge-table>
     </fieldset>
 
     <div class="actions">
@@ -178,4 +97,4 @@
       <a routerLink="/consuetudo">Cancel</a>
     </div>
   </form>
-</section>
+</app-forge-shell>

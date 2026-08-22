@@ -10,6 +10,8 @@ import {
   DailyLogDetail,
   DailyTaskSlot,
   DailyTaskTemplate,
+  LogQuickTaskPayload,
+  QuickTaskLog,
   UpsertDailyTaskPayload,
   UpsertDailyTemplatePayload,
 } from './daily.model';
@@ -174,6 +176,20 @@ export class DailiesService {
 
   listTemplates() {
     return this.http.get<DailyTaskTemplate[]>(`${this.baseUrl}/templates`);
+  }
+
+  listQuick(limit = 12) {
+    return this.http.get<QuickTaskLog[]>(
+      `${this.baseUrl}/quick?limit=${Math.max(1, Math.round(limit))}`,
+    );
+  }
+
+  logQuick(body: LogQuickTaskPayload) {
+    return this.http.post<{
+      log: QuickTaskLog;
+      award: LogActivityResponse | null;
+      awards: LogActivityResponse[];
+    }>(`${this.baseUrl}/quick`, body);
   }
 
   createTemplate(body: UpsertDailyTemplatePayload) {

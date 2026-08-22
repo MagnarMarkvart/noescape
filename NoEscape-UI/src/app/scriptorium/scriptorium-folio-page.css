@@ -1,0 +1,150 @@
+:host {
+  --rs-border: #8a7340;
+  --rs-border-bright: #c6a85a;
+  --rs-text: #f0e6c8;
+  --rs-muted: #b8a878;
+  --rs-accent: #d4a84b;
+  --rs-danger: #c07058;
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.create {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.create input,
+.create select,
+.create textarea {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--rs-border);
+  background: #1a1610;
+  color: var(--rs-text);
+  font: inherit;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.chip {
+  min-width: 2.2rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--rs-border);
+  background: #1a1610;
+  color: var(--rs-text);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+}
+
+.chip.selected {
+  border-color: var(--rs-accent);
+  background: rgba(212, 168, 75, 0.16);
+}
+
+.hint {
+  margin: 0;
+  color: var(--rs-muted);
+  font-size: 0.85rem;
+}
+
+.subtasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.subtasks li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.subtasks li > span {
+  min-width: 0;
+  color: var(--rs-text);
+}
+
+.inline-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.inline-add input {
+  flex: 1 1 12rem;
+}
+
+.ghost {
+  font-family: var(--font-display);
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-muted);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.ghost:hover,
+.chip:hover {
+  border-color: var(--rs-border-bright);
+  color: var(--rs-accent);
+}
+
+.ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tiny {
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.actions button[type='submit'] {
+  font-family: var(--font-display);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--rs-border-bright);
+  background: rgba(212, 168, 75, 0.14);
+  color: var(--rs-text);
+  cursor: pointer;
+}
+
+.actions button[type='submit']:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.actions > a:not(.ghost) {
+  color: var(--rs-muted);
+  text-decoration: none;
+}
+
+.actions .danger:hover {
+  color: var(--rs-danger);
+  border-color: var(--rs-danger);
+}

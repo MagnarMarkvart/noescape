@@ -2,6 +2,26 @@
   <p class="toast" role="status">{{ toast() }}</p>
 }
 
+<fieldset class="option-group">
+  <legend>Between phases</legend>
+  <app-rune-check
+    label="Auto-continue — rest and the next lap start on their own"
+    [checked]="autoContinue()"
+    [disabled]="savingContinue()"
+    (checkedChange)="setAutoContinue(true, $event)"
+  />
+  <app-rune-check
+    label="Wait for a click — start rest and the next lap yourself"
+    [checked]="!autoContinue()"
+    [disabled]="savingContinue()"
+    (checkedChange)="setAutoContinue(false, $event)"
+  />
+  <p class="hint">
+    After the last block the session still completes on its own. Changing this
+    mid-session applies when the current phase ends.
+  </p>
+</fieldset>
+
 <p class="lede">
   Sessio splits used on Horologium. Add your own, or edit and delete the
   built-in ones.
@@ -35,15 +55,33 @@
   <div class="row">
     <label>
       Work (min)
-      <input type="number" [formField]="editor.workMinutes" />
+      <app-number-field
+        ariaLabel="Work minutes"
+        [min]="1"
+        [max]="180"
+        [value]="model().workMinutes"
+        (valueChange)="setWorkMinutes($event)"
+      />
     </label>
     <label>
       Rest (min)
-      <input type="number" [formField]="editor.restMinutes" />
+      <app-number-field
+        ariaLabel="Rest minutes"
+        [min]="0"
+        [max]="60"
+        [value]="model().restMinutes"
+        (valueChange)="setRestMinutes($event)"
+      />
     </label>
     <label>
       Iterations
-      <input type="number" [formField]="editor.iterations" />
+      <app-number-field
+        ariaLabel="Iterations"
+        [min]="2"
+        [max]="12"
+        [value]="model().iterations"
+        (valueChange)="setIterations($event)"
+      />
     </label>
   </div>
   <app-rune-check

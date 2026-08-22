@@ -11,16 +11,19 @@ import { RouterLink } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { CharacterService } from '../character/character.service';
+import { ConsuetudoClockService } from '../horologium/consuetudo-clock.service';
 import { DailyBoard, DailyTaskSlot, dailySkillLine } from '../dailies/daily.model';
 import { DailiesService } from '../dailies/dailies.service';
+import { QuickTaskPanel } from '../dailies/quick-task-panel';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import { HabitsService, HabitView } from '../habits/habits.service';
 import { HorologiumTimerService } from '../horologium/horologium-timer.service';
 import { HorologiumWatchService } from '../horologium/horologium-watch.service';
-import { QuestSubtaskView, QuestView } from '../quests/quest.model';
+import { LevelUpLogItem } from '../level-ups/level-ups.model';
+import { QuestView } from '../quests/quest.model';
 import { QuestsService } from '../quests/quests.service';
 import { formatElapsedShort } from '../shared/time';
 import { TimedToast } from '../shared/timed-toast';
-import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import { ScriptoriumService } from '../scriptorium/scriptorium.service';
 import {
@@ -30,9 +33,11 @@ import {
 } from '../scriptorium/scriptorium.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 
+type LiveKind = 'sessio' | 'track' | 'consuetudo' | 'vigilia';
+
 @Component({
   selector: 'app-dashboard-page',
-  imports: [DecimalPipe, RouterLink],
+  imports: [DecimalPipe, RouterLink, QuickTaskPanel, UiIconBtn],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard-page.html',
   styleUrl: './dashboard-page.css',
@@ -47,13 +52,15 @@ export class DashboardPage implements OnInit {
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly timer = inject(HorologiumTimerService);
   private readonly watches = inject(HorologiumWatchService);
+  private readonly consuetudo = inject(ConsuetudoClockService);
   private readonly timed = new TimedToast();
 
-  protected readonly tree = signal<SkillTree | null>(null);
   protected readonly habits = signal<HabitView[]>([]);
   protected readonly board = signal<DailyBoard | null>(null);
   protected readonly quests = signal<QuestView[]>([]);
   protected readonly dueWorks = signal<ScriptoriumDueView[]>([]);
+  protected readonly levelLogs = signal<LevelUpLogItem[]>([]);
+  protected readonly totalLevel = signal(0);
   protected readonly habitusUnlocked = signal(false);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
@@ -70,15 +77,12 @@ export class DashboardPage implements OnInit {
   protected readonly phase = this.timer.phase;
   protected readonly taskLabel = this.timer.taskLabel;
   protected readonly watchElapsed = this.watches.selectedElapsedLabel;
-  protected readonly watchRunning = this.watches.desiredRunning;
   protected readonly selectedWatch = this.watches.selected;
 
   private readonly ringCircumference = 2 * Math.PI * 42;
 
   protected readonly todayIso = this.characterService.todayIso;
   protected readonly durationLabel = durationLabel;
-
-  protected readonly totalLevel = computed(() => this.tree()?.totalLevel ?? 0);
   protected readonly wealthLabel = this.characterService.wealthLabel;
 
   protected readonly todayDailies = computed(() => {
@@ -95,54 +99,105 @@ export class DashboardPage implements OnInit {
     this.quests().filter((q) => q.availability === 'active'),
   );
 
-  protected readonly clockLive = computed(() => {
-    const phase = this.phase();
-    if (phase === 'work' || phase === 'rest' || phase === 'complete') {
-      return true;
+  protected readonly liveKind = computed((): LiveKind | null => {
+    if (this.consuetudo.inProgress() && !this.consuetudo.finished()) {
+      return 'consuetudo';
     }
-    return this.watchRunning();
+    const phase = this.phase();
+    if (phase === 'work' || phase === 'rest') {
+      return this.timer.mode() === 'adhoc' ? 'track' : 'sessio';
+    }
+    if (this.watches.soloRunning() && this.watches.selected()) {
+      return 'vigilia';
+    }
+    return null;
+  });
+
+  protected readonly clockPhase = computed(() => {
+    const kind = this.liveKind();
+    if (kind === 'consuetudo') {
+      return this.consuetudo.overtime() ? 'overtime' : 'consuetudo';
+    }
+    if (kind === 'vigilia') {
+      return 'vigilia';
+    }
+    return this.phase();
   });
 
   protected readonly clockTime = computed(() => {
-    const phase = this.phase();
-    if (phase === 'work' || phase === 'rest') {
-      return this.remainingLabel();
+    const kind = this.liveKind();
+    if (kind === 'consuetudo') {
+      return this.consuetudo.displayLabel();
     }
-    if (phase === 'complete') {
-      return 'Done';
-    }
-    if (this.watchRunning()) {
+    if (kind === 'vigilia') {
       return this.watchElapsed();
     }
-    const work = this.timer.config().workMinutes;
-    return `${String(work).padStart(2, '0')}:00`;
+    return this.remainingLabel();
   });
 
-  protected readonly clockCaption = computed(() => {
+  protected readonly clockKindLabel = computed(() => {
+    switch (this.liveKind()) {
+      case 'consuetudo':
+        return 'Consuetudo';
+      case 'track':
+        return 'Track';
+      case 'vigilia':
+        return 'Vigilia';
+      case 'sessio':
+        return 'Sessio';
+      default:
+        return 'Horologium';
+    }
+  });
+
+  protected readonly clockTask = computed(() => {
+    const kind = this.liveKind();
+    if (kind === 'consuetudo') {
+      return this.consuetudo.currentStep()?.title || this.consuetudo.routine()?.name || '';
+    }
+    if (kind === 'vigilia') {
+      return this.selectedWatch()?.name || '';
+    }
+    return this.taskLabel();
+  });
+
+  protected readonly clockSession = computed(() => {
+    const kind = this.liveKind();
+    if (kind === 'consuetudo') {
+      const running = this.consuetudo.running()
+        ? this.consuetudo.overtime()
+          ? 'Over'
+          : 'Practice'
+        : 'Paused';
+      const meta = this.consuetudo.stepMeta();
+      const name = this.consuetudo.routine()?.name;
+      return [running, meta, name].filter(Boolean).join(' · ');
+    }
+    if (kind === 'vigilia') {
+      return this.watches.soloRunning() ? 'Running' : 'Paused';
+    }
     const phase = this.phase();
-    if (phase === 'work' || phase === 'rest') {
-      return this.running() ? this.phaseLabel() : 'Paused';
-    }
-    if (phase === 'complete') {
-      return this.sessionLabel();
-    }
-    if (this.watchRunning()) {
-      return this.selectedWatch()?.name || 'Vigilia';
-    }
-    return 'Ready';
+    const status = this.running()
+      ? this.phaseLabel()
+      : phase === 'rest' || phase === 'work'
+        ? 'Paused'
+        : this.phaseLabel();
+    return [status, this.sessionLabel()].filter(Boolean).join(' · ');
   });
 
   protected readonly ringDashOffset = computed(() => {
-    const live = this.phase() === 'work' || this.phase() === 'rest';
-    const pct = live ? Math.min(100, Math.max(0, this.progressPercent())) : 0;
+    const kind = this.liveKind();
+    let pct = 0;
+    if (kind === 'consuetudo') {
+      pct = this.consuetudo.progressPercent();
+    } else if (kind === 'sessio' || kind === 'track') {
+      pct = this.progressPercent();
+    }
+    pct = Math.min(100, Math.max(0, pct));
     return this.ringCircumference * (1 - pct / 100);
   });
 
   ngOnInit(): void {
-    const cached = this.skillsService.peekTree();
-    if (cached) {
-      this.tree.set(cached);
-    }
     this.reload();
   }
 
@@ -156,6 +211,14 @@ export class DashboardPage implements OnInit {
 
   protected habitDoneToday(habit: HabitView): boolean {
     return habit.recentDates.includes(this.todayIso());
+  }
+
+  protected dueSideCount(quest: QuestView): number {
+    const open = (quest.subtasks ?? []).filter((s) => !s.completed);
+    if (quest.journeyDueToday) {
+      return open.length;
+    }
+    return open.filter((s) => s.gatesJourney).length;
   }
 
   protected workDueCaption(row: ScriptoriumDueView): string {
@@ -177,21 +240,6 @@ export class DashboardPage implements OnInit {
     return SCRIPTORIUM_TIERS.find((t) => t.id === tier)?.name ?? tier;
   }
 
-  protected todayTasks(quest: QuestView): QuestSubtaskView[] {
-    const open = (quest.subtasks ?? []).filter((s) => !s.completed);
-    if (quest.journeyDueToday) {
-      return open;
-    }
-    return open.filter((s) => s.gatesJourney);
-  }
-
-  protected skillTip(skill: Skill): string {
-    if (skill.level >= skill.maxLevel) {
-      return `${skill.name} · Lv ${skill.level} · Max`;
-    }
-    return `${skill.name} · Lv ${skill.level} · ${skill.progress.percent}% · ${skill.xpToNext} XP to next`;
-  }
-
   protected completeHabit(habit: HabitView): void {
     if (this.habitDoneToday(habit) || this.busyHabitId()) {
       return;
@@ -211,6 +259,13 @@ export class DashboardPage implements OnInit {
     });
   }
 
+  protected onQuickLogged(): void {
+    this.reloadLevelLogs();
+    this.characterService.getProfile().subscribe({
+      next: (p) => this.totalLevel.set(p.totalLevel),
+    });
+  }
+
   protected completeDaily(slot: DailyTaskSlot): void {
     if (!slot.id || slot.completed || this.busyDailyId()) {
       return;
@@ -224,30 +279,14 @@ export class DashboardPage implements OnInit {
           this.xpFeedback.publishAward(award);
         }
         this.reloadBoard();
-        this.reloadTree();
-        void this.characterService.getProfile().subscribe();
+        this.reloadLevelLogs();
+        this.characterService.getProfile().subscribe({
+          next: (p) => this.totalLevel.set(p.totalLevel),
+        });
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.busyDailyId.set(null);
         this.timed.set(this.readError(err, 'Could not complete daily'));
-      },
-    });
-  }
-
-  protected completeSubtask(quest: QuestView, task: QuestSubtaskView): void {
-    const runId = quest.run?.id;
-    if (!runId || this.busyQuestKey()) {
-      return;
-    }
-    this.busyQuestKey.set(`t:${task.id}`);
-    this.questsService.toggleSubtask(runId, task.id, true).subscribe({
-      next: (updated) => {
-        this.busyQuestKey.set(null);
-        this.patchQuest(updated);
-      },
-      error: (err: { error?: { message?: string } }) => {
-        this.busyQuestKey.set(null);
-        this.timed.set(err.error?.message ?? 'Could not complete task');
       },
     });
   }
@@ -281,7 +320,6 @@ export class DashboardPage implements OnInit {
   private reload(): void {
     this.loading.set(true);
     forkJoin({
-      tree: this.skillsService.getTree(),
       board: this.dailiesService.getBoard(this.todayIso(), true),
       quests: this.questsService.list('active'),
       habits: this.habitsService.list().pipe(catchError(() => of([] as HabitView[]))),
@@ -291,23 +329,25 @@ export class DashboardPage implements OnInit {
       profile: this.characterService.getProfile().pipe(
         catchError(() => of(null)),
       ),
+      levels: this.skillsService.listLevelUps(1, 3).pipe(
+        catchError(() => of(null)),
+      ),
     }).subscribe({
-      next: ({ tree, board, quests, habits, dueWorks, profile }) => {
-        this.tree.set(tree);
+      next: ({ board, quests, habits, dueWorks, profile, levels }) => {
         this.board.set(board);
         this.quests.set(quests);
         this.dueWorks.set(dueWorks);
         this.habits.set(habits.filter((h) => h.active && !h.archived));
         this.habitusUnlocked.set(Boolean(profile?.habitusUnlocked));
+        this.totalLevel.set(profile?.totalLevel ?? 0);
+        this.levelLogs.set(levels?.items.slice(0, 3) ?? []);
         this.loading.set(false);
         this.error.set(null);
         void this.questsService.refreshActive().subscribe();
       },
       error: () => {
         this.loading.set(false);
-        if (!this.tree()) {
-          this.error.set('Could not reach the server. Is the backend running?');
-        }
+        this.error.set('Could not reach the server. Is the backend running?');
       },
     });
   }
@@ -330,11 +370,11 @@ export class DashboardPage implements OnInit {
     });
   }
 
-  private reloadTree(): void {
-    this.skillsService.getTree(true).subscribe({
-      next: (tree) => this.tree.set(tree),
+  private reloadLevelLogs(): void {
+    this.skillsService.listLevelUps(1, 3).subscribe({
+      next: (result) => this.levelLogs.set(result.items.slice(0, 3)),
       error: () => {
-        /* keep prior tree */
+        /* keep prior log */
       },
     });
   }

@@ -26,6 +26,7 @@ export interface CharacterProfile {
   weekStartsOn: WeekStart;
   menuAutoToggleMobile: boolean;
   menuAutoToggleDesktop: boolean;
+  pomodoroAutoContinue: boolean;
   wealthCents: number;
   currency: CurrencyId;
   habitusUnlocked: boolean;
@@ -73,6 +74,7 @@ export class CharacterService {
   readonly weekStartsOn = signal<WeekStart>(1);
   readonly menuAutoToggleMobile = signal(true);
   readonly menuAutoToggleDesktop = signal(true);
+  readonly pomodoroAutoContinue = signal(true);
   readonly wealthCents = signal(0);
   readonly currency = signal<CurrencyId>(DEFAULT_CURRENCY);
   readonly todayIso = computed(() => todayInZone(this.timezone()));
@@ -93,6 +95,7 @@ export class CharacterService {
     weekStartsOn?: WeekStart;
     menuAutoToggleMobile?: boolean;
     menuAutoToggleDesktop?: boolean;
+    pomodoroAutoContinue?: boolean;
     currency?: CurrencyId;
   }) {
     return this.http
@@ -116,6 +119,7 @@ export class CharacterService {
     this.weekStartsOn.set(isWeekStart(start) ? start : 1);
     this.menuAutoToggleMobile.set(p.menuAutoToggleMobile !== false);
     this.menuAutoToggleDesktop.set(p.menuAutoToggleDesktop !== false);
+    this.pomodoroAutoContinue.set(p.pomodoroAutoContinue !== false);
     this.wealthCents.set(Math.round(Number(p.wealthCents) || 0));
     this.currency.set(isCurrency(p.currency) ? p.currency : DEFAULT_CURRENCY);
   }

@@ -126,6 +126,14 @@ export const routes: Routes = [
     title: 'Consuetudo Demo — No Escape',
   },
   {
+    path: 'consuetudo/log',
+    loadComponent: () =>
+      import('./consuetudo/consuetudo-log-page').then(
+        (m) => m.ConsuetudoLogPage,
+      ),
+    title: 'Walk Log — No Escape',
+  },
+  {
     path: 'consuetudo/:id',
     loadComponent: () =>
       import('./consuetudo/consuetudo-edit-page').then(
@@ -138,6 +146,14 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./consuetudo/consuetudo-page').then((m) => m.ConsuetudoPage),
     title: 'Consuetudo — No Escape',
+  },
+  {
+    path: 'dailies/defaults/new',
+    loadComponent: () =>
+      import('./dailies/daily-default-forge-page').then(
+        (m) => m.DailyDefaultForgePage,
+      ),
+    title: 'New Default — No Escape',
   },
   {
     path: 'dailies/defaults',
@@ -176,6 +192,22 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./horologium/horologium-page').then((m) => m.HorologiumPage),
     title: 'Horologium — No Escape',
+  },
+  {
+    path: 'scriptorium/new',
+    loadComponent: () =>
+      import('./scriptorium/scriptorium-folio-page').then(
+        (m) => m.ScriptoriumFolioPage,
+      ),
+    title: 'New Folio — No Escape',
+  },
+  {
+    path: 'scriptorium/:id',
+    loadComponent: () =>
+      import('./scriptorium/scriptorium-folio-page').then(
+        (m) => m.ScriptoriumFolioPage,
+      ),
+    title: 'Folio — No Escape',
   },
   {
     path: 'scriptorium',

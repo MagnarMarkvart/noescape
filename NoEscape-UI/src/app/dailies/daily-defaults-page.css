@@ -12,11 +12,13 @@
   min-height: 100dvh;
   color: var(--rs-text);
   font-family: var(--font-body);
-  background: linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 50%, #221c12 100%);
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(212, 168, 75, 0.14), transparent 45%),
+    linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 45%, #221c12 100%);
 }
 
 .defaults-shell {
-  max-width: 36rem;
+  max-width: 42rem;
   padding: 0.85rem 1rem 2rem;
 }
 
@@ -24,6 +26,8 @@
   display: flex;
   justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
+  align-items: start;
   margin-bottom: 1rem;
 }
 
@@ -38,6 +42,7 @@
 .toolbar h1 {
   margin: 0.2rem 0 0;
   font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
   color: var(--rs-accent);
 }
 
@@ -47,14 +52,14 @@
   font-size: 0.9rem;
 }
 
-.back {
-  color: var(--rs-muted);
-  text-decoration: none;
-  font-family: var(--font-display);
+.toolbar-links {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
 }
 
 .toast {
-  padding: 0.65rem;
+  padding: 0.65rem 0.85rem;
   margin-bottom: 0.85rem;
   border: 1px solid var(--rs-border-bright);
   background: rgba(47, 143, 58, 0.16);
@@ -78,6 +83,11 @@
   background: rgba(30, 24, 14, 0.7);
 }
 
+.template-list .icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
 .template-list strong {
   display: block;
   font-family: var(--font-display);
@@ -88,54 +98,9 @@
   font-size: 0.8rem;
 }
 
-.danger {
-  border: 1px solid #8a4038;
-  background: transparent;
-  color: #d4a070;
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-size: 0.75rem;
-  padding: 0.35rem 0.5rem;
-}
-
-.create {
-  display: grid;
-  gap: 0.55rem;
-  padding: 1rem;
-  border: 1px solid var(--rs-border);
-}
-
-.create h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1rem;
-  color: var(--rs-accent);
-}
-
-.create label {
-  display: grid;
-  gap: 0.25rem;
-  font-size: 0.85rem;
+.template-list .empty {
   color: var(--rs-muted);
-}
-
-.create input,
-.create select {
-  padding: 0.45rem;
-  border: 1px solid var(--rs-border);
-  background: #1a1610;
-  color: var(--rs-text);
-  font: inherit;
-}
-
-.create button {
-  justify-self: start;
-  font-family: var(--font-display);
-  padding: 0.55rem 0.9rem;
-  border: 1px solid var(--rs-border-bright);
-  background: rgba(212, 168, 75, 0.14);
-  color: var(--rs-text);
-  cursor: pointer;
+  border-style: dashed;
 }
 
 .search {
@@ -152,76 +117,4 @@
   background: #1a1610;
   color: var(--rs-text);
   font: inherit;
-}
-
-.template-list .empty {
-  color: var(--rs-muted);
-  border-style: dashed;
-}
-
-.create fieldset {
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.create legend {
-  margin-bottom: 0.35rem;
-  font-size: 0.8rem;
-  color: var(--rs-muted);
-}
-
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.chip {
-  min-width: 2.2rem;
-  padding: 0.35rem 0.45rem;
-  border: 1px solid var(--rs-border);
-  background: #1a1610;
-  color: var(--rs-text);
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-size: 0.8rem;
-}
-
-.chip.selected {
-  border-color: var(--rs-accent);
-  background: rgba(212, 168, 75, 0.16);
-}
-
-.xp-preview {
-  margin: 0;
-  color: var(--rs-accent);
-  font-size: 0.85rem;
-}
-
-.hint {
-  margin: 0;
-  color: var(--rs-muted);
-  font-size: 0.82rem;
-}
-
-.inline-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: end;
-}
-
-.inline-add .grow {
-  flex: 1;
-  min-width: 12rem;
-}
-
-.ghost-btn {
-  font-family: var(--font-display);
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--rs-border);
-  background: transparent;
-  color: var(--rs-muted);
-  cursor: pointer;
 }

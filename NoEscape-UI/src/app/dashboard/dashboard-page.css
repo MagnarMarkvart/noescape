@@ -118,7 +118,7 @@ a.panel:focus-visible {
 .panel-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
@@ -143,95 +143,36 @@ a.panel:focus-visible {
   color: var(--rs-accent);
 }
 
-.skill-cats {
+.panel-tools {
   display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.45rem;
 }
 
-.cat-label {
-  margin: 0 0 0.2rem;
-  font-size: 0.62rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--rs-muted);
+.skills-panel app-quick-task-panel {
+  margin-bottom: 0.55rem;
 }
 
-.skill-dots {
+.level-log {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.28rem;
-}
-
-.skill-dot {
-  position: relative;
   display: grid;
-  place-items: center;
-  width: 2.15rem;
-  height: 2.15rem;
-  text-decoration: none;
-  color: inherit;
-  border: 1px solid rgba(138, 115, 64, 0.7);
-  background: rgba(18, 14, 8, 0.55);
+  gap: 0.3rem;
 }
 
-.skill-dot:hover,
-.skill-dot:focus-visible {
-  border-color: var(--rs-border-bright);
-  outline: none;
+.level-log li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid rgba(138, 115, 64, 0.4);
+  background: rgba(18, 14, 8, 0.35);
 }
 
-.dot-icon {
-  font-size: 0.85rem;
-  line-height: 1;
-}
-
-.dot-lv {
-  position: absolute;
-  right: 0.08rem;
-  bottom: 0.02rem;
-  font-family: var(--font-display);
-  font-size: 0.58rem;
-  color: var(--rs-accent);
-}
-
-.tip {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 0.4rem);
-  z-index: 4;
-  width: max-content;
-  max-width: 12.5rem;
-  padding: 0.45rem 0.55rem;
-  transform: translateX(-50%);
-  opacity: 0;
-  pointer-events: none;
-  border: 1px solid var(--rs-border-bright);
-  background: #1c1810;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
-  font-size: 0.72rem;
-  line-height: 1.35;
-  color: var(--rs-text);
-}
-
-.tip strong {
-  display: block;
-  margin-bottom: 0.15rem;
-  font-family: var(--font-display);
-  color: var(--rs-accent);
-}
-
-.tip span {
-  display: block;
-  color: var(--rs-muted);
-}
-
-.skill-dot:hover .tip,
-.skill-dot:focus-visible .tip {
-  opacity: 1;
+.level-log li.down strong {
+  color: #e08a72;
 }
 
 .clock-body {
@@ -271,6 +212,19 @@ a.panel:focus-visible {
 
 .mini-ring[data-phase='rest'] .progress {
   stroke: #6ea8d8;
+}
+
+.mini-ring[data-phase='consuetudo'] .progress {
+  stroke: var(--rs-accent);
+}
+
+.mini-ring[data-phase='overtime'] .progress {
+  stroke: #c45c4a;
+}
+
+.mini-ring[data-phase='vigilia'] .progress {
+  stroke: #c6a85a;
+  opacity: 0.55;
 }
 
 .clock-time {
@@ -383,7 +337,7 @@ a.panel:focus-visible {
 }
 
 .done-btn.log {
-  margin-top: 0.35rem;
+  margin-top: 0;
 }
 
 a.done-btn {
@@ -416,70 +370,124 @@ a.done-btn {
 }
 
 .quest-card {
-  padding: 0.4rem 0.45rem 0.5rem;
+  position: relative;
+  isolation: isolate;
+  padding: 0.35rem 0.4rem 0.4rem;
   border: 1px solid rgba(138, 115, 64, 0.45);
   background: rgba(18, 14, 8, 0.32);
+}
+
+.quest-card.toned::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.quest-card.toned > * {
+  position: relative;
+  z-index: 1;
+}
+
+.quest-card.due.toned::before {
+  background: rgba(176, 64, 52, 0.12);
+  box-shadow: inset 3px 0 0 rgba(196, 92, 74, 0.62);
+}
+
+.quest-card.settled.toned::before {
+  background: rgba(47, 143, 58, 0.13);
+  box-shadow: inset 3px 0 0 rgba(74, 154, 82, 0.62);
+}
+
+.quest-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.quest-line app-ui-icon-btn {
+  flex: 0 0 auto;
 }
 
 .quest-title {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 0.4rem;
+  min-width: 0;
+  flex: 1;
   color: inherit;
   text-decoration: none;
   font-family: var(--font-display);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+}
+
+.quest-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quest-title small {
   color: var(--rs-muted);
   font-family: var(--font-body);
+  flex: 0 0 auto;
 }
 
-.due {
-  margin: 0.2rem 0 0.35rem;
+.quest-copy {
+  margin: 0.15rem 0 0;
+  color: var(--rs-muted);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.due-side {
+  margin: 0.12rem 0 0;
   font-size: 0.72rem;
-  color: var(--rs-accent);
-}
-
-.gate {
-  margin-left: 0.3rem;
-  font-style: normal;
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--rs-accent);
-}
-
-.task-list {
-  margin-top: 0.3rem;
+  color: #e08a72;
 }
 
 @media (min-width: 860px) {
   .dash-grid {
-    grid-template-columns: 1.15fr 0.85fr;
+    grid-template-columns: 1.1fr 0.9fr;
     grid-template-areas:
-      'skills clock'
-      'habits quests'
-      'scriptorium scriptorium'
-      'dailies dailies';
+      'dailies scriptorium'
+      'quests skills'
+      'habits habits';
   }
 
-  .skills-panel { grid-area: skills; }
+  .dash-grid.with-clock {
+    grid-template-areas:
+      'clock clock'
+      'dailies scriptorium'
+      'quests skills'
+      'habits habits';
+  }
+
   .clock-panel { grid-area: clock; }
-  .habits-panel { grid-area: habits; }
-  .quests-panel { grid-area: quests; }
-  .scriptorium-panel { grid-area: scriptorium; }
   .dailies-panel { grid-area: dailies; }
+  .scriptorium-panel { grid-area: scriptorium; }
+  .quests-panel { grid-area: quests; }
+  .skills-panel { grid-area: skills; }
+  .habits-panel { grid-area: habits; }
 }
 
 @media (min-width: 1180px) {
   .dash-grid {
-    grid-template-columns: 0.95fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 0.9fr;
     grid-template-areas:
-      'skills clock habits'
-      'skills quests quests'
-      'scriptorium scriptorium scriptorium'
-      'dailies dailies dailies';
+      'dailies scriptorium habits'
+      'quests skills skills';
+  }
+
+  .dash-grid.with-clock {
+    grid-template-areas:
+      'clock clock clock'
+      'dailies scriptorium habits'
+      'quests skills skills';
   }
 }

@@ -4,24 +4,32 @@
       <p class="kicker">IRL Goals</p>
       <h1>Quests</h1>
     </div>
-    <div class="toolbar-right">
-      <a routerLink="/quests/forge" class="forge-btn">Forge new</a>
-      <div class="filters" role="tablist">
-        @for (f of boards; track f.id) {
-          <button
-            type="button"
-            class="chip"
-            role="tab"
-            [class.selected]="board() === f.id"
-            [attr.aria-selected]="board() === f.id"
-            (click)="setBoard(f.id)"
-          >
-            {{ f.label }}
-          </button>
-        }
-      </div>
-    </div>
+    <nav class="toolbar-links">
+      <app-ui-icon-btn
+        icon="wrench"
+        label="Edit quests"
+        [pressed]="editing()"
+        (clicked)="toggleEditing()"
+      />
+    </nav>
   </header>
+
+  @if (!editing()) {
+    <div class="filters" role="tablist">
+      @for (f of boards; track f.id) {
+        <button
+          type="button"
+          class="chip"
+          role="tab"
+          [class.selected]="board() === f.id"
+          [attr.aria-selected]="board() === f.id"
+          (click)="setBoard(f.id)"
+        >
+          {{ f.label }}
+        </button>
+      }
+    </div>
+  }
 
   @if (toast()) {
     <p class="toast" role="status">{{ toast() }}</p>
@@ -30,102 +38,35 @@
   <div class="list-col">
     @if (loading()) {
       <p class="state">Loading…</p>
-    } @else if (board() === 'today') {
-      @if (todayQuests().length === 0) {
-        <p class="state">Nothing due today. In-progress quests are waiting in the next tab.</p>
+    } @else if (editing() || board() !== 'schedule') {
+      @if (!editing() && listed().length === 0) {
+        <p class="state">{{ emptyCopy() }}</p>
       } @else {
         <ul class="quest-list">
-          @for (q of todayQuests(); track q.id) {
+          @if (editing()) {
             <li>
-              <button type="button" class="quest-card active" (click)="open(q)">
-                @if (coverBg(q); as bg) {
-                  <span class="card-thumb" [style.background-image]="bg" aria-hidden="true"></span>
-                }
+              <a
+                class="quest-card empty-card"
+                routerLink="/quests/forge"
+                [queryParams]="{ from: 'catalog' }"
+              >
                 <span class="card-body">
-                  <div class="card-top">
-                    <strong>{{ q.name }}</strong>
-                    <span class="tier">Due today</span>
-                  </div>
-                  <p class="summary">{{ q.journeyLabel || q.summary }}</p>
-                  <div class="mini-bar" aria-hidden="true">
-                    <span [style.width.%]="q.progressPercent"></span>
-                  </div>
-                  <p class="avail">{{ q.progressPercent }}% · {{ q.week.logged }}/{{ q.week.expected }} this week</p>
+                  <strong>New quest</strong>
+                  <p class="summary">Forge a blank quest.</p>
                 </span>
-              </button>
+              </a>
             </li>
           }
-        </ul>
-      }
-    } @else if (board() === 'progress') {
-      @if (inProgress().length === 0) {
-        <p class="state">No quests in progress.</p>
-      } @else {
-        <ul class="quest-list">
-          @for (q of inProgress(); track q.id) {
-            <li>
-              <button type="button" class="quest-card active" (click)="open(q)">
-                @if (coverBg(q); as bg) {
-                  <span class="card-thumb" [style.background-image]="bg" aria-hidden="true"></span>
-                }
-                <span class="card-body">
-                  <div class="card-top">
-                    <strong>{{ q.name }}</strong>
-                    <span class="tier">{{ q.tier }}</span>
-                  </div>
-                  <p class="summary">{{ q.summary }}</p>
-                  <div class="mini-bar" aria-hidden="true">
-                    <span [style.width.%]="q.progressPercent"></span>
-                  </div>
-                  <p class="avail">
-                    {{ q.progressPercent }}%
-                    @if (q.journeyDueToday) {
-                      · due today
-                    }
-                  </p>
-                </span>
-              </button>
-            </li>
-          }
-        </ul>
-      }
-    } @else if (board() === 'schedule') {
-      @if (inProgress().length === 0) {
-        <p class="state">No active schedule. Start a quest to see the week.</p>
-      } @else {
-        <ul class="schedule-list">
-          @for (q of inProgress(); track q.id) {
-            <li>
-              <button type="button" class="schedule-card" (click)="open(q)">
-                <div class="card-top">
-                  <strong>{{ q.name }}</strong>
-                  <span class="tier">{{ q.week.logged }}/{{ q.week.expected }}</span>
-                </div>
-                <p class="summary">{{ q.journeyLabel || q.summary }}</p>
-                <ul class="week-row" aria-label="This week">
-                  @for (d of q.week.dates; track d.date) {
-                    <li [class.logged]="d.logged" [class.today]="d.isToday">
-                      <span>{{ weekdayLabel(d.date) }}</span>
-                      <strong>{{ d.logged ? '✓' : '·' }}</strong>
-                    </li>
-                  }
-                </ul>
-              </button>
-            </li>
-          }
-        </ul>
-      }
-    } @else if (board() === 'ready') {
-      @if (notStarted().length === 0) {
-        <p class="state">No waiting quests. Forge one.</p>
-      } @else {
-        <ul class="quest-list">
-          @for (q of notStarted(); track q.id) {
-            <li>
+          @for (q of listed(); track q.id) {
+            <li [class.quest-row]="editing()">
               <button
                 type="button"
                 class="quest-card"
+                [class.toned]="editing() || board() === 'all'"
+                [class.active]="q.availability === 'active'"
                 [class.locked]="q.availability === 'locked'"
+                [class.completed]="q.availability === 'completed'"
+                [attr.data-status]="q.availability"
                 (click)="open(q)"
               >
                 @if (coverBg(q); as bg) {
@@ -134,51 +75,98 @@
                 <span class="card-body">
                   <div class="card-top">
                     <strong>{{ q.name }}</strong>
-                    <span class="tier">{{ q.tier }}</span>
+                    <span class="tier">{{ statusLabel(q) }}</span>
                   </div>
-                  <p class="summary">{{ q.summary }}</p>
-                  @if (q.requirements.length) {
-                    <ul class="reqs">
-                      @for (r of q.requirements; track r.label) {
-                        <li [class.met]="r.met" [class.unmet]="!r.met">
-                          {{ r.met ? '✓' : '✗' }} {{ r.label }}
-                        </li>
+                  <p class="summary">{{ q.journeyLabel || q.summary }}</p>
+                  @if (q.availability === 'active') {
+                    <div class="mini-bar" aria-hidden="true">
+                      <span [style.width.%]="q.progressPercent"></span>
+                    </div>
+                    <p class="avail">
+                      {{ q.progressPercent }}%
+                      @if (q.journeyDueToday) {
+                        · due today
                       }
-                    </ul>
+                      @if (q.week.expected) {
+                        · {{ q.week.logged }}/{{ q.week.expected }} this week
+                      }
+                    </p>
+                  } @else if (q.availability === 'available' || q.availability === 'locked') {
+                    @if (q.requirements.length) {
+                      <ul class="reqs">
+                        @for (r of q.requirements; track r.label) {
+                          <li [class.met]="r.met" [class.unmet]="!r.met">
+                            {{ r.met ? '✓' : '✗' }} {{ r.label }}
+                          </li>
+                        }
+                      </ul>
+                    } @else {
+                      <p class="open-tag">No requirements — open to all</p>
+                    }
+                    <p class="avail">{{ q.availability }}</p>
                   } @else {
-                    <p class="open-tag">No requirements — open to all</p>
+                    <p class="avail">completed</p>
                   }
-                  <p class="avail">{{ q.availability }}</p>
                 </span>
               </button>
+              @if (editing()) {
+                <div class="edit-actions">
+                  <app-ui-icon-btn
+                    icon="wrench"
+                    [label]="'Edit ' + q.name"
+                    [href]="editHref(q)"
+                    [queryParams]="{ from: 'catalog' }"
+                  />
+                  <app-ui-icon-btn
+                    icon="close"
+                    [label]="'Erase ' + q.name"
+                    (clicked)="askDelete(q)"
+                  />
+                </div>
+              }
             </li>
           }
         </ul>
       }
+    } @else if (inProgress().length === 0) {
+      <p class="state">No active schedule. Start a quest to see the week.</p>
     } @else {
-      @if (completed().length === 0) {
-        <p class="state">No completed quests yet.</p>
-      } @else {
-        <ul class="quest-list">
-          @for (q of completed(); track q.id) {
-            <li>
-              <button type="button" class="quest-card completed" (click)="open(q)">
-                @if (coverBg(q); as bg) {
-                  <span class="card-thumb" [style.background-image]="bg" aria-hidden="true"></span>
+      <ul class="schedule-list">
+        @for (q of inProgress(); track q.id) {
+          <li>
+            <button type="button" class="schedule-card" (click)="open(q)">
+              <div class="card-top">
+                <strong>{{ q.name }}</strong>
+                <span class="tier">{{ q.week.logged }}/{{ q.week.expected }}</span>
+              </div>
+              <p class="summary">{{ q.journeyLabel || q.summary }}</p>
+              <ul class="week-row" aria-label="This week">
+                @for (d of q.week.dates; track d.date) {
+                  <li [class.logged]="d.logged" [class.today]="d.isToday">
+                    <span>{{ weekdayLabel(d.date) }}</span>
+                    <strong>{{ d.logged ? '✓' : '·' }}</strong>
+                  </li>
                 }
-                <span class="card-body">
-                  <div class="card-top">
-                    <strong>{{ q.name }}</strong>
-                    <span class="tier">{{ q.tier }}</span>
-                  </div>
-                  <p class="summary">{{ q.summary }}</p>
-                  <p class="avail">completed</p>
-                </span>
-              </button>
-            </li>
-          }
-        </ul>
-      }
+              </ul>
+            </button>
+          </li>
+        }
+      </ul>
     }
   </div>
 </section>
+
+@if (pendingDelete(); as q) {
+  <app-ui-confirm
+    kicker="Quests"
+    [title]="'Erase “' + q.name + '”?'"
+    body="This removes the quest, its tasks, and progress reports. Horologium logs and dailies stay."
+    cancelLabel="Cancel"
+    confirmLabel="Erase"
+    tone="danger"
+    [busy]="deleting()"
+    (dismiss)="cancelDelete()"
+    (secondary)="cancelDelete()"
+    (confirm)="confirmDelete()"
+  />
+}

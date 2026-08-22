@@ -18,6 +18,10 @@ export class PreviewPage {
     this.xpFeedback.mockLevelUp();
   }
 
+  protected mockLevelUpUnlock(): void {
+    this.xpFeedback.mockLevelUpUnlock();
+  }
+
   protected mockXpLoss(): void {
     this.xpFeedback.mockXpLoss();
   }

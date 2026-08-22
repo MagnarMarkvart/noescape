@@ -1,4 +1,4 @@
-<div class="scenery" role="dialog" aria-label="Scenery view" aria-modal="true">
+<div class="scenery" role="dialog" aria-label="Scenery view" aria-modal="true" [class.notes-open]="notesOpen()">
   <video
     #loop
     class="loop"
@@ -42,8 +42,8 @@
       <p class="phase">{{ consuetudoOvertime() ? 'Over' : consuetudoRunning() ? 'Practice' : 'Paused' }}</p>
       @if (consuetudoStep(); as step) {
         <p class="practice-step">
-          <span aria-hidden="true">{{ step.icon || '◆' }}</span>
-          {{ step.title }}
+          <span class="step-icon" aria-hidden="true">{{ step.icon || '◆' }}</span>
+          <span class="step-title">{{ step.title }}</span>
         </p>
       }
       <p
@@ -51,9 +51,19 @@
         [class.overtime]="consuetudoOvertime()"
         aria-live="polite"
       >{{ consuetudoLabel() }}</p>
+      @if (routineName(); as name) {
+        <p class="routine-name">{{ name }}</p>
+      }
       <p class="meta">{{ consuetudoMeta() }}</p>
     } @else {
       <p class="phase">{{ statusLine() }}</p>
+      <button
+        type="button"
+        class="task-line"
+        (click)="openTaskFocus()"
+      >
+        {{ taskLabel || 'Focus a task' }}{{ taskLabel && !canCompleteTask ? ' · done' : '' }}
+      </button>
       <p class="clock" aria-live="polite">{{ remainingLabel() }}</p>
       <p class="meta">{{ sessionLabel() }}</p>
       @if (restCarryMs() > 0) {
@@ -146,33 +156,33 @@
         <div class="fields">
           <label>
             Work
-            <input
-              type="number"
-              min="1"
-              max="180"
+            <app-number-field
+              ariaLabel="Work minutes"
+              [min]="1"
+              [max]="180"
               [value]="config().workMinutes"
-              (change)="setWork($any($event.target).value)"
+              (valueChange)="setWork($event)"
             />
           </label>
           <label>
             Rest
-            <input
-              type="number"
-              min="1"
-              max="60"
+            <app-number-field
+              ariaLabel="Rest minutes"
+              [min]="1"
+              [max]="60"
               [value]="config().restMinutes"
-              (change)="setRest($any($event.target).value)"
+              (valueChange)="setRest($event)"
             />
           </label>
           @if (mode() === 'planned') {
             <label>
               Laps
-              <input
-                type="number"
-                min="2"
-                max="20"
+              <app-number-field
+                ariaLabel="Laps"
+                [min]="2"
+                [max]="20"
                 [value]="config().iterations"
-                (change)="setIterations($any($event.target).value)"
+                (valueChange)="setIterations($event)"
               />
             </label>
           }
@@ -202,12 +212,19 @@
         <label class="task">
           Practice
           <select
-            [value]="selectedRoutineId ?? ''"
+            [value]="selectedRoutineId == null ? '' : '' + selectedRoutineId"
             (change)="pickRoutine($any($event.target).value)"
           >
-            <option value="">None</option>
+            @if (routines.length === 0) {
+              <option value="">None</option>
+            }
             @for (r of routines; track r.id) {
-              <option [value]="r.id">{{ r.icon || '🌅' }} {{ r.name }}</option>
+              <option
+                [value]="'' + r.id"
+                [selected]="(selectedRoutineId == null ? '' : '' + selectedRoutineId) === '' + r.id"
+              >
+                {{ r.icon || '🌅' }} {{ r.name }}
+              </option>
             }
           </select>
         </label>
@@ -271,8 +288,6 @@
         }
         }
       </div>
-    } @else if (taskLabel) {
-      <p class="task-line">{{ taskLabel }}{{ canCompleteTask ? '' : ' · done' }}</p>
     }
 
     <div class="controls">
@@ -330,7 +345,7 @@
         @if (running()) {
           <button type="button" class="exit primary" (click)="pause()">Pause</button>
         } @else {
-          <button type="button" class="exit primary" (click)="resume()">Resume</button>
+          <button type="button" class="exit primary" (click)="resume()">{{ continueLabel() }}</button>
         }
         @if (canSkipRest()) {
           <button type="button" class="exit" (click)="skipRest()" [disabled]="awarding()">
@@ -345,7 +360,29 @@
         }
       }
     </div>
+
+    <div class="notes-toggle">
+      <app-ui-icon-btn
+        icon="note"
+        label="Toggle notes"
+        [round]="true"
+        [expanded]="notesOpen()"
+        (clicked)="toggleSceneryNotes()"
+      />
+    </div>
   </section>
+
+  @if (notesOpen()) {
+    <div class="notes-dock">
+      <textarea
+        class="live-notes"
+        [value]="notes()"
+        (input)="setLiveNotes($any($event.target).value)"
+        maxlength="4000"
+        placeholder="Live notes"
+      ></textarea>
+    </div>
+  }
 
   @if (setupKind !== 'vigilia' && setupKind !== 'consuetudo' && widgetVisible && selectedWatch(); as watch) {
     <aside class="watch-widget">
@@ -364,38 +401,58 @@
 
   <div class="sound-dock">
     @if (soundOpen()) {
-      <div class="sound-panel" role="listbox" aria-label="Soundscape">
-        <header>
-          <p>Soundscape</p>
-          <button type="button" class="exit slim" (click)="toggleAmbienceMute()">
-            {{ ambienceMuted() ? 'Unmute bed' : 'Mute bed' }}
-          </button>
-        </header>
-        <button type="button" class="exit slim chime-toggle" (click)="toggleJinglesMute()">
-          {{ jinglesMuted() ? 'Chimes off' : 'Mute chimes' }}
-        </button>
-        <label class="vol">
-          Volume
-          <input
-            type="range"
-            min="0"
-            max="100"
-            [value]="bedVolume()"
-            (input)="setBedVolume($any($event.target).value)"
-          />
-        </label>
-        @for (scene of scenes; track scene.id) {
-          <button
-            type="button"
-            class="sound-pick"
-            role="option"
-            [class.selected]="scene.id === sceneId"
-            [attr.aria-selected]="scene.id === sceneId"
-            (click)="pickScene(scene.id)"
+      <div class="sound-panel" aria-label="Sound">
+        <section class="sound-block" aria-label="General volume">
+          <header>
+            <p>General</p>
+            <button type="button" class="exit slim" (click)="toggleJinglesMute()">
+              {{ jinglesMuted() ? 'Chimes off' : 'Mute chimes' }}
+            </button>
+          </header>
+          <label class="vol">
+            Volume {{ generalVolume() }}%
+            <input
+              type="range"
+              min="0"
+              max="100"
+              [value]="generalVolume()"
+              (input)="setGeneralVolume($any($event.target).value)"
+            />
+          </label>
+        </section>
+        <section class="sound-block" aria-label="Soundscape volume">
+          <header>
+            <p>Soundscape</p>
+            <button type="button" class="exit slim" (click)="toggleAmbienceMute()">
+              {{ ambienceMuted() ? 'Unmute bed' : 'Mute bed' }}
+            </button>
+          </header>
+          <label class="vol">
+            Volume {{ bedVolume() }}%
+            <input
+              type="range"
+              min="0"
+              max="100"
+              [value]="bedVolume()"
+              (input)="setBedVolume($any($event.target).value)"
+            />
+          </label>
+        </section>
+        <section class="sound-block scene-pick" aria-label="Scene">
+          <header>
+            <p>Scene</p>
+          </header>
+          <select
+            class="scene-select"
+            [value]="sceneId"
+            (change)="pickScene($any($event.target).value)"
+            aria-label="Change scenery"
           >
-            {{ scene.name }}
-          </button>
-        }
+            @for (scene of scenes; track scene.id) {
+              <option [value]="scene.id">{{ scene.name }}</option>
+            }
+          </select>
+        </section>
       </div>
     }
     <button
@@ -403,7 +460,7 @@
       class="orb"
       [class.open]="soundOpen()"
       [attr.aria-expanded]="soundOpen()"
-      aria-haspopup="listbox"
+      aria-haspopup="true"
       [attr.aria-label]="'Soundscape: ' + name"
       (click)="toggleSoundPanel()"
     >

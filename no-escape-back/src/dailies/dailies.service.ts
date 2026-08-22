@@ -563,6 +563,154 @@ export class DailiesService {
     return { deleted: true, id, soft: false };
   }
 
+  async logQuick(input: {
+    title?: string;
+    skillId?: number;
+    skillWeights?: Array<{ slug: string; weight: number }>;
+    effortLevel?: number;
+    durationMinutes?: number;
+    templateId?: number | null;
+    wealthCents?: number | null;
+  }) {
+    const title = String(input.title ?? '').trim().slice(0, 120);
+    if (!title) {
+      throw new BadRequestException('Title is required');
+    }
+    const plan = await this.resolveSkillPlan({
+      skillId: input.skillId,
+      skillWeights: input.skillWeights,
+    });
+    const effortLevel = Math.min(10, Math.max(1, Math.round(Number(input.effortLevel) || 5)));
+    const durationMinutes = billedDurationMinutes(
+      Math.max(1, Math.round(Number(input.durationMinutes) || 5)),
+    );
+    const xp = calculateDailyTaskXp({ effortLevel, durationMinutes });
+    const catalog = await this.skillCatalog();
+    const shares = splitQuestXp(xp, plan.weights);
+    const note = `Quick: ${title}`;
+    const primarySlug = plan.weights.length
+      ? plan.weights.reduce((best, row) =>
+          row.weight > best.weight ? row : best,
+        ).slug
+      : '';
+    const primary = catalog.get(primarySlug);
+
+    const awards: Awaited<ReturnType<SkillsService['awardXp']>>[] = [];
+    try {
+      for (const share of shares) {
+        if (share.xp <= 0) {
+          continue;
+        }
+        const skill = catalog.get(share.slug);
+        if (!skill) {
+          throw new BadRequestException(`Unknown skill '${share.slug}'`);
+        }
+        awards.push(
+          await this.skillsService.awardXp(skill.id, {
+            xpGained: share.xp,
+            duration: durationMinutes,
+            note,
+          }),
+        );
+      }
+    } catch (err) {
+      for (const awarded of [...awards].reverse()) {
+        await this.skillsService.reverseXp(
+          awarded.skill.id,
+          awarded.activity.xpGained,
+          awarded.activity.id,
+        );
+      }
+      throw err;
+    }
+
+    const wealthCents = boostsWealth(plan.weights)
+      ? parseRewardCents(input.wealthCents)
+      : 0;
+    const activityIds = awards.map((a) => a.activity.id);
+    const log = await this.prisma.quickTaskLog.create({
+      data: {
+        date: this.localToday(),
+        title,
+        icon: primary?.icon ?? null,
+        templateId:
+          input.templateId != null && Number(input.templateId) > 0
+            ? Math.round(Number(input.templateId))
+            : null,
+        skillWeightsJson: JSON.stringify(plan.weights),
+        effortLevel,
+        durationMinutes,
+        xpAwarded: xp,
+        activityIdsJson: activityIds.length ? JSON.stringify(activityIds) : null,
+        wealthCents,
+      },
+    });
+
+    if (wealthCents > 0) {
+      await this.characterService.adjustWealth({
+        deltaCents: wealthCents,
+        note,
+        source: 'quick',
+        sourceId: log.id,
+        date: log.date,
+      });
+    }
+
+    return {
+      log: this.serializeQuickLog(log, catalog),
+      award: awards[0] ?? null,
+      awards,
+    };
+  }
+
+  async listQuick(limit = 12) {
+    const take = Math.min(40, Math.max(1, Math.round(Number(limit) || 12)));
+    const rows = await this.prisma.quickTaskLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take,
+    });
+    const catalog = await this.skillCatalog();
+    return rows.map((row) => this.serializeQuickLog(row, catalog));
+  }
+
+  private serializeQuickLog(
+    row: {
+      id: number;
+      date: string;
+      title: string;
+      icon: string | null;
+      templateId: number | null;
+      skillWeightsJson: string;
+      effortLevel: number;
+      durationMinutes: number;
+      xpAwarded: number;
+      wealthCents: number;
+      createdAt: Date;
+    },
+    catalog: Map<string, { name: string; icon: string | null }>,
+  ) {
+    const weights = this.taskWeights({ skillWeightsJson: row.skillWeightsJson });
+    const skillShares = splitQuestXp(row.xpAwarded, weights).map((share) => ({
+      ...share,
+      name: catalog.get(share.slug)?.name ?? share.slug,
+      icon: catalog.get(share.slug)?.icon ?? null,
+    }));
+    return {
+      id: row.id,
+      date: row.date,
+      title: row.title,
+      icon: row.icon,
+      templateId: row.templateId,
+      effortLevel: row.effortLevel,
+      durationMinutes: row.durationMinutes,
+      xpAwarded: row.xpAwarded,
+      wealthCents: row.wealthCents,
+      createdAt: row.createdAt.toISOString(),
+      skillWeights: weights,
+      skillShares,
+    };
+  }
+
   async clearSlot(id: number) {
     const task = await this.prisma.dailyTask.findUnique({ where: { id } });
     if (!task) {

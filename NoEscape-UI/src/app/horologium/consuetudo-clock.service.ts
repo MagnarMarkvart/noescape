@@ -1,13 +1,18 @@
-import { computed, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, NgZone, signal } from '@angular/core';
+import { ClockApiService } from '../clocks/clock-api.service';
+import { ClockEvent, ClockSnapshot } from '../clocks/clock.model';
+import { clockNow, clockSkewMs } from '../clocks/clock-now';
 import { formatClockMs } from '../consuetudo/consuetudo-xp';
 import { RoutineCompletePayload, RoutineView } from '../consuetudo/routines.service';
+import { HorologiumNotesService } from './horologium-notes.service';
 
 @Injectable({ providedIn: 'root' })
 export class ConsuetudoClockService {
-  private tickTimer: ReturnType<typeof setInterval> | null = null;
-  private stepStartedAt = 0;
-  private pausedAccum = 0;
-  private pauseStartedAt: number | null = null;
+  private readonly clockApi = inject(ClockApiService);
+  private readonly notesStore = inject(HorologiumNotesService);
+  private readonly ngZone = inject(NgZone);
+  private tickHandle: number | null = null;
+  private endAtMs: number | null = null;
 
   readonly routine = signal<RoutineView | null>(null);
   readonly index = signal(0);
@@ -16,6 +21,7 @@ export class ConsuetudoClockService {
   readonly awarding = signal(false);
   readonly now = signal(Date.now());
   readonly logs = signal<RoutineCompletePayload['steps']>([]);
+  readonly lastComplete = signal<unknown>(null);
 
   readonly currentStep = computed(() => {
     const routine = this.routine();
@@ -29,29 +35,24 @@ export class ConsuetudoClockService {
     () => (this.currentStep()?.durationMinutes ?? 0) * 60_000,
   );
 
-  readonly stepElapsedMs = computed(() => {
-    if (!this.currentStep() || this.stepStartedAt === 0) {
+  readonly remainingMs = computed(() => {
+    this.now();
+    clockSkewMs();
+    if (this.finished()) {
       return 0;
     }
-    const end = this.running()
-      ? this.now()
-      : (this.pauseStartedAt ?? this.now());
-    return Math.max(0, end - this.stepStartedAt - this.pausedAccum);
+    if (this.endAtMs != null && this.running()) {
+      return this.endAtMs - clockNow();
+    }
+    return this.pausedRemaining;
   });
+
+  private pausedRemaining = 0;
 
   readonly overtime = computed(() => {
-    const planned = this.plannedMs();
-    return (
-      planned > 0 &&
-      this.stepElapsedMs() > planned &&
-      !this.finished() &&
-      this.stepStartedAt > 0
-    );
+    const remaining = this.remainingMs();
+    return remaining < 0 && !this.finished() && this.plannedMs() > 0;
   });
-
-  readonly remainingMs = computed(
-    () => this.plannedMs() - this.stepElapsedMs(),
-  );
 
   readonly displayLabel = computed(() => {
     if (this.finished()) {
@@ -72,14 +73,14 @@ export class ConsuetudoClockService {
     if (this.overtime()) {
       return 100;
     }
-    return Math.min(100, (this.stepElapsedMs() / planned) * 100);
+    return Math.min(100, ((planned - Math.max(0, this.remainingMs())) / planned) * 100);
   });
 
   readonly inProgress = computed(
     () =>
       this.routine() != null &&
       !this.finished() &&
-      (this.running() || this.logs().length > 0 || this.stepStartedAt > 0),
+      (this.running() || this.logs().length > 0 || this.endAtMs != null || this.pausedRemaining > 0),
   );
 
   readonly stepCount = computed(() => this.routine()?.steps.length ?? 0);
@@ -96,70 +97,70 @@ export class ConsuetudoClockService {
     if (this.inProgress()) {
       return;
     }
-    this.clearTimers();
     this.routine.set(routine);
     this.index.set(0);
     this.running.set(false);
     this.finished.set(false);
     this.logs.set([]);
-    this.stepStartedAt = 0;
-    this.pausedAccum = 0;
-    this.pauseStartedAt = null;
+    this.endAtMs = null;
+    this.pausedRemaining = 0;
+    this.stopTicker();
   }
 
   start(): void {
     const routine = this.routine();
-    if (!routine?.steps.length || this.finished()) {
+    if (!routine?.steps.length || this.finished() || this.running()) {
       return;
     }
-    if (this.running()) {
+    if (this.inProgress()) {
+      this.clockApi.resume('consuetudo').subscribe({
+        next: (event) => this.applyEvent(event),
+      });
       return;
     }
-    if (this.stepStartedAt > 0 && this.pauseStartedAt != null) {
-      this.resume();
-      return;
-    }
-    this.beginStep();
+    this.clockApi.startConsuetudo(routine.id).subscribe({
+      next: (event) => this.applyEvent(event),
+    });
   }
 
   pause(): void {
     if (!this.running()) {
       return;
     }
-    this.pauseStartedAt = Date.now();
-    this.running.set(false);
+    this.clockApi.pause('consuetudo').subscribe({
+      next: (event) => this.applyEvent(event),
+    });
   }
 
   resume(): void {
-    if (this.running() || this.finished() || this.stepStartedAt === 0) {
+    if (this.running() || this.finished()) {
       return;
     }
-    if (this.pauseStartedAt != null) {
-      this.pausedAccum += Date.now() - this.pauseStartedAt;
-      this.pauseStartedAt = null;
-    }
-    this.running.set(true);
-    this.ensureTick();
+    this.clockApi.resume('consuetudo').subscribe({
+      next: (event) => this.applyEvent(event),
+    });
   }
 
   completeCurrent(): void {
-    this.commitCurrent('COMPLETED');
+    this.clockApi.completeStep().subscribe({
+      next: (event) => this.applyEvent(event),
+    });
   }
 
   skipCurrent(): void {
-    this.commitCurrent('SKIPPED');
+    this.clockApi.skipStep().subscribe({
+      next: (event) => this.applyEvent(event),
+    });
   }
 
   reset(): void {
-    this.clearTimers();
-    this.index.set(0);
-    this.running.set(false);
-    this.finished.set(false);
-    this.awarding.set(false);
-    this.logs.set([]);
-    this.stepStartedAt = 0;
-    this.pausedAccum = 0;
-    this.pauseStartedAt = null;
+    if (this.inProgress() || this.finished()) {
+      this.clockApi.stop('consuetudo').subscribe({
+        next: (event) => this.applyEvent(event),
+      });
+      return;
+    }
+    this.resetLocal();
   }
 
   payload(): RoutineCompletePayload | null {
@@ -167,60 +168,93 @@ export class ConsuetudoClockService {
     if (!logs.length) {
       return null;
     }
-    return { steps: logs };
+    return { steps: logs, notes: this.notesStore.text() };
   }
 
-  private beginStep(): void {
-    this.stepStartedAt = Date.now();
-    this.pausedAccum = 0;
-    this.pauseStartedAt = null;
-    this.running.set(true);
-    this.ensureTick();
-    this.now.set(Date.now());
-  }
-
-  private commitCurrent(outcome: 'COMPLETED' | 'SKIPPED'): void {
-    const step = this.currentStep();
-    if (!step || this.finished()) {
+  applyEvent(event: ClockEvent): void {
+    if (event.kind !== 'consuetudo') {
       return;
     }
-    const elapsedMs = this.stepElapsedMs();
-    const plannedSeconds = Math.max(0, Math.round(step.durationMinutes * 60));
-    this.logs.update((rows) => [
-      ...rows,
-      {
-        stepId: step.id > 0 ? step.id : null,
-        title: step.title,
-        icon: step.icon,
-        plannedSeconds,
-        elapsedMs,
-        outcome,
-      },
-    ]);
-    const next = this.index() + 1;
-    const total = this.stepCount();
-    if (next >= total) {
-      this.running.set(false);
-      this.finished.set(true);
-      this.clearTimers();
-      this.stepStartedAt = 0;
-      return;
+    if (event.complete) {
+      this.lastComplete.set(event.complete);
+      this.awarding.set(false);
     }
-    this.index.set(next);
-    this.beginStep();
+    this.applySnapshot(event.snapshot);
   }
 
-  private ensureTick(): void {
-    if (this.tickTimer != null) {
+  applySnapshot(snapshot: ClockSnapshot | null): void {
+    if (!snapshot || snapshot.kind !== 'consuetudo') {
+      if (this.inProgress() || this.running() || this.finished()) {
+        this.resetLocal();
+      }
       return;
     }
-    this.tickTimer = setInterval(() => this.now.set(Date.now()), 250);
+    const payload = snapshot.consuetudo;
+    if (payload) {
+      const current = this.routine();
+      this.routine.set({
+        id: payload.routineId,
+        name: payload.routineName,
+        icon: payload.routineIcon,
+        effortLevel: current?.effortLevel ?? 3,
+        skillWeights: current?.skillWeights ?? [],
+        sortOrder: current?.sortOrder ?? 0,
+        active: true,
+        createdAt: current?.createdAt ?? new Date().toISOString(),
+        updatedAt: current?.updatedAt ?? new Date().toISOString(),
+        steps: payload.steps,
+        runs: current?.runs ?? [],
+      });
+      this.index.set(payload.index);
+      this.logs.set(payload.logs);
+    }
+    this.finished.set(snapshot.status === 'complete' || snapshot.phase === 'complete');
+    this.running.set(snapshot.status === 'running');
+    this.pausedRemaining = snapshot.remainingMs;
+    if (snapshot.status === 'running' && snapshot.endsAt) {
+      this.endAtMs = Date.parse(snapshot.endsAt);
+      this.startTicker();
+    } else {
+      this.endAtMs = snapshot.status === 'paused' ? null : this.endAtMs;
+      if (snapshot.status !== 'running') {
+        this.endAtMs = null;
+        this.stopTicker();
+      }
+    }
+    this.now.set(clockNow());
   }
 
-  private clearTimers(): void {
-    if (this.tickTimer != null) {
-      clearInterval(this.tickTimer);
-      this.tickTimer = null;
+  private resetLocal(): void {
+    this.stopTicker();
+    this.index.set(0);
+    this.running.set(false);
+    this.finished.set(false);
+    this.awarding.set(false);
+    this.logs.set([]);
+    this.endAtMs = null;
+    this.pausedRemaining = 0;
+    this.now.set(clockNow());
+  }
+
+  private startTicker(): void {
+    this.stopTicker();
+    this.ngZone.runOutsideAngular(() => {
+      const loop = () => {
+        this.now.set(clockNow());
+        if (this.running() && this.endAtMs != null) {
+          this.tickHandle = requestAnimationFrame(loop);
+        } else {
+          this.tickHandle = null;
+        }
+      };
+      this.tickHandle = requestAnimationFrame(loop);
+    });
+  }
+
+  private stopTicker(): void {
+    if (this.tickHandle != null) {
+      cancelAnimationFrame(this.tickHandle);
+      this.tickHandle = null;
     }
   }
 }

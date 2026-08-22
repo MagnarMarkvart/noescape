@@ -10,6 +10,9 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { CharacterService } from '../character/character.service';
 import { QuestsService } from '../quests/quests.service';
+import { UiIcon } from '../shared/ui/ui-icon';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
+import { UiScroll } from '../shared/ui/ui-scroll';
 import { TimedToast } from '../shared/timed-toast';
 import {
   CONSUETUDO_DEMO_ROUTINE,
@@ -20,7 +23,7 @@ import { RoutineAccess, RoutineView, RoutinesService } from './routines.service'
 
 @Component({
   selector: 'app-consuetudo-page',
-  imports: [RouterLink],
+  imports: [RouterLink, UiIcon, UiIconBtn, UiScroll],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './consuetudo-page.html',
   styleUrl: './consuetudo-page.css',
@@ -45,6 +48,8 @@ export class ConsuetudoPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly toast = this.timed.value;
   protected readonly formatDelta = formatSignedDelta;
+  protected readonly openWalks = signal<Record<number, boolean>>({});
+  protected readonly notesText = signal<string | null>(null);
 
   ngOnInit(): void {
     this.quests.list('all').subscribe({
@@ -71,6 +76,22 @@ export class ConsuetudoPage implements OnInit {
 
   protected formatDate(iso: string): string {
     return this.character.formatDate(iso);
+  }
+
+  protected isWalkOpen(id: number): boolean {
+    return this.openWalks()[id] === true;
+  }
+
+  protected toggleWalk(id: number): void {
+    this.openWalks.update((map) => ({ ...map, [id]: !map[id] }));
+  }
+
+  protected openNotes(notes: string): void {
+    this.notesText.set(notes);
+  }
+
+  protected closeNotes(): void {
+    this.notesText.set(null);
   }
 
   protected plannedLabel(routine: RoutineView): string {

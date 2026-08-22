@@ -44,6 +44,16 @@
     </header>
 
     <div class="skills-board" aria-label="Skills">
+      <header class="skills-head">
+        <h2>Skills</h2>
+        <app-ui-icon-btn
+          icon="wrench"
+          label="Default tasks"
+          href="/dailies/defaults"
+          [queryParams]="{ from: 'character' }"
+        />
+      </header>
+      <app-quick-task-panel (logged)="onQuickLogged()" />
       @for (group of skillGroups(); track group.category) {
         <section class="skill-group">
           <h2>{{ group.category }}</h2>

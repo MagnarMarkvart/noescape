@@ -2,6 +2,17 @@ import { Skill, SkillProgress } from '../skills/skill.model';
 
 export type XpFeedbackDirection = 'gain' | 'loss';
 
+export interface XpUnlockGrant {
+  icon: string;
+  label: string;
+  type?: string;
+}
+
+export interface XpQuestReqGrant {
+  questName: string;
+  label: string;
+}
+
 export interface XpFeedbackEvent {
   direction: XpFeedbackDirection;
   /** Always positive; sign comes from direction. */
@@ -12,6 +23,8 @@ export interface XpFeedbackEvent {
   levelsChanged: number;
   previousLevel: number;
   previousProgress: SkillProgress;
+  unlocks?: XpUnlockGrant[];
+  questReqs?: XpQuestReqGrant[];
 }
 
 /** @deprecated alias — prefer XpFeedbackEvent */
@@ -30,6 +43,7 @@ export const XP_LOSS_SFX = '/assets/jingles/failiure.mp3';
 
 export const XP_DROP_MS = 3000;
 export const LEVEL_UP_MS = 3000;
+export const LEVEL_UP_GRANT_MS = 5200;
 export const LEVEL_DOWN_MS = 3000;
 
 export function mockFocusSkill(overrides: Partial<Skill> = {}): Skill {

@@ -1,4 +1,4 @@
-<section class="script-shell" [class.inspecting]="inspectorOpen()">
+<section class="script-shell">
   <header class="toolbar">
     <div>
       <p class="kicker">The vault of works</p>
@@ -7,12 +7,8 @@
         Inscribe projects, tasks, and notions. Bind a due day only when the work has a season.
       </p>
     </div>
-    <button type="button" class="primary" (click)="inscribe()">Inscribe</button>
+    <a routerLink="/scriptorium/new" class="primary">Inscribe</a>
   </header>
-
-  @if (toast()) {
-    <p class="toast" role="status">{{ toast() }}</p>
-  }
 
   <div class="filters">
     <label class="search">
@@ -62,12 +58,10 @@
             <ul class="cards">
               @for (w of col.works; track w.id) {
                 <li>
-                  <button
-                    type="button"
+                  <a
                     class="card"
-                    [class.selected]="selectedId() === w.id"
                     [class.archived]="w.status === 'ARCHIVED'"
-                    (click)="selectWork(w)"
+                    [routerLink]="['/scriptorium', w.id]"
                   >
                     <span class="card-icon" aria-hidden="true">{{ w.icon || defaultIcon }}</span>
                     <span class="card-body">
@@ -92,7 +86,7 @@
                         </span>
                       }
                     </span>
-                  </button>
+                  </a>
                 </li>
               }
             </ul>
@@ -100,234 +94,5 @@
         </section>
       }
     </div>
-  }
-
-  @if (inspectorOpen()) {
-    <aside class="inspector" aria-label="Work folio">
-      <header class="inspector-head">
-        <p class="kicker">{{ selectedId() === 'new' ? 'New folio' : 'Folio' }}</p>
-        <h2>{{ draft().title.trim() || 'Untitled work' }}</h2>
-        <button type="button" class="ghost close" (click)="closeInspector()" aria-label="Close folio">
-          ×
-        </button>
-      </header>
-
-      <div class="folio">
-        <label>
-          Title
-          <input
-            type="text"
-            maxlength="120"
-            [value]="draft().title"
-            (input)="setDraftTitle($any($event.target).value)"
-          />
-        </label>
-
-        <div class="icon-picker">
-          <div class="icon-picker-head">
-            <span>Icon</span>
-            <span class="icon-preview" aria-hidden="true">{{ draft().icon }}</span>
-          </div>
-          <div class="icon-tabs" role="tablist" aria-label="Icon categories">
-            @for (group of iconGroups; track group.id) {
-              <button
-                type="button"
-                role="tab"
-                class="icon-tab"
-                [class.selected]="iconGroupId() === group.id"
-                (click)="setIconGroup(group.id)"
-              >
-                {{ group.label }}
-              </button>
-            }
-          </div>
-          <div class="icon-grid" role="listbox">
-            @for (opt of activeIconGroup().icons; track opt.glyph) {
-              <button
-                type="button"
-                role="option"
-                class="icon-tile"
-                [class.selected]="draft().icon === opt.glyph"
-                [title]="opt.label"
-                (click)="pickIcon(opt.glyph)"
-              >
-                <span class="glyph" aria-hidden="true">{{ opt.glyph }}</span>
-                <span class="icon-label">{{ opt.label }}</span>
-              </button>
-            }
-          </div>
-        </div>
-
-        <fieldset>
-          <legend>Shelf</legend>
-          <div class="tier-picks">
-            @for (t of tiers; track t.id) {
-              <button
-                type="button"
-                class="chip"
-                [class.selected]="draft().tier === t.id"
-                (click)="setDraftTier(t.id)"
-              >
-                {{ t.name }}
-              </button>
-            }
-          </div>
-        </fieldset>
-
-        <label>
-          Due day
-          <span class="due-row">
-            <input
-              type="date"
-              [value]="draft().dueDate"
-              (input)="setDraftDue($any($event.target).value)"
-            />
-            <button type="button" class="ghost" (click)="clearDue()">None</button>
-          </span>
-        </label>
-
-        <fieldset>
-          <legend>Complexity</legend>
-          <div class="effort-picks">
-            @for (n of effortLevels; track n) {
-              <button
-                type="button"
-                class="chip tight"
-                [class.selected]="draft().effort === n"
-                (click)="setEffort(n)"
-              >
-                {{ n }}
-              </button>
-            }
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Volume</legend>
-          <div class="duration-picks">
-            <button
-              type="button"
-              class="chip"
-              [class.selected]="draft().durationMinutes == null"
-              (click)="setDuration(null)"
-            >
-              Unset
-            </button>
-            @for (m of durationPresets; track m) {
-              <button
-                type="button"
-                class="chip tight"
-                [class.selected]="draft().durationMinutes === m && !customDuration()"
-                (click)="setDuration(m)"
-              >
-                {{ durationLabel(m) }}
-              </button>
-            }
-          </div>
-          <label class="custom">
-            Custom minutes
-            <input
-              type="number"
-              min="1"
-              max="10080"
-              [value]="customDuration()"
-              (input)="setCustomDuration($any($event.target).value)"
-            />
-          </label>
-        </fieldset>
-
-        <label>
-          Notes
-          <textarea
-            rows="4"
-            maxlength="4000"
-            [value]="draft().notes"
-            (input)="setDraftNotes($any($event.target).value)"
-          ></textarea>
-        </label>
-
-        <fieldset>
-          <legend>Skills</legend>
-          <app-skill-weight-list
-            [shares]="shares()"
-            [remaining]="remainingWeights()"
-            [valid]="weightsOk()"
-            (bump)="bumpWeight($event.slug, $event.delta)"
-            (remove)="removeSkill($event)"
-          />
-          <span class="skill-add">
-            <select
-              [value]="skillPick()"
-              (change)="setSkillPick($any($event.target).value)"
-            >
-              <option value="">Add a skill…</option>
-              @for (s of availableSkills(); track s.slug) {
-                <option [value]="s.slug">{{ s.icon }} {{ s.name }}</option>
-              }
-            </select>
-            <button type="button" class="ghost" [disabled]="!skillPick()" (click)="addSkill()">
-              Bind
-            </button>
-          </span>
-        </fieldset>
-
-        @if (selected(); as work) {
-          <fieldset>
-            <legend>Subtasks</legend>
-            <ul class="subtasks">
-              @for (s of work.subtasks; track s.id) {
-                <li>
-                  <app-rune-check
-                    [checked]="s.done"
-                    [disabled]="busyKey() === 'sub:' + s.id"
-                    [label]="s.title"
-                    (checkedChange)="toggleSubtask(s.id, $event)"
-                  />
-                  <button
-                    type="button"
-                    class="ghost tiny"
-                    (click)="removeSubtask(s.id)"
-                    aria-label="Remove subtask"
-                  >
-                    ×
-                  </button>
-                </li>
-              }
-            </ul>
-            <form class="sub-add" (submit)="$event.preventDefault(); addSubtask()">
-              <input
-                type="text"
-                maxlength="160"
-                placeholder="Add a subtask"
-                [value]="subtaskDraft()"
-                (input)="setSubtaskDraft($any($event.target).value)"
-              />
-              <button type="submit" class="ghost" [disabled]="!subtaskDraft().trim()">
-                Add
-              </button>
-            </form>
-          </fieldset>
-        } @else {
-          <p class="hint">Save the folio first, then add subtasks.</p>
-        }
-
-        <div class="actions">
-          <button type="button" class="primary" [disabled]="saving()" (click)="save()">
-            {{ saving() ? 'Sealing…' : selectedId() === 'new' ? 'Inscribe' : 'Seal' }}
-          </button>
-          @if (selected()) {
-            <button type="button" class="ghost" (click)="forgeQuest()">Create a Quest</button>
-            <button type="button" class="ghost" (click)="openVigilia()">Open in Vigilia</button>
-            @if (selected()?.questId; as qid) {
-              <a class="ghost link" [routerLink]="['/quests', qid]">Open quest →</a>
-            }
-            <button type="button" class="ghost" (click)="archive()">
-              {{ selected()?.status === 'ARCHIVED' ? 'Restore' : 'Shelve' }}
-            </button>
-            <button type="button" class="ghost danger" (click)="destroy()">Erase</button>
-          }
-        </div>
-      </div>
-    </aside>
   }
 </section>

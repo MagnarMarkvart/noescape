@@ -9,5 +9,6 @@ import { DailiesService } from './dailies.service';
   imports: [SkillsModule, HabitsModule, CharacterModule],
   controllers: [DailiesController],
   providers: [DailiesService],
+  exports: [DailiesService],
 })
 export class DailiesModule {}

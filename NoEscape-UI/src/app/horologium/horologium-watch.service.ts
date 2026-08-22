@@ -5,6 +5,9 @@ import {
   Injectable,
   signal,
 } from '@angular/core';
+import { ClockApiService } from '../clocks/clock-api.service';
+import { ClockSnapshot } from '../clocks/clock.model';
+import { clockNow } from '../clocks/clock-now';
 import { HorologiumApiService } from './horologium-api.service';
 import { HorologiumTimerService } from './horologium-timer.service';
 import {
@@ -46,6 +49,7 @@ function loadWidgetVisible(): boolean {
 
 @Injectable({ providedIn: 'root' })
 export class HorologiumWatchService {
+  private readonly clockApi = inject(ClockApiService);
   private readonly api = inject(HorologiumApiService);
   private readonly timer = inject(HorologiumTimerService);
 
@@ -61,7 +65,7 @@ export class HorologiumWatchService {
   private localBaseMs = 0;
   private localStartedAt: number | null = null;
   private clockTimer: ReturnType<typeof setInterval> | null = null;
-  private syncTimer: ReturnType<typeof setInterval> | null = null;
+  private patchBusy = false;
 
   readonly selected = computed(() => {
     const id = this.selectedId();
@@ -135,35 +139,75 @@ export class HorologiumWatchService {
     if (!watch) {
       return 0;
     }
+    // elapsedMs is the paused accumulator; add only the open running segment.
+    if (watch.running && watch.lastStartedAt) {
+      const start = Date.parse(watch.lastStartedAt);
+      if (Number.isFinite(start)) {
+        return watch.elapsedMs + Math.max(0, clockNow() - start);
+      }
+    }
     if (watch.id === this.selectedId() && this.localStartedAt != null) {
-      return this.localBaseMs + (Date.now() - this.localStartedAt);
+      return this.localBaseMs + Math.max(0, clockNow() - this.localStartedAt);
     }
     return watch.elapsedMs;
+  }
+
+  applyClockSnapshot(snapshot: ClockSnapshot | null): void {
+    const v = snapshot?.vigilia;
+    if (!v) {
+      return;
+    }
+    const running = snapshot.status === 'running';
+    this.watches.update((list) => {
+      let changed = false;
+      const next = list.map((w) => {
+        if (w.id !== v.watchId) {
+          return w;
+        }
+        if (
+          w.elapsedMs === v.elapsedMs &&
+          w.running === running &&
+          w.lastStartedAt === snapshot.startedAt
+        ) {
+          return w;
+        }
+        changed = true;
+        return {
+          ...w,
+          elapsedMs: v.elapsedMs,
+          running,
+          lastStartedAt: snapshot.startedAt,
+        };
+      });
+      return changed ? next : list;
+    });
+    if (this.selectedId() !== v.watchId) {
+      return;
+    }
+    this.soloRunning.set(running && !this.pomodoroLinked());
+    this.localBaseMs = v.elapsedMs;
+    if (running) {
+      this.startClock();
+    } else {
+      this.localStartedAt = null;
+      this.stopClock();
+    }
+    this.clock.set(clockNow());
   }
 
   reload(): void {
     this.api.listWatches('ACTIVE').subscribe({
       next: (rows) => {
-        const frozen = rows.map((row) =>
-          row.running ? { ...row, running: false, lastStartedAt: null } : row,
-        );
-        this.watches.set(frozen);
-        for (const row of rows) {
-          if (row.running) {
-            this.api
-              .updateWatch(row.id, {
-                elapsedMs: row.elapsedMs,
-                running: false,
-              })
-              .subscribe();
-          }
-        }
+        this.watches.set(rows);
         const id = this.selectedId();
-        if (id != null && !frozen.some((w) => w.id === id)) {
+        if (id != null && !rows.some((w) => w.id === id)) {
           this.selectedId.set(null);
           saveWatchId(null);
         }
         this.hydrateLocal(this.selected());
+        if (this.selected()?.running) {
+          this.startClock();
+        }
       },
     });
   }
@@ -281,60 +325,67 @@ export class HorologiumWatchService {
   private hydrateLocal(watch: HorologiumWatchRecord | null): void {
     this.localBaseMs = watch?.elapsedMs ?? 0;
     this.localStartedAt = null;
-    this.clock.set(Date.now());
+    this.clock.set(clockNow());
   }
 
   private startLocal(): void {
-    if (this.localStartedAt != null || this.selectedId() == null) {
+    if (this.selectedId() == null) {
       return;
     }
-    this.localStartedAt = Date.now();
-    this.clock.set(this.localStartedAt);
-    this.patchSelected({ running: true, elapsedMs: this.localBaseMs });
+    if (this.localStartedAt == null) {
+      this.localStartedAt = clockNow();
+      this.clock.set(this.localStartedAt);
+    }
     this.startClock();
+    if (this.selected()?.running || this.patchBusy) {
+      return;
+    }
+    this.patchSelected({ running: true });
   }
 
   private pauseLocal(persist: boolean): void {
-    const wasRunning = this.localStartedAt != null;
-    if (wasRunning) {
-      this.localBaseMs += Date.now() - this.localStartedAt!;
+    const selected = this.selected();
+    const wasLocal = this.localStartedAt != null;
+    if (wasLocal) {
+      this.localBaseMs += Math.max(0, clockNow() - this.localStartedAt!);
       this.localStartedAt = null;
-      this.clock.set(Date.now());
+      this.clock.set(clockNow());
     }
     this.stopClock();
-    if (persist && wasRunning && this.selectedId() != null) {
-      this.patchSelected({ running: false, elapsedMs: this.localBaseMs });
+    if (
+      persist &&
+      this.selectedId() != null &&
+      (wasLocal || selected?.running) &&
+      !this.patchBusy
+    ) {
+      this.patchSelected({ running: false });
     }
   }
 
-  private patchSelected(payload: { elapsedMs: number; running: boolean }): void {
+  private patchSelected(payload: { running: boolean }): void {
     const id = this.selectedId();
-    if (id == null) {
+    if (id == null || this.patchBusy) {
       return;
     }
-    this.api.updateWatch(id, payload).subscribe({
-      next: (row) => {
-        this.watches.update((list) =>
-          list.map((w) =>
-            w.id === row.id
-              ? {
-                  ...row,
-                  elapsedMs: payload.elapsedMs,
-                  running: payload.running,
-                }
-              : w,
-          ),
-        );
+    this.patchBusy = true;
+    const req = payload.running
+      ? this.clockApi.startVigilia(id)
+      : this.clockApi.pauseVigilia(id);
+    req.subscribe({
+      next: (snap) => {
+        this.patchBusy = false;
+        this.applyClockSnapshot(snap);
+        this.reconcile(this.desiredRunning(), this.selected());
+      },
+      error: () => {
+        this.patchBusy = false;
       },
     });
   }
 
   private startClock(): void {
     if (this.clockTimer == null) {
-      this.clockTimer = setInterval(() => this.clock.set(Date.now()), 250);
-    }
-    if (this.syncTimer == null) {
-      this.syncTimer = setInterval(() => this.persistLive(), 15_000);
+      this.clockTimer = setInterval(() => this.clock.set(clockNow()), 250);
     }
   }
 
@@ -343,18 +394,6 @@ export class HorologiumWatchService {
       clearInterval(this.clockTimer);
       this.clockTimer = null;
     }
-    if (this.syncTimer != null) {
-      clearInterval(this.syncTimer);
-      this.syncTimer = null;
-    }
-  }
-
-  private persistLive(): void {
-    if (this.localStartedAt == null || this.selectedId() == null) {
-      return;
-    }
-    const elapsed = this.localBaseMs + (Date.now() - this.localStartedAt);
-    this.patchSelected({ elapsedMs: elapsed, running: true });
   }
 
   private bindPageLifecycle(): void {
@@ -362,12 +401,9 @@ export class HorologiumWatchService {
       return;
     }
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') {
-        this.pauseLocal(true);
-      } else {
+      if (document.visibilityState === 'visible') {
         this.reconcile(this.desiredRunning(), this.selected());
       }
     });
-    window.addEventListener('pagehide', () => this.pauseLocal(true));
   }
 }

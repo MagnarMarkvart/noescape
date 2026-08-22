@@ -85,6 +85,10 @@
   border-color: #c6a85a;
 }
 
+.btn.unlock {
+  border-color: #8fbc7a;
+}
+
 .btn.loss {
   border-color: #8a5048;
 }

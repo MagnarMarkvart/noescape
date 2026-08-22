@@ -12,13 +12,17 @@ import { TimedToast } from '../shared/timed-toast';
 import { FINANCE_SKILL_SLUG } from '../shared/skill-weights';
 import { parseMoneyToCents } from '../shared/money';
 import { SkillsService } from '../skills/skills.service';
-import { Skill } from '../skills/skill.model';
-import { DEFAULT_HABIT_ICON, HABIT_ICON_GROUPS } from './habit-icons';
+import { Skill, SkillTree } from '../skills/skill.model';
+import { ForgeShell } from '../shared/ui/forge-shell';
+import { IconPicker } from '../shared/ui/icon-picker';
+import { NumberField } from '../shared/ui/number-field';
+import { SkillTreePicker } from '../shared/ui/skill-tree-picker';
+import { DEFAULT_HABIT_ICON } from './habit-icons';
 import { HabitsService } from './habits.service';
 
 @Component({
   selector: 'app-habitus-new-page',
-  imports: [RouterLink, FormField],
+  imports: [RouterLink, FormField, ForgeShell, IconPicker, SkillTreePicker, NumberField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './habitus-new-page.html',
   styleUrl: './habitus-new-page.css',
@@ -31,10 +35,9 @@ export class HabitusNewPage {
   private readonly timed = new TimedToast();
 
   protected readonly toast = this.timed.value;
-  protected readonly iconGroups = HABIT_ICON_GROUPS;
-  protected readonly iconGroupId = signal(HABIT_ICON_GROUPS[0].id);
   protected readonly creating = signal(false);
-  protected readonly skills = signal<Skill[]>([]);
+  protected readonly skillTree = signal<SkillTree | null>(null);
+  protected readonly selectedCategory = signal<string | null>(null);
 
   protected readonly createModel = signal({
     name: '',
@@ -48,11 +51,23 @@ export class HabitusNewPage {
     required(p.name);
   });
 
-  protected readonly activeIconGroup = computed(
-    () =>
-      this.iconGroups.find((g) => g.id === this.iconGroupId()) ??
-      this.iconGroups[0],
+  protected readonly categories = computed(
+    () => this.skillTree()?.categories ?? [],
   );
+  protected readonly subskills = computed(() => {
+    const category = this.selectedCategory();
+    if (!category) {
+      return [] as Skill[];
+    }
+    return this.categories().find((c) => c.category === category)?.skills ?? [];
+  });
+  protected readonly skills = computed(() =>
+    this.categories().flatMap((c) => c.skills),
+  );
+  protected readonly selectedSlugs = computed(() => {
+    const skill = this.selectedSkill();
+    return skill ? [skill.slug] : [];
+  });
 
   protected readonly selectedSkill = computed(() =>
     this.skills().find((s) => s.id === this.createModel().skillId) ?? null,
@@ -66,8 +81,7 @@ export class HabitusNewPage {
 
   constructor() {
     this.skillsService.getTree().subscribe({
-      next: (tree) =>
-        this.skills.set(tree.categories.flatMap((c) => c.skills)),
+      next: (tree) => this.skillTree.set(tree),
     });
   }
 
@@ -75,13 +89,19 @@ export class HabitusNewPage {
     this.createModel.update((m) => ({ ...m, icon: glyph }));
   }
 
-  protected setIconGroup(id: string): void {
-    this.iconGroupId.set(id);
+  protected selectCategory(category: string): void {
+    this.selectedCategory.set(category);
   }
 
-  protected setSkill(event: Event): void {
-    const id = Number((event.target as HTMLSelectElement).value) || 0;
-    this.createModel.update((m) => ({ ...m, skillId: id }));
+  protected pickSkill(skill: Skill): void {
+    this.createModel.update((m) => ({
+      ...m,
+      skillId: m.skillId === skill.id ? 0 : skill.id,
+    }));
+  }
+
+  protected setEveryNDays(n: number): void {
+    this.createModel.update((m) => ({ ...m, everyNDays: n }));
   }
 
   protected setWealthAmount(event: Event): void {

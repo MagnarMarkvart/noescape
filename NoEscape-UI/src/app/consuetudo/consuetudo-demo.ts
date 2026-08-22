@@ -50,6 +50,7 @@ export const CONSUETUDO_DEMO_ROUTINE: RoutineView = {
       baseXp: 256,
       bonusXp: 128,
       xpAwarded: 384,
+      notes: 'Woke a little late, skipped nothing. Tea was good.',
       steps: SAMPLE_MORNING_STEPS.map((step, i) => {
         const planned = step.durationMinutes * 60;
         const elapsed = planned * 1000 - (i === 4 ? 120_000 : 20_000);
