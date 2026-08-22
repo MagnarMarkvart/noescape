@@ -202,6 +202,29 @@
         }
       </section>
 
+      <section class="panel tabularium-panel" aria-label="Tabularium">
+        <header class="panel-head">
+          <h2>Tabularium</h2>
+          <a routerLink="/tabularium">Board →</a>
+        </header>
+        @if (tabulae().length === 0) {
+          <p class="empty">No tallies yet.</p>
+        } @else {
+          <ul class="tabula-grid">
+            @for (row of tabulae(); track row.id) {
+              <li>
+                <app-tabula-clicker
+                  [compact]="true"
+                  [row]="row"
+                  [busy]="busyTabulaId() === row.id"
+                  (clicked)="clickTabula($event)"
+                />
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
       <section class="panel habits-panel" aria-label="Active habits">
         <header class="panel-head">
           <h2>Habits</h2>

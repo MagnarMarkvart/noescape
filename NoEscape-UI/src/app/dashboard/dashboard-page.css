@@ -445,6 +445,14 @@ a.done-btn {
   white-space: nowrap;
 }
 
+.tabula-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
 .due-side {
   margin: 0.12rem 0 0;
   font-size: 0.72rem;
@@ -456,6 +464,7 @@ a.done-btn {
     grid-template-columns: 1.1fr 0.9fr;
     grid-template-areas:
       'dailies scriptorium'
+      'tabularium tabularium'
       'quests skills'
       'habits habits';
   }
@@ -464,6 +473,7 @@ a.done-btn {
     grid-template-areas:
       'clock clock'
       'dailies scriptorium'
+      'tabularium tabularium'
       'quests skills'
       'habits habits';
   }
@@ -471,6 +481,7 @@ a.done-btn {
   .clock-panel { grid-area: clock; }
   .dailies-panel { grid-area: dailies; }
   .scriptorium-panel { grid-area: scriptorium; }
+  .tabularium-panel { grid-area: tabularium; }
   .quests-panel { grid-area: quests; }
   .skills-panel { grid-area: skills; }
   .habits-panel { grid-area: habits; }
@@ -481,13 +492,13 @@ a.done-btn {
     grid-template-columns: 1fr 1fr 0.9fr;
     grid-template-areas:
       'dailies scriptorium habits'
-      'quests skills skills';
+      'quests skills tabularium';
   }
 
   .dash-grid.with-clock {
     grid-template-areas:
       'clock clock clock'
       'dailies scriptorium habits'
-      'quests skills skills';
+      'quests skills tabularium';
   }
 }

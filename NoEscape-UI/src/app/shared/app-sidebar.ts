@@ -46,6 +46,9 @@ import { AppShellService } from './app-shell.service';
           </a>
           <a routerLink="/character" routerLinkActive="active">Character</a>
           <a routerLink="/quests" routerLinkActive="active">Quests</a>
+          <a routerLink="/tabularium" routerLinkActive="active">
+            Tabularium
+          </a>
           @if (activeQuests().length) {
             <p class="group-label">Started</p>
             @for (q of activeQuests(); track q.runId) {
@@ -348,6 +351,9 @@ export class AppSidebar implements OnInit {
     }
     if (path.startsWith('/quests')) {
       return 'QUESTS';
+    }
+    if (path.startsWith('/tabularium')) {
+      return 'TABULARIUM';
     }
     if (path.startsWith('/habitus')) {
       return 'HABITUS';

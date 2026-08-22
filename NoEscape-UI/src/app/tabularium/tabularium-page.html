@@ -1,0 +1,65 @@
+<section class="defaults-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Reckoning</p>
+      <h1>Tabularium</h1>
+      <p class="lede">
+        Click to tally. Green is on the right side of the band you set —
+        less for vices, more for virtues.
+      </p>
+    </div>
+    <nav class="toolbar-links">
+      <app-ui-icon-btn icon="log" label="Ledger" href="/tabularium/log" />
+      <app-ui-icon-btn
+        icon="wrench"
+        label="New tabula"
+        href="/tabularium/new"
+      />
+    </nav>
+  </header>
+
+  @if (toast()) {
+    <p class="toast" role="status">{{ toast() }}</p>
+  }
+
+  <label class="search">
+    Search tallies
+    <input
+      type="search"
+      placeholder="Name or quest"
+      autocomplete="off"
+      [value]="query()"
+      (input)="onQuery($event)"
+    />
+  </label>
+
+  @if (loading()) {
+    <p class="empty">Loading…</p>
+  } @else if (filtered().length === 0) {
+    <p class="empty">
+      @if (query().trim()) {
+        No tallies match “{{ query() }}”.
+      } @else {
+        No tabulae yet. Forge one to start counting.
+      }
+    </p>
+  } @else {
+    <ul class="clicker-list">
+      @for (row of filtered(); track row.id) {
+        <li>
+          <app-tabula-clicker
+            [row]="row"
+            [busy]="busyId() === row.id"
+            (clicked)="click($event)"
+            (undone)="undo($event)"
+          />
+          <app-ui-icon-btn
+            icon="wrench"
+            [label]="'Edit ' + row.name"
+            [href]="'/tabularium/' + row.id"
+          />
+        </li>
+      }
+    </ul>
+  }
+</section>

@@ -17,6 +17,7 @@ npm run dev
 - Backend: `http://localhost:3000`
 - UI Dashboard: `http://localhost:4200/status`
 - UI Dailies: `http://localhost:4200/dailies`
+- UI Tabularium: `http://localhost:4200/tabularium`
 
 ---
 
@@ -219,6 +220,26 @@ Source of truth: `no-escape-back/src/xp/consuetudo-xp.util.ts`.
 - `POST /dailies/copy-incomplete` `{ date?, sourceDate? }` — copy **incomplete only** from last (or given) log into the target day
 - `GET /dailies/logs` — sealed day list
 - `GET /dailies/logs/:date` — full sealed snapshot (quests + skill tree)
+
+### Tabularium (clicker tallies)
+
+Separate from Horologium and Dailies. Optional quest bind only. One **tabula** is a named counter (cigarettes, water, tempers, …) with a period window and a normal band.
+
+**Polarity**
+- `vice` — less is better (green below the band, yellow inside, red above)
+- `virtue` — more is better (green above the band, yellow inside, red below)
+
+**Period:** `day` | `week` | `month` | `year` (counts sum click deltas in that window).
+
+- `GET /tabularium?date=YYYY-MM-DD` — board (omit date = today)
+- `GET /tabularium/calendar?from=&to=` — mark counts for the ledger calendar
+- `GET /tabularium/log?date=YYYY-MM-DD` — day’s clicks + full board
+- `GET /tabularium/:id` · `POST /tabularium` · `PATCH /tabularium/:id`
+- `DELETE /tabularium/:id` — archive (clicks stay in the ledger)
+- `POST /tabularium/:id/click` `{ delta? }` — add `step` (or given delta) for **today**
+- `POST /tabularium/:id/undo` — remove the last **today** click
+
+UI: catalog `/tabularium`, forge `/tabularium/new` and `/tabularium/:id`, ledger `/tabularium/log`. Dashboard has a compact clicker widget.
 
 ### Day rollover / Seal gate
 

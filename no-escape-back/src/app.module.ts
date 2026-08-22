@@ -12,6 +12,7 @@ import { RewardsModule } from './rewards/rewards.module';
 import { RoutinesModule } from './routines/routines.module';
 import { ScriptoriumModule } from './scriptorium/scriptorium.module';
 import { SkillsModule } from './skills/skills.module';
+import { TabulariumModule } from './tabularium/tabularium.module';
 import { TimeModule } from './time/time.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { TimeModule } from './time/time.module';
     RoutinesModule,
     ScriptoriumModule,
     ClocksModule,
+    TabulariumModule,
   ],
   controllers: [AppController],
   providers: [AppService],

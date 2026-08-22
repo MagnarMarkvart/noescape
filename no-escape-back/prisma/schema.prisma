@@ -348,6 +348,7 @@ model Quest {
   runs           QuestRun[]
   subtasks       QuestSubtask[]
   scriptoriumWorks ScriptoriumWork[]
+  tabulae        Tabula[]
 }
 
 model QuestSubtask {
@@ -561,4 +562,40 @@ model ScriptoriumSubtask {
   sortOrder Int             @default(0)
 
   @@index([workId])
+}
+
+/// Clicker tally — vices, virtues, and other counts over a chosen window.
+model Tabula {
+  id        Int      @id @default(autoincrement())
+  name      String
+  icon      String?
+  /// day | week | month | year
+  period    String   @default("day")
+  /// vice = less is better · virtue = more is better
+  polarity  String   @default("vice")
+  normMin   Int      @default(0)
+  normMax   Int      @default(0)
+  step      Int      @default(1)
+  questId   Int?
+  quest     Quest?   @relation(fields: [questId], references: [id], onDelete: SetNull)
+  sortOrder Int      @default(0)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clicks    TabulaClick[]
+
+  @@index([archived])
+  @@index([questId])
+}
+
+model TabulaClick {
+  id        Int      @id @default(autoincrement())
+  tabulaId  Int
+  tabula    Tabula   @relation(fields: [tabulaId], references: [id], onDelete: Cascade)
+  date      String
+  delta     Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@index([tabulaId, date])
+  @@index([date])
 }

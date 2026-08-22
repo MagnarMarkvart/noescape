@@ -148,6 +148,36 @@ export const routes: Routes = [
     title: 'Consuetudo — No Escape',
   },
   {
+    path: 'tabularium/new',
+    loadComponent: () =>
+      import('./tabularium/tabularium-forge-page').then(
+        (m) => m.TabulariumForgePage,
+      ),
+    title: 'New Tabula — No Escape',
+  },
+  {
+    path: 'tabularium/log',
+    loadComponent: () =>
+      import('./tabularium/tabularium-log-page').then(
+        (m) => m.TabulariumLogPage,
+      ),
+    title: 'Tabularium Ledger — No Escape',
+  },
+  {
+    path: 'tabularium/:id',
+    loadComponent: () =>
+      import('./tabularium/tabularium-forge-page').then(
+        (m) => m.TabulariumForgePage,
+      ),
+    title: 'Edit Tabula — No Escape',
+  },
+  {
+    path: 'tabularium',
+    loadComponent: () =>
+      import('./tabularium/tabularium-page').then((m) => m.TabulariumPage),
+    title: 'Tabularium — No Escape',
+  },
+  {
     path: 'dailies/defaults/new',
     loadComponent: () =>
       import('./dailies/daily-default-forge-page').then(
