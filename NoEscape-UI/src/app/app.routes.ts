@@ -105,6 +105,12 @@ export const routes: Routes = [
     title: 'Habitus Demo — No Escape',
   },
   {
+    path: 'habitus/:id',
+    loadComponent: () =>
+      import('./habits/habitus-new-page').then((m) => m.HabitusNewPage),
+    title: 'Edit Habit — No Escape',
+  },
+  {
     path: 'habitus',
     loadComponent: () =>
       import('./habits/habitus-page').then((m) => m.HabitusPage),
@@ -149,33 +155,19 @@ export const routes: Routes = [
   },
   {
     path: 'tabularium/new',
-    loadComponent: () =>
-      import('./tabularium/tabularium-forge-page').then(
-        (m) => m.TabulariumForgePage,
-      ),
-    title: 'New Tabula — No Escape',
+    redirectTo: 'habitus/new',
   },
   {
     path: 'tabularium/log',
-    loadComponent: () =>
-      import('./tabularium/tabularium-log-page').then(
-        (m) => m.TabulariumLogPage,
-      ),
-    title: 'Tabularium Ledger — No Escape',
+    redirectTo: 'habitus',
   },
   {
     path: 'tabularium/:id',
-    loadComponent: () =>
-      import('./tabularium/tabularium-forge-page').then(
-        (m) => m.TabulariumForgePage,
-      ),
-    title: 'Edit Tabula — No Escape',
+    redirectTo: 'habitus',
   },
   {
     path: 'tabularium',
-    loadComponent: () =>
-      import('./tabularium/tabularium-page').then((m) => m.TabulariumPage),
-    title: 'Tabularium — No Escape',
+    redirectTo: 'habitus',
   },
   {
     path: 'dailies/defaults/new',

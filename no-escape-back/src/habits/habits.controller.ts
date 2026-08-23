@@ -9,7 +9,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { HabitsService } from './habits.service';
+import { HabitsService, type HabitWriteInput } from './habits.service';
 
 @Controller('habits')
 export class HabitsController {
@@ -29,30 +29,47 @@ export class HabitsController {
     return this.habitsService.listProgression(this.isDev(dev));
   }
 
-  @Post()
-  create(
-    @Body()
-    body: {
-      name: string;
-      icon?: string;
-      skillId?: number;
-      cadence?: string;
-      everyNDays?: number;
-      wealthCents?: number | null;
-    },
+  @Get('stats')
+  stats(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('ids') ids?: string,
+    @Query('grain') grain?: string,
     @Query('dev') dev?: string,
   ) {
-    return this.habitsService.create(body, this.isDev(dev));
+    void this.habitsService.assertUnlocked(this.isDev(dev));
+    const parsedIds = (ids ?? '')
+      .split(',')
+      .map((n) => Number(n))
+      .filter((n) => Number.isInteger(n) && n > 0);
+    return this.habitsService.stats({
+      from,
+      to,
+      ids: parsedIds,
+      grain,
+    });
+  }
+
+  @Post()
+  create(
+    @Body() body: HabitWriteInput,
+    @Query('dev') dev?: string,
+  ) {
+    return this.habitsService.create(body ?? {}, this.isDev(dev));
+  }
+
+  @Get(':id')
+  getOne(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('dev') dev?: string,
+  ) {
+    return this.habitsService.getOne(id, this.isDev(dev));
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body()
-    body: {
-      skillId?: number | null;
-      wealthCents?: number | null;
-    },
+    @Body() body: HabitWriteInput,
     @Query('dev') dev?: string,
   ) {
     return this.habitsService.update(id, body ?? {}, this.isDev(dev));
@@ -108,6 +125,25 @@ export class HabitsController {
   ) {
     await this.habitsService.assertUnlocked(this.isDev(dev));
     return this.habitsService.uncomplete(id, date);
+  }
+
+  @Post(':id/click')
+  click(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { delta?: number },
+    @Query('dev') dev?: string,
+  ) {
+    void this.habitsService.assertUnlocked(this.isDev(dev));
+    return this.habitsService.click(id, body?.delta);
+  }
+
+  @Post(':id/undo')
+  undo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('dev') dev?: string,
+  ) {
+    void this.habitsService.assertUnlocked(this.isDev(dev));
+    return this.habitsService.undo(id);
   }
 
   @Patch(':id/archive')

@@ -20,8 +20,24 @@ import { AppShellService } from './app-shell.service';
   selector: 'app-sidebar',
   imports: [RouterLink, RouterLinkActive],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(document:keydown.escape)': 'onEscape()',
+  },
   template: `
-    <aside class="sidebar" [class.collapsed]="collapsed()" aria-label="App">
+    @if (drawerOpen()) {
+      <button
+        type="button"
+        class="nav-veil"
+        (click)="shell.collapse()"
+        aria-label="Close navigation"
+      ></button>
+    }
+    <aside
+      class="sidebar"
+      [class.collapsed]="collapsed()"
+      [class.drawer]="drawerOpen()"
+      aria-label="App"
+    >
       <button
         type="button"
         class="toggle"
@@ -46,9 +62,6 @@ import { AppShellService } from './app-shell.service';
           </a>
           <a routerLink="/character" routerLinkActive="active">Character</a>
           <a routerLink="/quests" routerLinkActive="active">Quests</a>
-          <a routerLink="/tabularium" routerLinkActive="active">
-            Tabularium
-          </a>
           @if (activeQuests().length) {
             <p class="group-label">Started</p>
             @for (q of activeQuests(); track q.runId) {
@@ -62,15 +75,13 @@ import { AppShellService } from './app-shell.service';
               </a>
             }
           }
-          @if (showHabitus()) {
-            <a
-              routerLink="/habitus"
-              routerLinkActive="active"
-              [routerLinkActiveOptions]="{ exact: true }"
-            >
-              Habitus
-            </a>
-          }
+          <a
+            routerLink="/habitus"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            Habitus
+          </a>
           @if (showConsuetudo()) {
             <a
               routerLink="/consuetudo"
@@ -122,6 +133,10 @@ import { AppShellService } from './app-shell.service';
       display: contents;
     }
 
+    .nav-veil {
+      display: none;
+    }
+
     .sidebar {
       position: sticky;
       top: 0;
@@ -142,6 +157,43 @@ import { AppShellService } from './app-shell.service';
       width: 2.75rem;
       align-items: center;
       padding-inline: 0.35rem;
+    }
+
+    @media (max-width: 899px) {
+      :host {
+        display: block;
+        width: 2.75rem;
+        min-height: 100dvh;
+      }
+
+      .nav-veil {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 139;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: rgba(8, 6, 3, 0.62);
+        cursor: pointer;
+      }
+
+      .sidebar {
+        width: 2.75rem;
+        z-index: 2;
+      }
+
+      .sidebar.drawer {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 140;
+        width: min(18rem, 86vw);
+        align-items: stretch;
+        padding: 0.75rem 0.65rem;
+        box-shadow: 12px 0 36px rgba(0, 0, 0, 0.55);
+        overscroll-behavior: contain;
+      }
     }
 
     .toggle {
@@ -246,18 +298,15 @@ export class AppSidebar implements OnInit {
   private readonly characterService = inject(CharacterService);
   private readonly skillsService = inject(SkillsService);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly shell = inject(AppShellService);
+  protected readonly shell = inject(AppShellService);
 
   protected readonly collapsed = this.shell.collapsed;
+  protected readonly drawerOpen = this.shell.drawerOpen;
   protected readonly habitusUnlocked = signal(false);
   protected readonly consuetudoUnlocked = signal(false);
   protected readonly activeQuests = this.questsService.activeQuests;
   protected readonly hasLevelUps = this.skillsService.hasLevelUps;
   protected readonly isDev = isDevMode;
-
-  protected readonly showHabitus = computed(
-    () => isDevMode() || this.habitusUnlocked(),
-  );
 
   protected readonly consuetudoQuestActive = computed(() =>
     this.activeQuests().some((q) => q.slug === 'ordo-diei'),
@@ -272,9 +321,6 @@ export class AppSidebar implements OnInit {
 
   protected readonly unlockables = computed(() => {
     const items: Array<{ id: string; label: string; path: string }> = [];
-    if (isDevMode() || !this.habitusUnlocked()) {
-      items.push({ id: 'habitus', label: 'Habitus', path: '/habitus/demo' });
-    }
     if (isDevMode() || !this.consuetudoUnlocked()) {
       items.push({
         id: 'consuetudo',
@@ -320,6 +366,12 @@ export class AppSidebar implements OnInit {
         this.consuetudoUnlocked.set(false);
       },
     });
+  }
+
+  protected onEscape(): void {
+    if (this.shell.drawerOpen()) {
+      this.shell.collapse();
+    }
   }
 
   protected onNavClick(event: Event): void {

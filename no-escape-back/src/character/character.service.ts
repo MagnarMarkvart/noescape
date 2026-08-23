@@ -27,8 +27,8 @@ export class CharacterService implements OnModuleInit {
     });
     await this.prisma.featureUnlock.upsert({
       where: { key: FEATURE_HABITUS },
-      update: {},
-      create: { key: FEATURE_HABITUS, unlocked: false },
+      update: { unlocked: true },
+      create: { key: FEATURE_HABITUS, unlocked: true, unlockedAt: new Date() },
     });
     await this.prisma.featureUnlock.upsert({
       where: { key: FEATURE_CONSUETUDO },
@@ -85,8 +85,7 @@ export class CharacterService implements OnModuleInit {
       skills,
       activeQuests,
       completedQuests,
-      habitusUnlocked:
-        features.find((f) => f.key === FEATURE_HABITUS)?.unlocked ?? false,
+      habitusUnlocked: true,
       consuetudoUnlocked:
         features.find((f) => f.key === FEATURE_CONSUETUDO)?.unlocked ?? false,
     };
@@ -179,6 +178,9 @@ export class CharacterService implements OnModuleInit {
   }
 
   async isFeatureUnlocked(key: string): Promise<boolean> {
+    if (key === FEATURE_HABITUS) {
+      return true;
+    }
     const row = await this.prisma.featureUnlock.findUnique({ where: { key } });
     return row?.unlocked ?? false;
   }

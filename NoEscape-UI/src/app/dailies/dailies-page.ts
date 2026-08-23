@@ -240,7 +240,8 @@ export class DailiesPage implements OnInit {
       },
     });
     this.habitsService.list().subscribe({
-      next: (rows) => this.habits.set(rows),
+      next: (rows) =>
+        this.habits.set(rows.filter((h) => h.allowInDailies !== false)),
       error: () => this.habits.set([]),
     });
     this.dailiesService.listTemplates().subscribe({
@@ -714,7 +715,9 @@ export class DailiesPage implements OnInit {
     if (!this.slotModel().title.trim()) {
       this.slotForm.title().value.set(habit.name);
     }
-    if (habit.skillId) {
+    if (habit.skillWeights?.length) {
+      this.setSkillWeights(habit.skillWeights);
+    } else if (habit.skillId) {
       const skill = this.findSkillById(habit.skillId);
       if (skill) {
         this.setSkillWeights(
@@ -734,6 +737,10 @@ export class DailiesPage implements OnInit {
         wealthAmount: centsToInput(habit.wealthCents),
       }));
     }
+    this.slotForm.effortLevel().value.set(habit.effortLevel || 5);
+    this.slotForm.durationMinutes().value.set(
+      Math.max(1, habit.durationMinutes || 45),
+    );
   }
 
   private persistDefault(model: SlotFormModel, duration: number): void {

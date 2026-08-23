@@ -10,33 +10,30 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { CharacterService } from '../character/character.service';
-import { QuestsService } from '../quests/quests.service';
 import { TimedToast } from '../shared/timed-toast';
-import { FINANCE_SKILL_SLUG } from '../shared/skill-weights';
-import { centsToInput, formatMoney, parseMoneyToCents } from '../shared/money';
-import { SkillsService } from '../skills/skills.service';
-import { Skill } from '../skills/skill.model';
 import {
   monthGridLead,
+  monthRange,
+  shiftIsoDays,
+  shiftIsoMonths,
   startOfWeekIso,
   weekdayNames,
 } from '../shared/time';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
+import { HabitCard } from './habit-card';
+import { HABITUS_DEMO_HABITS, habitusDemoStats } from './habitus-demo';
 import {
-  HABITUS_DEMO_HABITS,
-  HABITUS_UNLOCK_QUEST_SLUG,
-  habitusDemoRange,
-} from './habitus-demo';
-import {
-  HabitRangeLog,
+  HabitStats,
+  HabitStatsGrain,
   HabitsService,
   HabitView,
 } from './habits.service';
 
-export type HabitusViewMode = 'day' | 'week' | 'month';
+type CatalogView = 'cards' | 'calendar';
 
 @Component({
   selector: 'app-habitus-page',
-  imports: [RouterLink],
+  imports: [RouterLink, UiIconBtn, HabitCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './habitus-page.html',
   styleUrl: './habitus-page.css',
@@ -47,8 +44,6 @@ export type HabitusViewMode = 'day' | 'week' | 'month';
 export class HabitusPage implements OnInit {
   private readonly habitsService = inject(HabitsService);
   private readonly character = inject(CharacterService);
-  private readonly quests = inject(QuestsService);
-  private readonly skillsService = inject(SkillsService);
   private readonly route = inject(ActivatedRoute);
   private readonly timed = new TimedToast();
 
@@ -56,40 +51,76 @@ export class HabitusPage implements OnInit {
     this.route.data.pipe(map((d) => d['demo'] === true)),
     { initialValue: this.route.snapshot.data['demo'] === true },
   );
-  protected readonly unlockQuestPath = signal('/quests');
 
   protected readonly habits = signal<HabitView[]>([]);
-  protected readonly selected = signal<HabitView | null>(null);
-  protected readonly period = signal<HabitRangeLog | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly toast = this.timed.value;
-  protected readonly busyDate = signal<string | null>(null);
-  protected readonly viewMode = signal<HabitusViewMode>('month');
-  /** Focus day (YYYY-MM-DD); week/month derive from this. */
-  protected readonly anchor = signal(this.isoToday());
-  protected readonly skills = signal<Skill[]>([]);
-  protected readonly skillDraft = signal(0);
-  protected readonly wealthDraft = signal('');
-  protected readonly savingReward = signal(false);
+  protected readonly busyId = signal<number | null>(null);
+  protected readonly query = signal('');
+  protected readonly view = signal<CatalogView>('cards');
+  protected readonly grain = signal<HabitStatsGrain>('month');
+  protected readonly anchor = signal(this.character.todayIso());
+  protected readonly selectedIds = signal<number[]>([]);
+  protected readonly stats = signal<HabitStats | null>(null);
 
   protected readonly todayIso = computed(() => this.character.todayIso());
-
-  protected readonly showWealthEdit = computed(() => {
-    const skill = this.skills().find((s) => s.id === this.skillDraft());
-    return skill?.slug === FINANCE_SKILL_SLUG || parseMoneyToCents(this.wealthDraft()) > 0;
-  });
-
-  protected readonly currencyLabel = computed(() => this.character.currency());
-
   protected readonly weekdays = computed(() =>
     weekdayNames(this.character.weekStartsOn()),
   );
 
+  protected readonly filtered = computed(() => {
+    const q = this.query().trim().toLowerCase();
+    const rows = this.habits();
+    if (!q) {
+      return rows;
+    }
+    return rows.filter((row) => {
+      const hay = [row.name, row.questName ?? '', row.skill?.name ?? '']
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  });
+
+  protected readonly calendarHabits = computed(() => {
+    const ids = this.selectedIds();
+    const rows = this.habits();
+    if (!ids.length) {
+      return rows;
+    }
+    return rows.filter((row) => ids.includes(row.id));
+  });
+
+  protected readonly periodLabel = computed(() => {
+    const grain = this.grain();
+    const stats = this.stats();
+    if (grain === 'all') {
+      return 'All time';
+    }
+    if (!stats) {
+      return '';
+    }
+    if (grain === 'day') {
+      return this.character.formatDate(stats.from);
+    }
+    if (grain === 'week') {
+      return `${this.character.formatDate(stats.from)} – ${this.character.formatDate(stats.to)}`;
+    }
+    if (grain === 'year') {
+      return stats.from.slice(0, 4);
+    }
+    const [y, m] = stats.from.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleString(undefined, {
+      month: 'long',
+      year: 'numeric',
+    });
+  });
+
   protected readonly monthLead = computed(() => {
-    if (this.viewMode() !== 'month') {
+    if (this.grain() !== 'month' || !this.stats()) {
       return 0;
     }
-    const [y, m] = this.bounds().from.split('-').map(Number);
+    const [y, m] = this.stats()!.from.split('-').map(Number);
     return monthGridLead(y, m, this.character.weekStartsOn());
   });
 
@@ -97,329 +128,218 @@ export class HabitusPage implements OnInit {
     Array.from({ length: this.monthLead() }, (_, i) => i),
   );
 
-  protected readonly periodLabel = computed(() => {
-    const mode = this.viewMode();
-    const { from, to } = this.bounds();
-    if (mode === 'day') {
-      return this.character.formatDate(from);
+  protected readonly sparkPoints = computed(() => {
+    const series = this.stats()?.series ?? [];
+    if (series.length < 2) {
+      return '';
     }
-    if (mode === 'week') {
-      return `${this.character.formatDate(from)} – ${this.character.formatDate(to)}`;
-    }
-    const [y, m] = from.split('-').map(Number);
-    return new Date(y, m - 1, 1).toLocaleString(undefined, {
-      month: 'long',
-      year: 'numeric',
-    });
-  });
-
-  protected readonly nowButtonLabel = computed(() => {
-    switch (this.viewMode()) {
-      case 'day':
-        return 'Today';
-      case 'week':
-        return 'This week';
-      default:
-        return 'This month';
-    }
+    const max = Math.max(1, ...series.map((p) => p.value));
+    return series
+      .map((p, i) => {
+        const x = (i / (series.length - 1)) * 100;
+        const y = 36 - (p.value / max) * 32;
+        return `${x},${y}`;
+      })
+      .join(' ');
   });
 
   ngOnInit(): void {
-    if (this.demo()) {
-      this.quests.list('all').subscribe({
-        next: (rows) => {
-          const q = rows.find((r) => r.slug === HABITUS_UNLOCK_QUEST_SLUG);
-          if (q) {
-            this.unlockQuestPath.set(`/quests/${q.id}`);
-          }
-        },
-      });
-    }
     this.reload();
-    this.skillsService.getAll().subscribe({
-      next: (rows) => this.skills.set(rows),
-    });
   }
 
-  protected select(h: HabitView): void {
-    this.selected.set(h);
-    this.skillDraft.set(h.skillId ?? 0);
-    this.wealthDraft.set(centsToInput(h.wealthCents));
-    this.loadPeriod(h.id);
+  protected onQuery(event: Event): void {
+    this.query.set((event.target as HTMLInputElement).value);
   }
 
-  protected setView(mode: HabitusViewMode): void {
-    this.viewMode.set(mode);
-    const sel = this.selected();
-    if (sel) {
-      this.loadPeriod(sel.id);
+  protected setView(view: CatalogView): void {
+    this.view.set(view);
+    if (view === 'calendar') {
+      this.loadStats();
     }
+  }
+
+  protected setGrain(grain: HabitStatsGrain): void {
+    this.grain.set(grain);
+    this.loadStats();
+  }
+
+  protected toggleHabitFilter(id: number): void {
+    this.selectedIds.update((ids) =>
+      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
+    );
+    this.loadStats();
+  }
+
+  protected selectAllHabits(): void {
+    this.selectedIds.set([]);
+    this.loadStats();
   }
 
   protected shift(delta: number): void {
-    const mode = this.viewMode();
+    if (this.grain() === 'all') {
+      return;
+    }
+    const grain = this.grain();
     const a = this.anchor();
-    if (mode === 'day') {
-      this.anchor.set(this.offsetIso(a, delta));
-    } else if (mode === 'week') {
-      this.anchor.set(this.offsetIso(a, delta * 7));
+    if (grain === 'day') {
+      this.anchor.set(shiftIsoDays(a, delta));
+    } else if (grain === 'week') {
+      this.anchor.set(shiftIsoDays(a, delta * 7));
+    } else if (grain === 'year') {
+      this.anchor.set(shiftIsoDays(a, delta * 365));
     } else {
-      const [y, m, d] = a.split('-').map(Number);
-      const next = new Date(y, m - 1 + delta, Math.min(d, 28));
-      this.anchor.set(this.toIso(next));
+      this.anchor.set(shiftIsoMonths(a, delta));
     }
-    const sel = this.selected();
-    if (sel) {
-      this.loadPeriod(sel.id);
-    }
+    this.loadStats();
   }
 
   protected jumpToNow(): void {
-    this.anchor.set(this.isoToday());
-    const sel = this.selected();
-    if (sel) {
-      this.loadPeriod(sel.id);
-    }
+    this.anchor.set(this.character.todayIso());
+    this.loadStats();
   }
 
-  protected canToggle(date: string): boolean {
-    return date <= this.todayIso();
+  protected isSelected(id: number): boolean {
+    const ids = this.selectedIds();
+    return ids.length === 0 || ids.includes(id);
   }
 
-  protected toggleDay(date: string, completed: boolean): void {
-    const h = this.selected();
-    if (!h || !this.canToggle(date) || this.busyDate()) {
+  protected clickTally(habit: HabitView): void {
+    if (this.demo() || this.busyId()) {
+      if (this.demo()) {
+        this.timed.set('Demo only — forge a real habit to keep tallies.');
+      }
       return;
     }
-    if (this.demo()) {
-      this.timed.set('Demo only — complete Custodia Mentis to keep logs.');
-      return;
-    }
-    this.busyDate.set(date);
-    const req = completed
-      ? this.habitsService.uncomplete(h.id, date)
-      : this.habitsService.complete(h.id, date);
-    req.subscribe({
-      next: () => {
-        this.busyDate.set(null);
-        this.timed.set(
-          completed ? `Cleared ${date}` : `Logged ${h.name} · ${date}`,
-        );
-        this.reload(h.id);
-        void this.character.getProfile().subscribe();
+    this.busyId.set(habit.id);
+    this.habitsService.click(habit.id).subscribe({
+      next: (next) => {
+        this.patch(next);
+        this.busyId.set(null);
+        if (this.view() === 'calendar') {
+          this.loadStats();
+        }
       },
       error: (err: { error?: { message?: string } }) => {
-        this.busyDate.set(null);
-        this.timed.set(err.error?.message ?? 'Could not update day');
+        this.busyId.set(null);
+        this.timed.set(err.error?.message ?? 'Could not mark');
       },
     });
   }
 
-  protected markToday(): void {
-    if (this.demo()) {
-      this.timed.set('Demo only — complete Custodia Mentis to keep logs.');
+  protected undoTally(habit: HabitView): void {
+    if (this.demo() || this.busyId()) {
       return;
     }
-    const h = this.selected();
-    if (!h || this.busyDate()) {
-      return;
-    }
-    this.busyDate.set(this.todayIso());
-    this.habitsService.complete(h.id, this.todayIso()).subscribe({
-      next: () => {
-        this.busyDate.set(null);
-        this.timed.set(`Logged ${h.name} · today`);
-        this.reload(h.id);
-        void this.character.getProfile().subscribe();
+    this.busyId.set(habit.id);
+    this.habitsService.undo(habit.id).subscribe({
+      next: (next) => {
+        this.patch(next);
+        this.busyId.set(null);
+        if (this.view() === 'calendar') {
+          this.loadStats();
+        }
       },
       error: (err: { error?: { message?: string } }) => {
-        this.busyDate.set(null);
+        this.busyId.set(null);
+        this.timed.set(err.error?.message ?? 'Nothing to undo');
+      },
+    });
+  }
+
+  protected completeCheck(habit: HabitView): void {
+    if (this.demo()) {
+      this.timed.set('Demo only — forge a real habit to keep logs.');
+      return;
+    }
+    if (this.busyId()) {
+      return;
+    }
+    this.busyId.set(habit.id);
+    this.habitsService.complete(habit.id, this.todayIso()).subscribe({
+      next: () => {
+        this.busyId.set(null);
+        this.timed.set(`Logged ${habit.name}`);
+        this.reload();
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.busyId.set(null);
         this.timed.set(err.error?.message ?? 'Could not log habit');
       },
     });
   }
 
-  protected setSkillDraft(event: Event): void {
-    this.skillDraft.set(Number((event.target as HTMLSelectElement).value) || 0);
+  private patch(next: HabitView): void {
+    this.habits.update((rows) =>
+      rows.map((row) => (row.id === next.id ? next : row)),
+    );
   }
 
-  protected setWealthDraft(event: Event): void {
-    this.wealthDraft.set((event.target as HTMLInputElement).value);
-  }
-
-  protected formatHabitWealth(cents: number | null | undefined): string {
-    const n = Math.round(Number(cents) || 0);
-    return n > 0 ? formatMoney(n, this.character.currency()) : '';
-  }
-
-  protected saveReward(): void {
-    const h = this.selected();
-    if (!h || this.demo() || this.savingReward()) {
-      return;
-    }
-    const skill = this.skills().find((s) => s.id === this.skillDraft());
-    this.savingReward.set(true);
-    this.habitsService
-      .update(h.id, {
-        skillId: this.skillDraft() > 0 ? this.skillDraft() : null,
-        wealthCents:
-          skill?.slug === FINANCE_SKILL_SLUG
-            ? parseMoneyToCents(this.wealthDraft())
-            : 0,
-      })
-      .subscribe({
-        next: (updated) => {
-          this.savingReward.set(false);
-          this.habits.update((rows) =>
-            rows.map((row) => (row.id === updated.id ? updated : row)),
-          );
-          this.selected.set(updated);
-          this.skillDraft.set(updated.skillId ?? 0);
-          this.wealthDraft.set(centsToInput(updated.wealthCents));
-          this.timed.set('Reward saved');
-        },
-        error: (err: { error?: { message?: string } }) => {
-          this.savingReward.set(false);
-          this.timed.set(err.error?.message ?? 'Could not save reward');
-        },
-      });
-  }
-
-  protected archiveSelected(): void {
+  private reload(): void {
     if (this.demo()) {
-      return;
-    }
-    const h = this.selected();
-    if (!h) {
-      return;
-    }
-    if (
-      !confirm(
-        `Archive “${h.name}”? Progress stays in Progression; it leaves the active list.`,
-      )
-    ) {
-      return;
-    }
-    this.habitsService.archive(h.id).subscribe({
-      next: () => {
-        this.timed.set(`Archived: ${h.name}`);
-        this.selected.set(null);
-        this.reload();
-      },
-      error: (err: { error?: { message?: string } }) => {
-        this.timed.set(err.error?.message ?? 'Archive failed');
-      },
-    });
-  }
-
-  protected deleteSelected(): void {
-    if (this.demo()) {
-      return;
-    }
-    const h = this.selected();
-    if (!h) {
-      return;
-    }
-    if (
-      !confirm(
-        `Delete “${h.name}” permanently? All logs for this habit will be erased.`,
-      )
-    ) {
-      return;
-    }
-    this.habitsService.remove(h.id).subscribe({
-      next: () => {
-        this.timed.set(`Deleted: ${h.name}`);
-        this.selected.set(null);
-        this.reload();
-      },
-      error: (err: { error?: { message?: string } }) => {
-        this.timed.set(err.error?.message ?? 'Delete failed');
-      },
-    });
-  }
-
-  private reload(selectId?: number): void {
-    if (this.demo()) {
-      this.applyHabits(HABITUS_DEMO_HABITS, selectId);
+      this.habits.set(HABITUS_DEMO_HABITS as HabitView[]);
+      this.error.set(null);
       return;
     }
     this.habitsService.list().subscribe({
       next: (rows) => {
-        this.applyHabits(rows, selectId);
+        this.habits.set(rows);
+        this.error.set(null);
+        if (this.view() === 'calendar') {
+          this.loadStats();
+        }
       },
       error: (err: { error?: { message?: string } }) => {
-        this.error.set(
-          err.error?.message ??
-            'Habitus locked — complete Custodia Mentis (or use dev mode).',
-        );
+        this.error.set(err.error?.message ?? 'Could not load Habitus.');
       },
     });
   }
 
-  private applyHabits(rows: HabitView[], selectId?: number): void {
-    this.habits.set(rows);
-    this.error.set(null);
-    const pick =
-      rows.find((r) => r.id === selectId) ??
-      (this.selected()
-        ? (rows.find((r) => r.id === this.selected()!.id) ?? null)
-        : null) ??
-      rows[0] ??
-      null;
-    this.selected.set(pick);
-    if (pick) {
-      this.skillDraft.set(pick.skillId ?? 0);
-      this.wealthDraft.set(centsToInput(pick.wealthCents));
-      this.loadPeriod(pick.id);
-    } else {
-      this.period.set(null);
-    }
-  }
-
-  private loadPeriod(habitId: number): void {
+  private loadStats(): void {
     const { from, to } = this.bounds();
     if (this.demo()) {
-      this.period.set(habitusDemoRange(habitId, from, to));
+      this.stats.set(
+        habitusDemoStats({
+          from: this.grain() === 'all' ? undefined : from,
+          to: this.grain() === 'all' ? undefined : to,
+          grain: this.grain(),
+          ids: this.selectedIds(),
+          today: this.todayIso(),
+        }),
+      );
       return;
     }
-    this.habitsService.range(habitId, from, to).subscribe({
-      next: (p) => this.period.set(p),
-    });
+    this.habitsService
+      .stats({
+        from: this.grain() === 'all' ? undefined : from,
+        to: this.grain() === 'all' ? undefined : to,
+        ids: this.selectedIds(),
+        grain: this.grain(),
+      })
+      .subscribe({
+        next: (rows) => this.stats.set(rows),
+        error: (err: { error?: { message?: string } }) => {
+          this.timed.set(err.error?.message ?? 'Could not load calendar');
+        },
+      });
   }
 
   private bounds(): { from: string; to: string } {
-    const mode = this.viewMode();
+    const grain = this.grain();
     const a = this.anchor();
-    if (mode === 'day') {
+    if (grain === 'day') {
       return { from: a, to: a };
     }
-    if (mode === 'week') {
-      const from = this.startOfWeek(a);
-      return { from, to: this.offsetIso(from, 6) };
+    if (grain === 'week') {
+      const from = startOfWeekIso(a, this.character.weekStartsOn());
+      return { from, to: shiftIsoDays(from, 6) };
     }
-    const [y, m] = a.split('-').map(Number);
-    const from = `${y}-${String(m).padStart(2, '0')}-01`;
-    const last = new Date(y, m, 0).getDate();
-    const to = `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
-    return { from, to };
-  }
-
-  private startOfWeek(iso: string): string {
-    return startOfWeekIso(iso, this.character.weekStartsOn());
-  }
-
-  private offsetIso(iso: string, days: number): string {
-    const d = new Date(`${iso}T12:00:00`);
-    d.setDate(d.getDate() + days);
-    return this.toIso(d);
-  }
-
-  private toIso(d: Date): string {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-
-  private isoToday(): string {
-    return this.character.todayIso();
+    if (grain === 'year') {
+      const y = a.slice(0, 4);
+      return { from: `${y}-01-01`, to: `${y}-12-31` };
+    }
+    if (grain === 'all') {
+      return { from: a, to: a };
+    }
+    return monthRange(a);
   }
 }

@@ -202,61 +202,24 @@
         }
       </section>
 
-      <section class="panel tabularium-panel" aria-label="Tabularium">
+      <section class="panel habits-panel" aria-label="Habits">
         <header class="panel-head">
-          <h2>Tabularium</h2>
-          <a routerLink="/tabularium">Board →</a>
+          <h2>Habitus</h2>
+          <a routerLink="/habitus">Board →</a>
         </header>
-        @if (tabulae().length === 0) {
-          <p class="empty">No tallies yet.</p>
-        } @else {
-          <ul class="tabula-grid">
-            @for (row of tabulae(); track row.id) {
-              <li>
-                <app-tabula-clicker
-                  [compact]="true"
-                  [row]="row"
-                  [busy]="busyTabulaId() === row.id"
-                  (clicked)="clickTabula($event)"
-                />
-              </li>
-            }
-          </ul>
-        }
-      </section>
-
-      <section class="panel habits-panel" aria-label="Active habits">
-        <header class="panel-head">
-          <h2>Habits</h2>
-          @if (habitusUnlocked()) {
-            <a routerLink="/habitus">Habitus →</a>
-          }
-        </header>
-        @if (!habitusUnlocked()) {
-          <p class="empty">Habitus is locked.</p>
-        } @else if (habits().length === 0) {
+        @if (habits().length === 0) {
           <p class="empty">No active habits.</p>
         } @else {
-          <ul class="rows">
+          <ul class="habit-grid">
             @for (h of habits(); track h.id) {
-              <li class="row">
-                <span class="row-icon" aria-hidden="true">{{ h.icon || '◆' }}</span>
-                <span class="row-body">
-                  <strong>{{ h.name }}</strong>
-                  <small>🔥 {{ h.currentStreak }}</small>
-                </span>
-                @if (habitDoneToday(h)) {
-                  <span class="done-flag">Done</span>
-                } @else {
-                  <button
-                    type="button"
-                    class="done-btn"
-                    [disabled]="busyHabitId() === h.id"
-                    (click)="completeHabit(h)"
-                  >
-                    {{ busyHabitId() === h.id ? '…' : 'Done' }}
-                  </button>
-                }
+              <li>
+                <app-habit-card
+                  [habit]="h"
+                  [compact]="true"
+                  [busy]="busyHabitId() === h.id"
+                  (clicked)="clickHabit($event)"
+                  (completed)="completeHabit($event)"
+                />
               </li>
             }
           </ul>

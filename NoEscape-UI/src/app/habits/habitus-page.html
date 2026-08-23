@@ -1,24 +1,17 @@
 <section class="habitus-shell">
   <header class="toolbar">
     <div>
-      <p class="kicker">{{ demo() ? 'Unlockable · Demo' : 'Streaks' }}</p>
+      <p class="kicker">{{ demo() ? 'Unlockable · Demo' : 'Practice' }}</p>
       <h1>Habitus</h1>
-      @if (demo()) {
-        <p class="hint-inline">
-          Preview of the habit calendar. Complete
-          <a [routerLink]="unlockQuestPath()">Custodia Mentis</a>
-          to keep real logs.
-        </p>
-      }
+      <p class="lede">
+        Cards for the daily board. Open the calendar when you want the ledger.
+      </p>
     </div>
     <nav class="toolbar-links">
       @if (!demo()) {
-        <a routerLink="/habitus/new">New habit</a>
+        <app-ui-icon-btn icon="wrench" label="New habit" href="/habitus/new" />
         <a routerLink="/habitus/progression">Progression →</a>
-      } @else {
-        <a [routerLink]="unlockQuestPath()">Unlock via quest</a>
       }
-      <a routerLink="/character" class="back">← Character</a>
     </nav>
   </header>
 
@@ -28,180 +21,214 @@
 
   @if (error()) {
     <p class="state error">{{ error() }}</p>
-    <p class="hint">
-      Dev mode can open Habitus early. Complete
-      <a routerLink="/quests">Custodia Mentis</a> to unlock for real.
-    </p>
   } @else {
-    <div class="layout">
-      <aside class="habit-list">
-        <h2>Active habits</h2>
-        <ul>
-          @for (h of habits(); track h.id) {
+    <div class="view-bar">
+      <div class="chips" role="tablist" aria-label="Habitus view">
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="view() === 'cards'"
+          (click)="setView('cards')"
+        >
+          Cards
+        </button>
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="view() === 'calendar'"
+          (click)="setView('calendar')"
+        >
+          Calendar
+        </button>
+      </div>
+      @if (view() === 'cards') {
+        <label class="search">
+          Search
+          <input
+            type="search"
+            placeholder="Name, skill, quest"
+            [value]="query()"
+            (input)="onQuery($event)"
+          />
+        </label>
+      }
+    </div>
+
+    @if (view() === 'cards') {
+      @if (filtered().length === 0) {
+        <p class="state">
+          @if (query().trim()) {
+            No habits match “{{ query() }}”.
+          } @else {
+            No active habits.
+            @if (!demo()) {
+              <a routerLink="/habitus/new">Forge one</a>
+            }
+          }
+        </p>
+      } @else {
+        <ul class="card-grid">
+          @for (h of filtered(); track h.id) {
             <li>
-              <button
-                type="button"
-                class="habit-btn"
-                [class.selected]="selected()?.id === h.id"
-                (click)="select(h)"
-              >
-                <span aria-hidden="true">{{ h.icon || '◆' }}</span>
-                <span>
-                  <strong>{{ h.name }}</strong>
-                  <small>
-                    🔥 {{ h.currentStreak }} · best {{ h.bestStreak }}
-                  </small>
-                </span>
-              </button>
+              <app-habit-card
+                [habit]="h"
+                [busy]="busyId() === h.id"
+                [readonly]="demo()"
+                (clicked)="clickTally($event)"
+                (undone)="undoTally($event)"
+                (completed)="completeCheck($event)"
+              />
             </li>
           }
         </ul>
-        @if (habits().length === 0) {
-          <p class="state">No active habits.</p>
-        }
-        @if (!demo()) {
-          <a routerLink="/habitus/new" class="new-link">+ New habit</a>
-        }
-      </aside>
-
-      <section class="calendar-panel">
-        @if (selected(); as h) {
-          <div class="cal-head">
-            <h2>
-              <span aria-hidden="true">{{ h.icon }}</span>
+      }
+    } @else {
+      <div class="calendar-layout">
+        <aside class="filters">
+          <p class="kicker">Show</p>
+          <button
+            type="button"
+            class="filter"
+            [class.selected]="selectedIds().length === 0"
+            (click)="selectAllHabits()"
+          >
+            All
+          </button>
+          @for (h of habits(); track h.id) {
+            <button
+              type="button"
+              class="filter"
+              [class.selected]="selectedIds().includes(h.id)"
+              (click)="toggleHabitFilter(h.id)"
+            >
+              <span aria-hidden="true">{{ h.icon || '◆' }}</span>
               {{ h.name }}
-            </h2>
-            <p class="meta">
-              {{ h.cadence === 'DAILY' ? 'Daily' : 'Every ' + h.everyNDays + ' days' }}
-              · {{ h.totalCompletions }} logs · best streak {{ h.bestStreak }}
-              @if (formatHabitWealth(h.wealthCents); as cash) {
-                · {{ cash }}
-              }
-            </p>
+            </button>
+          }
+        </aside>
 
-            @if (!demo()) {
-              <form class="reward-edit" (submit)="$event.preventDefault(); saveReward()">
-                <label>
-                  Skill
-                  <select [value]="skillDraft()" (change)="setSkillDraft($event)">
-                    <option [value]="0">— none —</option>
-                    @for (s of skills(); track s.id) {
-                      <option [value]="s.id">{{ s.icon }} {{ s.name }}</option>
-                    }
-                  </select>
-                </label>
-                @if (showWealthEdit()) {
-                  <label>
-                    Wealth ({{ currencyLabel() }})
-                    <input
-                      type="text"
-                      inputmode="decimal"
-                      [value]="wealthDraft()"
-                      (input)="setWealthDraft($event)"
-                      placeholder="0.00"
-                    />
-                  </label>
-                }
-                <button type="submit" [disabled]="savingReward()">
-                  {{ savingReward() ? '…' : 'Save' }}
-                </button>
-              </form>
-            }
-
-            <div class="view-tabs" role="tablist">
-              @for (mode of ['day', 'week', 'month']; track mode) {
-                <button
-                  type="button"
-                  class="chip"
-                  [class.selected]="viewMode() === mode"
-                  (click)="setView($any(mode))"
-                >
-                  {{ mode }}
-                </button>
-              }
+        <section class="calendar-main">
+          <div class="mini-dash">
+            <div>
+              <p class="kicker">Points</p>
+              <p class="stat">{{ stats()?.points ?? 0 }}</p>
             </div>
-
-            <div class="cal-nav">
-              <button type="button" (click)="shift(-1)" aria-label="Previous">‹</button>
-              <span>{{ periodLabel() }}</span>
-              <button type="button" (click)="shift(1)" aria-label="Next">›</button>
-              <button type="button" class="now-btn" (click)="jumpToNow()">
-                {{ nowButtonLabel() }}
-              </button>
+            <div>
+              <p class="kicker">Checks</p>
+              <p class="stat">{{ stats()?.completions ?? 0 }}</p>
             </div>
+            <div>
+              <p class="kicker">Tallies</p>
+              <p class="stat">{{ stats()?.clicks ?? 0 }}</p>
+            </div>
+            <svg
+              class="spark"
+              viewBox="0 0 100 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              @if (sparkPoints()) {
+                <polyline [attr.points]="sparkPoints()" />
+              }
+            </svg>
           </div>
 
-          @if (period(); as p) {
-            <div
-              class="month-grid"
-              [class.day-view]="viewMode() === 'day'"
-              [class.week-view]="viewMode() === 'week'"
-              role="grid"
-              [attr.aria-label]="periodLabel()"
+          <div class="chips">
+            @for (g of ['day', 'week', 'month', 'year', 'all']; track g) {
+              <button
+                type="button"
+                class="chip"
+                [class.selected]="grain() === g"
+                (click)="setGrain($any(g))"
+              >
+                {{ g === 'all' ? 'All time' : g }}
+              </button>
+            }
+          </div>
+
+          <div class="cal-nav">
+            <button
+              type="button"
+              [disabled]="grain() === 'all'"
+              (click)="shift(-1)"
+              aria-label="Previous"
             >
-              @if (viewMode() !== 'day') {
+              ‹
+            </button>
+            <span>{{ periodLabel() }}</span>
+            <button
+              type="button"
+              [disabled]="grain() === 'all'"
+              (click)="shift(1)"
+              aria-label="Next"
+            >
+              ›
+            </button>
+            @if (grain() !== 'all') {
+              <button type="button" class="now" (click)="jumpToNow()">
+                Now
+              </button>
+            }
+          </div>
+
+          @if (stats(); as s) {
+            @if (grain() === 'month') {
+              <div class="month-grid" role="grid" [attr.aria-label]="periodLabel()">
                 @for (wd of weekdays(); track wd) {
                   <span class="wd">{{ wd }}</span>
                 }
-              }
-              @if (viewMode() === 'month') {
                 @for (pad of leadPads(); track pad) {
                   <span class="day pad" aria-hidden="true"></span>
                 }
-              }
-              @for (day of p.days; track day.date) {
-                <button
-                  type="button"
-                  class="day"
-                  [class.done]="day.completed"
-                  [class.today]="day.date === todayIso()"
-                  [class.future]="!canToggle(day.date)"
-                  [disabled]="!canToggle(day.date) || busyDate() === day.date"
-                  [attr.title]="
-                    canToggle(day.date)
-                      ? (day.completed ? 'Clear ' : 'Log ') + day.date
-                      : day.date + ' (future)'
-                  "
-                  (click)="toggleDay(day.date, day.completed)"
-                >
-                  @if (viewMode() === 'day') {
-                    <span class="day-big">{{ day.date.slice(-2) }}</span>
-                    <span class="day-status">{{ day.completed ? 'Done' : 'Open' }}</span>
-                  } @else {
+                @for (day of s.days; track day.date) {
+                  <span
+                    class="day"
+                    [class.hot]="day.points > 0"
+                    [class.today]="day.date === todayIso()"
+                    [title]="day.date + ' · ' + day.points"
+                  >
                     {{ day.date.slice(-2) }}
-                  }
-                </button>
-              }
-            </div>
-            <p class="month-count">{{ p.completedCount }} logged in this view</p>
+                    @if (day.points > 0) {
+                      <em>{{ day.points }}</em>
+                    }
+                  </span>
+                }
+              </div>
+            } @else {
+              <ul class="series">
+                @for (row of s.series; track row.key) {
+                  <li>
+                    <span>{{ row.label }}</span>
+                    <span class="bar">
+                      <span
+                        [style.width.%]="
+                          s.points > 0 ? (row.value / s.points) * 100 : 0
+                        "
+                      ></span>
+                    </span>
+                    <strong>{{ row.value }}</strong>
+                  </li>
+                }
+              </ul>
+            }
           }
 
-          <div class="actions">
-            @if (demo()) {
-              <a [routerLink]="unlockQuestPath()" class="primary-link">
-                Complete Custodia Mentis to unlock
-              </a>
-            } @else {
-              <button type="button" class="primary" (click)="markToday()">
-                Mark today complete
-              </button>
-              <button type="button" class="ghost" (click)="archiveSelected()">
-                Archive
-              </button>
-              <button type="button" class="danger" (click)="deleteSelected()">
-                Delete
-              </button>
+          <ul class="card-grid nested">
+            @for (h of calendarHabits(); track h.id) {
+              <li>
+                <app-habit-card
+                  [habit]="h"
+                  [busy]="busyId() === h.id"
+                  [readonly]="demo()"
+                  (clicked)="clickTally($event)"
+                  (undone)="undoTally($event)"
+                  (completed)="completeCheck($event)"
+                />
+              </li>
             }
-          </div>
-        } @else {
-          <p class="state">
-            No habit selected.
-            @if (!demo()) {
-              <a routerLink="/habitus/new">Create one</a>
-            }
-          </p>
-        }
-      </section>
-    </div>
+          </ul>
+        </section>
+      </div>
+    }
   }
 </section>

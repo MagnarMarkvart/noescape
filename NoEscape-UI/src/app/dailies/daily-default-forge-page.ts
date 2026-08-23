@@ -138,7 +138,8 @@ export class DailyDefaultForgePage implements OnInit {
       next: (t) => this.skillTree.set(t),
     });
     this.habitsService.list().subscribe({
-      next: (rows) => this.habits.set(rows),
+      next: (rows) =>
+        this.habits.set(rows.filter((h) => h.allowInDailies !== false)),
       error: () => this.habits.set([]),
     });
   }
@@ -163,7 +164,27 @@ export class DailyDefaultForgePage implements OnInit {
 
   protected onHabitSelect(event: Event): void {
     const id = Number((event.target as HTMLSelectElement).value) || 0;
+    const habit = this.habits().find((h) => h.id === id);
     this.createModel.update((m) => ({ ...m, habitId: id }));
+    if (!habit) {
+      return;
+    }
+    if (!this.createModel().name.trim()) {
+      this.createForm.name().value.set(habit.name);
+    }
+    if (habit.skillWeights?.length) {
+      this.setWeights(habit.skillWeights);
+    }
+    this.createForm.effortLevel().value.set(habit.effortLevel || 5);
+    this.createForm.durationMinutes().value.set(
+      Math.max(1, habit.durationMinutes || 45),
+    );
+    if (habit.wealthCents > 0) {
+      this.createModel.update((m) => ({
+        ...m,
+        wealthAmount: (habit.wealthCents / 100).toFixed(2),
+      }));
+    }
   }
 
   protected selectEffort(level: number): void {

@@ -1,43 +1,180 @@
 <app-forge-shell
   kicker="Habitus"
-  title="New habit"
-  lede="Configure cadence and icon. Logs stay in Progression forever."
+  [title]="heading()"
+  lede="Cadence, skills and time for dailies. Tally is the optional clicker variant."
   backHref="/habitus"
   backLabel="Back to Habitus"
   [toast]="toast()"
 >
-  <form class="create" (submit)="$event.preventDefault(); create()">
+  <form class="create" (submit)="$event.preventDefault(); save()">
     <fieldset>
       <legend>Name</legend>
-      <input type="text" [formField]="createForm.name" />
+      <input
+        type="text"
+        maxlength="80"
+        [value]="draft().name"
+        (input)="setName($any($event.target).value)"
+      />
     </fieldset>
 
     <app-icon-picker
-      [selected]="createModel().icon"
+      [selected]="draft().icon"
       (picked)="pickIcon($event)"
     />
 
     <fieldset>
-      <legend>Cadence</legend>
-      <select [formField]="createForm.cadence">
-        <option value="DAILY">Daily</option>
-        <option value="EVERY_N_DAYS">Every N days</option>
-      </select>
-    </fieldset>
-    <fieldset>
-      <legend>Every N days</legend>
-      <app-number-field
-        ariaLabel="Every N days"
-        [min]="1"
-        [max]="365"
-        [value]="createModel().everyNDays"
-        (valueChange)="setEveryNDays($event)"
-      />
+      <legend>Variant</legend>
+      <div class="chip-row">
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="draft().kind === 'check'"
+          (click)="setKind('check')"
+        >
+          Check
+        </button>
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="draft().kind === 'tally'"
+          (click)="setKind('tally')"
+        >
+          Tally
+        </button>
+      </div>
+      <p class="hint">
+        Check is a streak day. Tally is a clicker with a normal band, as Tabularium was.
+      </p>
     </fieldset>
 
-    <fieldset>
-      <legend>Skill (optional)</legend>
+    @if (draft().kind === 'check') {
+      <fieldset>
+        <legend>Cadence</legend>
+        <select
+          [value]="draft().cadence"
+          (change)="setCadence($any($event.target).value)"
+        >
+          <option value="DAILY">Daily</option>
+          <option value="EVERY_N_DAYS">Every N days</option>
+        </select>
+      </fieldset>
+      @if (draft().cadence === 'EVERY_N_DAYS') {
+        <fieldset>
+          <legend>Every N days</legend>
+          <app-number-field
+            ariaLabel="Every N days"
+            [min]="1"
+            [max]="365"
+            [value]="draft().everyNDays"
+            (valueChange)="setEveryNDays($event)"
+          />
+        </fieldset>
+      }
+    } @else {
+      <fieldset>
+        <legend>Window</legend>
+        <div class="chip-row">
+          @for (p of periods; track p.id) {
+            <button
+              type="button"
+              class="chip"
+              [class.selected]="draft().period === p.id"
+              (click)="setPeriod(p.id)"
+            >
+              {{ p.label }}
+            </button>
+          }
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Polarity</legend>
+        <div class="chip-row">
+          @for (p of polarities; track p.id) {
+            <button
+              type="button"
+              class="chip"
+              [class.selected]="draft().polarity === p.id"
+              (click)="setPolarity(p.id)"
+            >
+              {{ p.label }}
+            </button>
+          }
+        </div>
+        <p class="hint">{{ polarities.find((p) => p.id === draft().polarity)?.hint }}</p>
+      </fieldset>
+      <fieldset class="band">
+        <legend>Normal band</legend>
+        <div class="hm">
+          <label>
+            From
+            <app-number-field
+              ariaLabel="Normal minimum"
+              [min]="0"
+              [max]="9999"
+              [value]="draft().normMin"
+              (valueChange)="setNormMin($event)"
+            />
+          </label>
+          <label>
+            To
+            <app-number-field
+              ariaLabel="Normal maximum"
+              [min]="0"
+              [max]="9999"
+              [value]="draft().normMax"
+              (valueChange)="setNormMax($event)"
+            />
+          </label>
+          <label>
+            Click step
+            <app-number-field
+              ariaLabel="Click step"
+              [min]="1"
+              [max]="99"
+              [value]="draft().step"
+              (valueChange)="setStep($event)"
+            />
+          </label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Quest (optional)</legend>
+        <select
+          [value]="draft().questId ?? 0"
+          (change)="setQuest($any($event.target).value)"
+        >
+          <option [value]="0">— none —</option>
+          @for (q of quests(); track q.id) {
+            <option [value]="q.id">{{ q.name }}</option>
+          }
+        </select>
+      </fieldset>
+    }
+
+    <app-effort-field
+      [value]="draft().effortLevel"
+      (valueChange)="setEffort($event)"
+    />
+
+    <app-duration-field
+      legend="Time for dailies"
+      [presets]="durationPresets"
+      [minutes]="draft().durationMinutes"
+      [maxHours]="8"
+      (minutesChange)="setDuration($event)"
+    />
+
+    <fieldset class="picker-block">
+      <legend>Skills (optional)</legend>
+      <app-skill-weight-list
+        [shares]="weightShares()"
+        [remaining]="weightRemaining()"
+        [valid]="weightsValid()"
+        (bump)="bumpSkillWeight($event)"
+        (remove)="removeSkillWeight($event)"
+      />
       <app-skill-tree-picker
+        [showLevel]="true"
         [categories]="categories()"
         [skills]="subskills()"
         [selectedCategory]="selectedCategory()"
@@ -53,18 +190,63 @@
         <input
           type="text"
           inputmode="decimal"
-          [value]="createModel().wealthAmount"
+          [value]="draft().wealthAmount"
           (input)="setWealthAmount($event)"
           placeholder="0.00"
         />
       </fieldset>
     }
 
+    <fieldset>
+      <legend>Dailies</legend>
+      <div class="chip-row">
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="draft().allowInDailies"
+          (click)="setAllowInDailies(true)"
+        >
+          Offer in dailies
+        </button>
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="!draft().allowInDailies"
+          (click)="setAllowInDailies(false)"
+        >
+          Hide from dailies
+        </button>
+      </div>
+      <p class="hint">
+        Hidden habits cannot be picked into a daily. Offered ones fill skill split and duration.
+      </p>
+    </fieldset>
+
     <div class="actions">
-      <button type="submit" [disabled]="creating()">
-        {{ creating() ? '…' : 'Create habit' }}
+      <button type="submit" [disabled]="saving() || !canSave()">
+        {{ saving() ? '…' : editId() ? 'Save habit' : 'Forge habit' }}
       </button>
       <a routerLink="/habitus">Cancel</a>
+      @if (editId()) {
+        <button type="button" class="ghost" (click)="confirmRemove.set(true)">
+          Remove
+        </button>
+      }
     </div>
   </form>
 </app-forge-shell>
+
+@if (confirmRemove()) {
+  <app-ui-confirm
+    kicker="Habitus"
+    title="Archive this habit?"
+    body="Logs stay in Progression, but the habit leaves the active board and dailies."
+    cancelLabel="Keep"
+    confirmLabel="Archive"
+    tone="danger"
+    [busy]="removing()"
+    (dismiss)="confirmRemove.set(false)"
+    (secondary)="confirmRemove.set(false)"
+    (confirm)="remove()"
+  />
+}

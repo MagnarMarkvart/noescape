@@ -16,6 +16,10 @@ body {
   background: #1c1810;
 }
 
+body.nav-lock {
+  overflow: hidden;
+}
+
 .numeric-input {
   appearance: textfield;
 }

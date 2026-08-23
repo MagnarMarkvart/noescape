@@ -17,6 +17,7 @@ import { DailiesService } from '../dailies/dailies.service';
 import { QuickTaskPanel } from '../dailies/quick-task-panel';
 import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import { HabitsService, HabitView } from '../habits/habits.service';
+import { HabitCard } from '../habits/habit-card';
 import { HorologiumTimerService } from '../horologium/horologium-timer.service';
 import { HorologiumWatchService } from '../horologium/horologium-watch.service';
 import { LevelUpLogItem } from '../level-ups/level-ups.model';
@@ -32,15 +33,12 @@ import {
   SCRIPTORIUM_TIERS,
 } from '../scriptorium/scriptorium.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
-import { TabulaClicker } from '../tabularium/tabula-clicker';
-import { TabulaView } from '../tabularium/tabularium.model';
-import { TabulariumService } from '../tabularium/tabularium.service';
 
 type LiveKind = 'sessio' | 'track' | 'consuetudo' | 'vigilia';
 
 @Component({
   selector: 'app-dashboard-page',
-  imports: [DecimalPipe, RouterLink, QuickTaskPanel, UiIconBtn, TabulaClicker],
+  imports: [DecimalPipe, RouterLink, QuickTaskPanel, UiIconBtn, HabitCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard-page.html',
   styleUrl: './dashboard-page.css',
@@ -51,7 +49,6 @@ export class DashboardPage implements OnInit {
   private readonly habitsService = inject(HabitsService);
   private readonly questsService = inject(QuestsService);
   private readonly scriptoriumApi = inject(ScriptoriumService);
-  private readonly tabularium = inject(TabulariumService);
   private readonly characterService = inject(CharacterService);
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly timer = inject(HorologiumTimerService);
@@ -63,17 +60,14 @@ export class DashboardPage implements OnInit {
   protected readonly board = signal<DailyBoard | null>(null);
   protected readonly quests = signal<QuestView[]>([]);
   protected readonly dueWorks = signal<ScriptoriumDueView[]>([]);
-  protected readonly tabulae = signal<TabulaView[]>([]);
   protected readonly levelLogs = signal<LevelUpLogItem[]>([]);
   protected readonly totalLevel = signal(0);
-  protected readonly habitusUnlocked = signal(false);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   protected readonly toast = this.timed.value;
   protected readonly busyHabitId = signal<number | null>(null);
   protected readonly busyDailyId = signal<number | null>(null);
   protected readonly busyQuestKey = signal<string | null>(null);
-  protected readonly busyTabulaId = signal<number | null>(null);
 
   protected readonly remainingLabel = this.timer.remainingLabel;
   protected readonly phaseLabel = this.timer.phaseLabel;
@@ -247,6 +241,10 @@ export class DashboardPage implements OnInit {
   }
 
   protected completeHabit(habit: HabitView): void {
+    if (habit.kind === 'tally') {
+      this.clickHabit(habit);
+      return;
+    }
     if (this.habitDoneToday(habit) || this.busyHabitId()) {
       return;
     }
@@ -261,6 +259,25 @@ export class DashboardPage implements OnInit {
       error: (err: { error?: { message?: string } }) => {
         this.busyHabitId.set(null);
         this.timed.set(err.error?.message ?? 'Could not log habit');
+      },
+    });
+  }
+
+  protected clickHabit(habit: HabitView): void {
+    if (this.busyHabitId()) {
+      return;
+    }
+    this.busyHabitId.set(habit.id);
+    this.habitsService.click(habit.id).subscribe({
+      next: (next) => {
+        this.habits.update((rows) =>
+          rows.map((row) => (row.id === next.id ? next : row)),
+        );
+        this.busyHabitId.set(null);
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.busyHabitId.set(null);
+        this.timed.set(err.error?.message ?? 'Could not mark');
       },
     });
   }
@@ -323,29 +340,6 @@ export class DashboardPage implements OnInit {
     void this.questsService.refreshActive().subscribe();
   }
 
-  protected clickTabula(row: TabulaView): void {
-    if (this.busyTabulaId()) {
-      return;
-    }
-    this.busyTabulaId.set(row.id);
-    this.tabularium.click(row.id).subscribe({
-      next: (next) => {
-        this.patchTabula(next);
-        this.busyTabulaId.set(null);
-      },
-      error: (err: { error?: { message?: string } }) => {
-        this.busyTabulaId.set(null);
-        this.timed.set(err.error?.message ?? 'Could not mark');
-      },
-    });
-  }
-
-  private patchTabula(next: TabulaView): void {
-    this.tabulae.update((rows) =>
-      rows.map((row) => (row.id === next.id ? next : row)),
-    );
-  }
-
   private reload(): void {
     this.loading.set(true);
     forkJoin({
@@ -355,9 +349,6 @@ export class DashboardPage implements OnInit {
       dueWorks: this.scriptoriumApi.dueSoon(14).pipe(
         catchError(() => of([] as ScriptoriumDueView[])),
       ),
-      tabulae: this.tabularium.list().pipe(
-        catchError(() => of([] as TabulaView[])),
-      ),
       profile: this.characterService.getProfile().pipe(
         catchError(() => of(null)),
       ),
@@ -365,13 +356,11 @@ export class DashboardPage implements OnInit {
         catchError(() => of(null)),
       ),
     }).subscribe({
-      next: ({ board, quests, habits, dueWorks, tabulae, profile, levels }) => {
+      next: ({ board, quests, habits, dueWorks, profile, levels }) => {
         this.board.set(board);
         this.quests.set(quests);
         this.dueWorks.set(dueWorks);
-        this.tabulae.set(tabulae);
         this.habits.set(habits.filter((h) => h.active && !h.archived));
-        this.habitusUnlocked.set(Boolean(profile?.habitusUnlocked));
         this.totalLevel.set(profile?.totalLevel ?? 0);
         this.levelLogs.set(levels?.items.slice(0, 3) ?? []);
         this.loading.set(false);

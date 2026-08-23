@@ -349,6 +349,7 @@ model Quest {
   subtasks       QuestSubtask[]
   scriptoriumWorks ScriptoriumWork[]
   tabulae        Tabula[]
+  habits         Habit[]
 }
 
 model QuestSubtask {
@@ -435,10 +436,32 @@ model Habit {
   active      Boolean           @default(true)
   /// Literal cash awarded on a manual complete when the linked skill is Finance.
   wealthCents Int               @default(0)
-  createdAt   DateTime          @default(now())
-  completions   HabitCompletion[]
-  dailyTasks    DailyTask[]
-  taskTemplates DailyTaskTemplate[]
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10 when set.
+  skillWeightsJson String?
+  effortLevel      Int      @default(5)
+  durationMinutes  Int      @default(30)
+  /// When false, the habit is hidden from daily pickers.
+  allowInDailies   Boolean  @default(true)
+  /// check = binary streak log · tally = Tabularium-style clicker
+  kind             String   @default("check")
+  /// day | week | month | year (tally window)
+  period           String   @default("day")
+  /// vice = less is better · virtue = more is better
+  polarity         String   @default("virtue")
+  normMin          Int      @default(0)
+  normMax          Int      @default(1)
+  step             Int      @default(1)
+  questId          Int?
+  quest            Quest?   @relation(fields: [questId], references: [id], onDelete: SetNull)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  completions      HabitCompletion[]
+  clicks           HabitClick[]
+  dailyTasks       DailyTask[]
+  taskTemplates    DailyTaskTemplate[]
+
+  @@index([kind])
+  @@index([questId])
 }
 
 model HabitCompletion {
@@ -452,6 +475,18 @@ model HabitCompletion {
   createdAt   DateTime @default(now())
 
   @@unique([habitId, date])
+  @@index([date])
+}
+
+model HabitClick {
+  id        Int      @id @default(autoincrement())
+  habitId   Int
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      String
+  delta     Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@index([habitId, date])
   @@index([date])
 }
 

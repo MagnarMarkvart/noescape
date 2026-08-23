@@ -138,8 +138,11 @@ button.task-line:focus-visible {
   font-feature-settings: 'tnum' 1, 'lnum' 1;
   font-size: clamp(3.2rem, 10vw, 5.6rem);
   line-height: 1;
-  letter-spacing: 0.04em;
-  width: 6.8ch;
+  letter-spacing: 0.08em;
+  text-indent: 0.08em;
+  padding: 0;
+  width: max-content;
+  max-width: 100%;
   text-align: center;
   font-weight: 500;
   white-space: nowrap;
@@ -267,7 +270,7 @@ button.task-line:focus-visible {
 
 .session.notes-open,
 .scenery.notes-open .session {
-  padding-bottom: 12.5rem;
+  padding-bottom: 18rem;
 }
 
 .notes-toggle {
@@ -278,9 +281,9 @@ button.task-line:focus-visible {
 
 .notes-dock {
   position: absolute;
-  z-index: 3;
+  z-index: 2;
   left: 50%;
-  bottom: 5.35rem;
+  bottom: 9.25rem;
   transform: translateX(-50%);
   width: min(22rem, calc(100vw - 2rem));
   pointer-events: auto;
@@ -305,8 +308,8 @@ button.task-line:focus-visible {
 
 @media (max-width: 899px) {
   .notes-dock {
-    width: calc(100vw - 1.5rem);
-    bottom: 5.1rem;
+    width: min(22rem, calc(100vw - 2rem));
+    bottom: 9rem;
   }
 
   .live-notes {
@@ -316,7 +319,7 @@ button.task-line:focus-visible {
 
 .sound-dock {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   left: 1.15rem;
   bottom: 1.25rem;
   display: flex;

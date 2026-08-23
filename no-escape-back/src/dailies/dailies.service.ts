@@ -1439,9 +1439,9 @@ export class DailiesService {
     }
     const habit = await this.prisma.habit.findUnique({
       where: { id: habitId },
-      select: { id: true, active: true },
+      select: { id: true, active: true, allowInDailies: true },
     });
-    if (!habit?.active) {
+    if (!habit?.active || habit.allowInDailies === false) {
       return null;
     }
     return habit.id;

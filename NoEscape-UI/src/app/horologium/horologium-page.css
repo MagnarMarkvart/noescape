@@ -11,6 +11,8 @@
   --rs-rest: #6ea8d8;
   --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
   --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --font-clock: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', 'Liberation Mono',
+    Menlo, monospace;
 
   display: block;
   min-height: 100dvh;
@@ -114,6 +116,8 @@
 .ring-wrap {
   display: grid;
   place-items: center;
+  justify-items: center;
+  width: 100%;
   padding: 1.15rem 0 0.35rem;
 }
 
@@ -121,6 +125,7 @@
   position: relative;
   width: min(18rem, 78vw);
   max-width: 100%;
+  margin-inline: auto;
   aspect-ratio: 1;
   border-radius: 50%;
   border: 1px solid var(--rs-border-bright);
@@ -341,10 +346,11 @@ button.task-line:focus-visible {
   margin: 0;
   font-family: var(--font-display);
   letter-spacing: 0.16em;
-  padding-left: 0.16em;
+  padding: 0;
   text-transform: uppercase;
   font-size: 0.78rem;
   color: var(--rs-muted);
+  text-align: center;
 }
 
 .horologium-shell[data-phase='work'] .phase-tag {
@@ -465,14 +471,19 @@ button.task-line:focus-visible {
 }
 
 .clock {
-  margin: 0;
-  font-family: var(--font-display);
-  font-variant-numeric: lining-nums;
+  margin: 0 auto;
+  width: 100%;
+  font-family: var(--font-clock);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
   font-size: clamp(2.6rem, 8vw, 3.4rem);
-  letter-spacing: 0.04em;
-  padding-right: 0.3em;
+  letter-spacing: 0.08em;
+  text-indent: 0.08em;
+  padding: 0;
   color: var(--rs-text);
   line-height: 1;
+  text-align: center;
+  white-space: nowrap;
   transition: opacity 0.15s ease;
 }
 
@@ -986,7 +997,7 @@ button.ghost {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  align-items: stretch;
+  align-items: center;
 }
 
 .horologium-shell.focus .layout,
@@ -995,7 +1006,9 @@ button.ghost {
 }
 
 .horologium-shell.focus .dial-panel {
+  align-items: center;
   justify-content: center;
+  width: 100%;
   gap: 0.65rem;
   overflow: auto;
   padding: 1rem 1.15rem;
@@ -1015,8 +1028,8 @@ button.ghost {
 }
 
 .horologium-shell.focus .ring {
-  width: min(20rem, 62vw, calc(100dvh - 18rem));
-  max-width: none;
+  width: min(20rem, 100%, calc(100dvh - 18rem));
+  max-width: 100%;
 }
 
 .horologium-shell.focus .dial-task {
@@ -1080,8 +1093,8 @@ button.ghost {
   }
 
   .horologium-shell.focus .ring {
-    width: min(20rem, 36vw, calc(100dvh - 17rem));
-    max-width: none;
+    width: min(20rem, 100%, calc(100dvh - 17rem));
+    max-width: 100%;
   }
 
   .horologium-shell.focus .clock {

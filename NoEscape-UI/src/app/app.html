@@ -1,7 +1,7 @@
 <a class="skip-link" href="#main">Skip to content</a>
 <div class="app-frame">
   <app-sidebar />
-  <main id="main">
+  <main id="main" [attr.inert]="shell.drawerOpen() ? '' : null">
     <router-outlet />
   </main>
 </div>

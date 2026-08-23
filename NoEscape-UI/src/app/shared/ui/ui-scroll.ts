@@ -65,7 +65,9 @@ import {
       position: relative;
       width: min(36rem, 100%);
       max-height: min(92dvh, 48rem);
-      overflow: auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       padding: 1.45rem 1.4rem 1.3rem;
       color: var(--ink);
       font-family: var(--font-body);
@@ -79,6 +81,7 @@ import {
     }
     .corner {
       position: absolute;
+      z-index: 2;
       width: 1.05rem;
       height: 1.05rem;
       border: 1px solid var(--gold);
@@ -91,6 +94,7 @@ import {
     .br { bottom: 0.45rem; right: 0.45rem; border-left: 0; border-top: 0; }
     .head {
       display: flex;
+      flex-shrink: 0;
       justify-content: space-between;
       gap: 1rem;
       align-items: start;
@@ -124,7 +128,11 @@ import {
       border-color: var(--bright);
     }
     .body {
+      flex: 1 1 auto;
+      min-height: 0;
+      min-width: 0;
       margin-top: 1rem;
+      overflow: auto;
     }
   `,
 })

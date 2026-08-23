@@ -19,7 +19,7 @@
         </div>
         <div>
           <dt>Habitus</dt>
-          <dd>{{ p.habitusUnlocked ? 'On' : '—' }}</dd>
+          <dd>On</dd>
         </div>
         <div>
           <dt>Consuetudo</dt>
@@ -32,9 +32,7 @@
       </dl>
       <nav class="quick" aria-label="Shortcuts">
         <a routerLink="/quests">Quests</a>
-        @if (p.habitusUnlocked) {
-          <a routerLink="/habitus">Habitus</a>
-        }
+        <a routerLink="/habitus">Habitus</a>
         @if (p.consuetudoUnlocked) {
           <a routerLink="/consuetudo">Consuetudo</a>
         }
