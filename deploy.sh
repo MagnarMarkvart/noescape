@@ -11,7 +11,7 @@ git pull origin main
 echo ""
 echo "🔧 Backend — installing deps..."
 cd no-escape-back
-npm ci --omit=dev 2>/dev/null || npm install
+npm ci 2>/dev/null || npm install
 
 echo "🗄️  Running Prisma migrations..."
 npx prisma migrate deploy
