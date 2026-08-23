@@ -38,10 +38,9 @@
   <div class="list-col">
     @if (loading()) {
       <p class="state">Loading…</p>
-    } @else if (editing() || board() !== 'schedule') {
-      @if (!editing() && listed().length === 0) {
-        <p class="state">{{ emptyCopy() }}</p>
-      } @else {
+    } @else if (!editing() && listed().length === 0) {
+      <p class="state">{{ emptyCopy() }}</p>
+    } @else {
         <ul class="quest-list">
           @if (editing()) {
             <li>
@@ -78,6 +77,9 @@
                     <span class="tier">{{ statusLabel(q) }}</span>
                   </div>
                   <p class="summary">{{ q.journeyLabel || q.summary }}</p>
+                  @if (dueIso(q); as due) {
+                    <p class="due" [attr.data-tone]="dueTone(due)">{{ dueLabel(due) }}</p>
+                  }
                   @if (q.availability === 'active') {
                     <div class="mini-bar" aria-hidden="true">
                       <span [style.width.%]="q.progressPercent"></span>
@@ -91,6 +93,16 @@
                         · {{ q.week.logged }}/{{ q.week.expected }} this week
                       }
                     </p>
+                    @if (board() === 'schedule' && q.week.dates.length) {
+                      <ul class="week-row" aria-label="This week">
+                        @for (d of q.week.dates; track d.date) {
+                          <li [class.logged]="d.logged" [class.today]="d.isToday">
+                            <span>{{ weekdayLabel(d.date) }}</span>
+                            <strong>{{ d.logged ? '✓' : '·' }}</strong>
+                          </li>
+                        }
+                      </ul>
+                    }
                   } @else if (q.availability === 'available' || q.availability === 'locked') {
                     @if (q.requirements.length) {
                       <ul class="reqs">
@@ -127,31 +139,6 @@
             </li>
           }
         </ul>
-      }
-    } @else if (inProgress().length === 0) {
-      <p class="state">No active schedule. Start a quest to see the week.</p>
-    } @else {
-      <ul class="schedule-list">
-        @for (q of inProgress(); track q.id) {
-          <li>
-            <button type="button" class="schedule-card" (click)="open(q)">
-              <div class="card-top">
-                <strong>{{ q.name }}</strong>
-                <span class="tier">{{ q.week.logged }}/{{ q.week.expected }}</span>
-              </div>
-              <p class="summary">{{ q.journeyLabel || q.summary }}</p>
-              <ul class="week-row" aria-label="This week">
-                @for (d of q.week.dates; track d.date) {
-                  <li [class.logged]="d.logged" [class.today]="d.isToday">
-                    <span>{{ weekdayLabel(d.date) }}</span>
-                    <strong>{{ d.logged ? '✓' : '·' }}</strong>
-                  </li>
-                }
-              </ul>
-            </button>
-          </li>
-        }
-      </ul>
     }
   </div>
 </section>

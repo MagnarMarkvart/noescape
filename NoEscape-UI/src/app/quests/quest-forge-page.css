@@ -93,8 +93,10 @@
   align-items: end;
 }
 
-.inline-add .grow {
-  flex: 1 1 12rem;
+.inline-add app-date-field,
+.subtask-list app-date-field {
+  min-width: 8.5rem;
+  flex: 0 0 auto;
 }
 
 .ghost-btn {
@@ -104,6 +106,27 @@
   background: transparent;
   color: var(--rs-muted);
   cursor: pointer;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip-row .chip {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-muted);
+  cursor: pointer;
+}
+
+.chip-row .chip.selected {
+  border-color: var(--rs-border-bright);
+  color: var(--rs-accent);
 }
 
 .chip-list,

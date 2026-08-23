@@ -29,4 +29,12 @@ export class PreviewPage {
   protected mockLevelDown(): void {
     this.xpFeedback.mockLevelDown();
   }
+
+  protected mockQuestStarted(): void {
+    this.xpFeedback.mockQuestStarted();
+  }
+
+  protected mockQuestCompleted(): void {
+    this.xpFeedback.mockQuestCompleted();
+  }
 }

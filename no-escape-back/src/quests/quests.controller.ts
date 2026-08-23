@@ -44,13 +44,17 @@ export class QuestsController {
       journeyLabel?: string;
       journeyNote?: string;
       commitmentLevel?: number;
+      deadline?: string | null;
       coverDataUrl?: string;
       tier?: string;
       skillSlug?: string;
       skillReqs?: { slug: string; level: number }[];
       unlockReqs?: string[];
       questReqs?: string[];
-      subtasks?: Array<string | { id?: number; title: string; gatesJourney?: boolean }>;
+      subtasks?: Array<
+        | string
+        | { id?: number; title: string; gatesJourney?: boolean; deadline?: string | null }
+      >;
       rewards?: {
         title?: string;
         features?: string[];
@@ -81,12 +85,16 @@ export class QuestsController {
       journeyLabel?: string;
       journeyNote?: string;
       commitmentLevel?: number;
+      deadline?: string | null;
       coverDataUrl?: string;
       tier?: string;
       skillSlug?: string;
       skillReqs?: { slug: string; level: number }[];
       questReqs?: string[];
-      subtasks?: Array<string | { id?: number; title: string; gatesJourney?: boolean }>;
+      subtasks?: Array<
+        | string
+        | { id?: number; title: string; gatesJourney?: boolean; deadline?: string | null }
+      >;
       rewards?: {
         title?: string;
         features?: string[];

@@ -44,6 +44,14 @@ export const routes: Routes = [
         title: 'Settings — No Escape',
       },
       {
+        path: 'time',
+        loadComponent: () =>
+          import('./settings/settings-time-page').then(
+            (m) => m.SettingsTimePage,
+          ),
+        title: 'Time — Settings',
+      },
+      {
         path: 'pomodoro',
         loadComponent: () =>
           import('./settings/settings-pomodoro-page').then(
@@ -85,11 +93,8 @@ export const routes: Routes = [
   },
   {
     path: 'habitus/progression',
-    loadComponent: () =>
-      import('./habits/habitus-progression-page').then(
-        (m) => m.HabitusProgressionPage,
-      ),
-    title: 'Habit Progression — No Escape',
+    redirectTo: '/habitus?view=calendar',
+    pathMatch: 'full',
   },
   {
     path: 'habitus/new',

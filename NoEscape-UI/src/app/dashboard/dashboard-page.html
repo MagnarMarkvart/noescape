@@ -157,7 +157,9 @@
                 @if (q.journeyLabel || q.summary) {
                   <p class="quest-copy">{{ q.journeyLabel || q.summary }}</p>
                 }
-                @if (dueSideCount(q); as n) {
+                @if (questDueLabel(q); as due) {
+                  <p class="due-side" [attr.data-tone]="questDueTone(q)">{{ due }}</p>
+                } @else if (dueSideCount(q); as n) {
                   <p class="due-side">{{ n }} due today</p>
                 }
               </li>
@@ -217,8 +219,8 @@
                   [habit]="h"
                   [compact]="true"
                   [busy]="busyHabitId() === h.id"
-                  (clicked)="clickHabit($event)"
-                  (completed)="completeHabit($event)"
+                  (plus)="plusHabit($event)"
+                  (minus)="minusHabit($event)"
                 />
               </li>
             }

@@ -241,7 +241,9 @@ export class DailiesPage implements OnInit {
     });
     this.habitsService.list().subscribe({
       next: (rows) =>
-        this.habits.set(rows.filter((h) => h.allowInDailies !== false)),
+        this.habits.set(
+          rows.filter((h) => h.allowInDailies !== false && h.kind !== 'tally'),
+        ),
       error: () => this.habits.set([]),
     });
     this.dailiesService.listTemplates().subscribe({

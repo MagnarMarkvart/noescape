@@ -29,6 +29,29 @@ export class HabitsController {
     return this.habitsService.listProgression(this.isDev(dev));
   }
 
+  @Get('groups')
+  groups() {
+    return this.habitsService.listGroups();
+  }
+
+  @Post('groups')
+  createGroup(@Body() body: { name?: string }) {
+    return this.habitsService.createGroup(body?.name ?? '');
+  }
+
+  @Patch('groups/:groupId')
+  renameGroup(
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @Body() body: { name?: string },
+  ) {
+    return this.habitsService.renameGroup(groupId, body?.name ?? '');
+  }
+
+  @Delete('groups/:groupId')
+  removeGroup(@Param('groupId', ParseIntPipe) groupId: number) {
+    return this.habitsService.removeGroup(groupId);
+  }
+
   @Get('stats')
   stats(
     @Query('from') from?: string,
@@ -73,6 +96,38 @@ export class HabitsController {
     @Query('dev') dev?: string,
   ) {
     return this.habitsService.update(id, body ?? {}, this.isDev(dev));
+  }
+
+  @Patch(':id/place')
+  place(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { groupId?: number | null; sortOrder?: number },
+  ) {
+    return this.habitsService.placeHabit(
+      id,
+      body.groupId === undefined ? null : body.groupId,
+      body.sortOrder,
+    );
+  }
+
+  @Patch(':id/quest-link')
+  questLink(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: HabitWriteInput['questLink'] | { clear?: boolean },
+  ) {
+    if (body && 'clear' in body && body.clear) {
+      return this.habitsService.upsertQuestLink(id, null);
+    }
+    return this.habitsService.upsertQuestLink(
+      id,
+      (body as HabitWriteInput['questLink']) ?? null,
+    );
+  }
+
+  @Get(':id/quest-events')
+  questEvents(@Param('id', ParseIntPipe) id: number) {
+    return this.habitsService.listQuestEvents(id);
   }
 
   @Get(':id/month')

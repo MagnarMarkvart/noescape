@@ -10,7 +10,6 @@
     <nav class="toolbar-links">
       @if (!demo()) {
         <app-ui-icon-btn icon="wrench" label="New habit" href="/habitus/new" />
-        <a routerLink="/habitus/progression">Progression →</a>
       }
     </nav>
   </header>
@@ -55,10 +54,88 @@
     </div>
 
     @if (view() === 'cards') {
-      @if (filtered().length === 0) {
+      <div class="board-bar">
+        <div class="chips" role="tablist" aria-label="Due filter">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="dueFilter() === 'today'"
+            (click)="setDueFilter('today')"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="dueFilter() === 'all'"
+            (click)="setDueFilter('all')"
+          >
+            All
+          </button>
+        </div>
+        @if (dueFilter() === 'today') {
+          <label class="toggle">
+            <input
+              type="checkbox"
+              [checked]="showCompleted()"
+              (change)="toggleCompleted()"
+            />
+            Show completed
+          </label>
+        }
+        <label class="toggle">
+          <input
+            type="checkbox"
+            [checked]="dragMode()"
+            [disabled]="demo()"
+            (change)="setDragMode($any($event.target).checked)"
+          />
+          Drag
+        </label>
+        @if (!demo()) {
+          <form class="group-add" (submit)="$event.preventDefault(); addGroup()">
+            <input
+              type="text"
+              maxlength="40"
+              placeholder="New group"
+              [value]="newGroupName()"
+              (input)="onNewGroup($event)"
+            />
+            <button type="submit" [disabled]="!newGroupName().trim()">Add</button>
+          </form>
+        }
+      </div>
+
+      @if (skillChips().length) {
+        <div class="chips skill-chips" aria-label="Skill filter">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="skillFilter() === null"
+            (click)="setSkillFilter(null)"
+          >
+            All skills
+          </button>
+          @for (s of skillChips(); track s.slug) {
+            <button
+              type="button"
+              class="chip"
+              [class.selected]="skillFilter() === s.slug"
+              (click)="setSkillFilter(s.slug)"
+            >
+              @if (s.icon) {
+                <span aria-hidden="true">{{ s.icon }}</span>
+              }
+              {{ s.name }}
+            </button>
+          }
+        </div>
+      }
+
+      @if (openCards().length === 0 && doneCards().length === 0) {
         <p class="state">
-          @if (query().trim()) {
-            No habits match “{{ query() }}”.
+          @if (query().trim() || skillFilter() || dueFilter() === 'today') {
+            Nothing due in this view.
           } @else {
             No active habits.
             @if (!demo()) {
@@ -66,21 +143,94 @@
             }
           }
         </p>
-      } @else {
-        <ul class="card-grid">
-          @for (h of filtered(); track h.id) {
-            <li>
-              <app-habit-card
-                [habit]="h"
-                [busy]="busyId() === h.id"
-                [readonly]="demo()"
-                (clicked)="clickTally($event)"
-                (undone)="undoTally($event)"
-                (completed)="completeCheck($event)"
-              />
-            </li>
+      }
+
+      <div class="group-board">
+        @for (g of grouped().groups; track g.id) {
+          <fieldset
+            class="group-box"
+            [class.droppable]="dragMode()"
+            (dragover)="allowDrop($event)"
+            (drop)="onDrop(g.id, $event)"
+          >
+            <legend>
+              {{ g.name }}
+              @if (!demo()) {
+                <button
+                  type="button"
+                  class="ghost-mini"
+                  (click)="deleteGroup(g.id)"
+                >
+                  Remove
+                </button>
+              }
+            </legend>
+            @if (g.habits.length === 0) {
+              <p class="empty-bin">{{ dragMode() ? 'Drop a card here.' : 'Empty.' }}</p>
+            } @else {
+              <ul class="card-grid">
+                @for (h of g.habits; track h.id) {
+                  <li>
+                    <app-habit-card
+                      [habit]="h"
+                      [busy]="busyId() === h.id"
+                      [readonly]="demo()"
+                      [draggable]="dragMode() && !demo()"
+                      (plus)="plus($event)"
+                      (minus)="minus($event)"
+                    />
+                  </li>
+                }
+              </ul>
+            }
+          </fieldset>
+        }
+
+        <fieldset
+          class="group-box"
+          [class.droppable]="dragMode()"
+          (dragover)="allowDrop($event)"
+          (drop)="onDrop(null, $event)"
+        >
+          <legend>The Cloister</legend>
+          @if (grouped().cloister.length === 0) {
+            <p class="empty-bin">{{ dragMode() ? 'Drop a card here.' : 'Ungrouped habits live here.' }}</p>
+          } @else {
+            <ul class="card-grid">
+              @for (h of grouped().cloister; track h.id) {
+                <li>
+                  <app-habit-card
+                    [habit]="h"
+                    [busy]="busyId() === h.id"
+                    [readonly]="demo()"
+                    [draggable]="dragMode() && !demo()"
+                    (plus)="plus($event)"
+                    (minus)="minus($event)"
+                  />
+                </li>
+              }
+            </ul>
           }
-        </ul>
+        </fieldset>
+      </div>
+
+      @if (doneCards().length) {
+        <fieldset class="group-box done-pile">
+          <legend>Done</legend>
+          <ul class="card-grid">
+            @for (h of doneCards(); track h.id) {
+              <li>
+                <app-habit-card
+                  [habit]="h"
+                  [busy]="busyId() === h.id"
+                  [readonly]="demo()"
+                  (plus)="plus($event)"
+                  (minus)="minus($event)"
+                />
+              </li>
+            }
+          </ul>
+        </fieldset>
       }
     } @else {
       <div class="calendar-layout">
@@ -213,20 +363,151 @@
             }
           }
 
-          <ul class="card-grid nested">
-            @for (h of calendarHabits(); track h.id) {
-              <li>
-                <app-habit-card
-                  [habit]="h"
-                  [busy]="busyId() === h.id"
-                  [readonly]="demo()"
-                  (clicked)="clickTally($event)"
-                  (undone)="undoTally($event)"
-                  (completed)="completeCheck($event)"
-                />
-              </li>
+          <section class="ledger">
+            <header class="ledger-head">
+              <div>
+                <p class="kicker">Ledger</p>
+                <h2>Every habit</h2>
+                <p class="sub">
+                  {{ activeCount() }} active · {{ archivedCount() }} archived
+                </p>
+              </div>
+            </header>
+
+            @if (ledgerHabits().length === 0) {
+              <p class="state">No habits recorded yet.</p>
+            } @else {
+              <div class="ledger-layout">
+                <ul class="habit-cards">
+                  @for (h of ledgerHabits(); track h.id) {
+                    <li>
+                      <button
+                        type="button"
+                        class="ledger-card"
+                        [class.selected]="selectedLedger()?.id === h.id"
+                        [class.archived]="h.archived"
+                        (click)="selectLedger(h)"
+                      >
+                        <span class="icon" aria-hidden="true">{{ h.icon || '◆' }}</span>
+                        <span class="body">
+                          <strong>{{ h.name }}</strong>
+                          <small>
+                            @if (h.archived) {
+                              Archived
+                            } @else {
+                              Active
+                            }
+                            · {{ h.totalCompletions }} logs · best {{ h.bestStreak }}
+                          </small>
+                          <small class="range">
+                            @if (h.firstLog) {
+                              {{ formatDate(h.firstLog) }} → {{ formatDate(h.lastLog) }}
+                            } @else {
+                              No logs yet
+                            }
+                          </small>
+                        </span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+
+                <div class="ledger-detail">
+                  @if (selectedLedger(); as h) {
+                    <div class="detail-head">
+                      <h3>
+                        <span aria-hidden="true">{{ h.icon }}</span>
+                        {{ h.name }}
+                      </h3>
+                      <dl class="stats-grid">
+                        <div>
+                          <dt>Total logs</dt>
+                          <dd>{{ h.totalCompletions }}</dd>
+                        </div>
+                        <div>
+                          <dt>Best streak</dt>
+                          <dd>{{ h.bestStreak }}</dd>
+                        </div>
+                        <div>
+                          <dt>Current</dt>
+                          <dd>{{ h.archived ? '—' : h.currentStreak }}</dd>
+                        </div>
+                        <div>
+                          <dt>Cadence</dt>
+                          <dd>
+                            {{
+                              h.cadence === 'DAILY'
+                                ? 'Daily'
+                                : 'Every ' + h.everyNDays + 'd'
+                            }}
+                          </dd>
+                        </div>
+                      </dl>
+                      @if (h.questLink; as link) {
+                        <p class="quest-progress">
+                          Quest · {{ link.questName }}
+                          · {{ link.rule }} {{ link.progress }}/{{ link.requiredCount }}
+                          @if (link.completed) {
+                            · complete
+                          }
+                        </p>
+                        @if (link.events.length) {
+                          <ol class="quest-log">
+                            @for (ev of link.events; track $index) {
+                              <li>
+                                {{ formatDate(ev.date) }}
+                                · {{ ev.kind }}
+                                @if (!ev.success) {
+                                  · miss
+                                }
+                                @if (ev.note) {
+                                  · {{ ev.note }}
+                                }
+                              </li>
+                            }
+                          </ol>
+                        }
+                      }
+                      @if (h.archived) {
+                        <button type="button" class="restore" (click)="unarchive(h)">
+                          Restore to Habitus
+                        </button>
+                      }
+                    </div>
+
+                    <div class="cal-nav">
+                      <button type="button" (click)="shiftLedgerMonth(-1)">‹</button>
+                      <span>{{ ledgerMonthLabel() }}</span>
+                      <button type="button" (click)="shiftLedgerMonth(1)">›</button>
+                    </div>
+
+                    @if (month(); as m) {
+                      <div class="month-grid heat" role="grid">
+                        @for (wd of weekdays(); track wd) {
+                          <span class="wd">{{ wd }}</span>
+                        }
+                        @for (pad of ledgerLeadPads(); track pad) {
+                          <span class="day pad" aria-hidden="true"></span>
+                        }
+                        @for (day of m.days; track day.date) {
+                          <div
+                            class="day"
+                            [class.done]="day.completed"
+                            [attr.title]="day.date"
+                          >
+                            {{ day.date.slice(-2) }}
+                          </div>
+                        }
+                      </div>
+                      <p class="month-count">{{ m.completedCount }} days this month</p>
+                    }
+                  } @else {
+                    <p class="state">Select a habit to inspect its history.</p>
+                  }
+                </div>
+              </div>
             }
-          </ul>
+          </section>
         </section>
       </div>
     }

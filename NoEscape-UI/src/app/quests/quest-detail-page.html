@@ -25,6 +25,9 @@
         <p class="kicker">{{ q.tier }} · Quest Briefing</p>
         <h1>{{ q.name }}</h1>
         <p class="lede">{{ q.summary }}</p>
+        @if (dueIso(); as due) {
+          <p class="deadline" [attr.data-tone]="dueTone(due)">{{ dueLabel(due) }}</p>
+        }
         <div class="progress-block" aria-label="Quest progress">
           <div class="progress-track">
             <div class="progress-fill" [style.width.%]="q.progressPercent"></div>
@@ -150,6 +153,11 @@
                 {{ t.title }}
                 @if (t.gatesJourney) {
                   <span class="gate-flag">Gate</span>
+                }
+                @if (t.deadline) {
+                  <span class="detail due" [attr.data-tone]="dueTone(t.deadline)">
+                    {{ dueLabel(t.deadline) }}
+                  </span>
                 }
                 @if (t.elapsedMs) {
                   <span class="detail">{{ elapsedLabel(t.elapsedMs) }} tracked</span>

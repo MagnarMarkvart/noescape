@@ -7,7 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
+import { forkJoin, map, of } from 'rxjs';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { form, FormField, required, submit } from '@angular/forms/signals';
 import { Skill, SkillTree } from '../skills/skill.model';
@@ -15,6 +15,7 @@ import { SkillsService } from '../skills/skills.service';
 import { RuneCheck } from '../shared/rune-check';
 import { SkillWeightList } from '../shared/skill-weight-list';
 import { ForgeShell } from '../shared/ui/forge-shell';
+import { DateField } from '../shared/ui/date-field';
 import { NumberField } from '../shared/ui/number-field';
 import { SkillTreePicker } from '../shared/ui/skill-tree-picker';
 import { CharacterService } from '../character/character.service';
@@ -36,11 +37,18 @@ import {
 import { QuestsService } from './quests.service';
 import { ScriptoriumService } from '../scriptorium/scriptorium.service';
 import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
+import {
+  HabitQuestRule,
+  HabitQuestTarget,
+  HabitsService,
+  HabitView,
+} from '../habits/habits.service';
 
 interface ForgeSubtask {
   id?: number;
   title: string;
   gatesJourney: boolean;
+  deadline: string | null;
 }
 
 @Component({
@@ -53,6 +61,7 @@ interface ForgeSubtask {
     ForgeShell,
     SkillTreePicker,
     NumberField,
+    DateField,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-forge-page.html',
@@ -66,12 +75,21 @@ export class QuestForgePage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly timed = new TimedToast();
   private readonly character = inject(CharacterService);
+  private readonly habitsService = inject(HabitsService);
 
   protected readonly toast = this.timed.value;
   protected readonly saving = signal(false);
   protected readonly loading = signal(false);
   protected readonly editId = signal<number | null>(null);
   protected readonly scriptoriumWorkId = signal<number | null>(null);
+  protected readonly habits = signal<HabitView[]>([]);
+  protected readonly linkedHabitId = signal<number | null>(null);
+  protected readonly previousLinkedHabitId = signal<number | null>(null);
+  protected readonly habitTarget = signal<HabitQuestTarget>('JOURNEY');
+  protected readonly habitSubtaskId = signal<number | null>(null);
+  protected readonly habitRule = signal<HabitQuestRule>('COUNT');
+  protected readonly habitRequiredCount = signal(1);
+  protected readonly habitWindowDays = signal(7);
   protected readonly catalog = signal<QuestView[]>([]);
   protected readonly skillTree = signal<SkillTree | null>(null);
   protected readonly selectedCategory = signal<string | null>(null);
@@ -81,6 +99,7 @@ export class QuestForgePage implements OnInit {
   protected readonly subtasks = signal<ForgeSubtask[]>([]);
   protected readonly subtaskDraft = signal('');
   protected readonly gateDraft = signal(false);
+  protected readonly subtaskDeadlineDraft = signal('');
   protected readonly skillReqs = signal<Array<{ slug: string; level: number }>>(
     [],
   );
@@ -102,6 +121,7 @@ export class QuestForgePage implements OnInit {
     journeyLabel: '',
     journeyNote: '',
     commitmentLevel: 7,
+    deadline: '',
     titleReward: '',
     totalXp: 0,
     wealthAmount: '',
@@ -193,8 +213,11 @@ export class QuestForgePage implements OnInit {
     this.skillsService.getTree().subscribe({
       next: (tree) => this.skillTree.set(tree),
     });
-    this.questsService.list('all').subscribe({
-      next: (rows) => this.catalog.set(rows),
+    this.habitsService.list().subscribe({
+      next: (rows) => {
+        this.habits.set(rows);
+        this.syncLinkedHabit(this.editId());
+      },
     });
     const rawId = this.route.snapshot.paramMap.get('id');
     const id = rawId ? Number(rawId) : NaN;
@@ -250,14 +273,34 @@ export class QuestForgePage implements OnInit {
     }
     this.subtasks.update((rows) => [
       ...rows,
-      { title, gatesJourney: this.gateDraft() },
+      {
+        title,
+        gatesJourney: this.gateDraft(),
+        deadline: this.subtaskDeadlineDraft().trim() || null,
+      },
     ]);
     this.subtaskDraft.set('');
     this.gateDraft.set(false);
+    this.subtaskDeadlineDraft.set('');
   }
 
   protected removeSubtask(index: number): void {
     this.subtasks.update((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  protected setSubtaskDeadline(index: number, iso: string): void {
+    const deadline = iso.trim() || null;
+    this.subtasks.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, deadline } : row)),
+    );
+  }
+
+  protected setSubtaskDeadlineDraft(iso: string): void {
+    this.subtaskDeadlineDraft.set(iso);
+  }
+
+  protected setDeadline(iso: string): void {
+    this.createModel.update((m) => ({ ...m, deadline: iso }));
   }
 
   protected toggleGate(index: number): void {
@@ -323,6 +366,91 @@ export class QuestForgePage implements OnInit {
     this.skillWeights.set(removeSkillWeight(this.skillWeights(), slug));
   }
 
+  protected setLinkedHabit(raw: string): void {
+    const id = Number(raw);
+    this.linkedHabitId.set(Number.isFinite(id) && id > 0 ? id : null);
+    this.habitSubtaskId.set(null);
+  }
+
+  protected setHabitTarget(target: HabitQuestTarget): void {
+    this.habitTarget.set(target);
+    if (target === 'JOURNEY') {
+      this.habitSubtaskId.set(null);
+    }
+  }
+
+  protected setHabitSubtask(raw: string): void {
+    const id = Number(raw);
+    this.habitSubtaskId.set(Number.isFinite(id) && id > 0 ? id : null);
+  }
+
+  protected setHabitRule(rule: HabitQuestRule): void {
+    this.habitRule.set(rule);
+  }
+
+  protected setHabitRequiredCount(n: number): void {
+    this.habitRequiredCount.set(Math.max(1, Math.round(n) || 1));
+  }
+
+  protected setHabitWindowDays(n: number): void {
+    this.habitWindowDays.set(Math.max(1, Math.round(n) || 7));
+  }
+
+  protected readonly linkedHabitSubtasks = computed(
+    () => this.subtasks(),
+  );
+
+  private syncLinkedHabit(questId: number | null): void {
+    if (!questId) {
+      return;
+    }
+    const found = this.habits().find((h) => h.questLink?.questId === questId);
+    this.previousLinkedHabitId.set(found?.id ?? null);
+    this.linkedHabitId.set(found?.id ?? null);
+    if (found?.questLink) {
+      this.habitTarget.set(found.questLink.target);
+      this.habitSubtaskId.set(found.questLink.subtaskId);
+      this.habitRule.set(found.questLink.rule);
+      this.habitRequiredCount.set(found.questLink.requiredCount);
+      this.habitWindowDays.set(found.questLink.windowDays ?? 7);
+    }
+  }
+
+  private saveHabitLink(questId: number, done: () => void): void {
+    const nextId = this.linkedHabitId();
+    const prevId = this.previousLinkedHabitId();
+    const ops = [];
+    if (prevId && prevId !== nextId) {
+      ops.push(this.habitsService.upsertQuestLink(prevId, null));
+    }
+    if (nextId) {
+      ops.push(
+        this.habitsService.upsertQuestLink(nextId, {
+          questId,
+          target: this.habitTarget(),
+          subtaskId:
+            this.habitTarget() === 'SUBTASK' ? this.habitSubtaskId() : null,
+          rule: this.habitRule(),
+          requiredCount: this.habitRequiredCount(),
+          windowDays:
+            this.habitRule() === 'WINDOW' ? this.habitWindowDays() : null,
+        }),
+      );
+    }
+    if (!ops.length) {
+      done();
+      return;
+    }
+    forkJoin(ops).subscribe({
+      next: () => done(),
+      error: (err: { error?: { message?: string } }) => {
+        this.saving.set(false);
+        this.timed.set(err.error?.message ?? 'Quest saved, but habit link failed');
+        void this.router.navigate(['/quests', questId]);
+      },
+    });
+  }
+
   protected setCommitment(event: Event): void {
     const n = Number((event.target as HTMLInputElement).value) || 7;
     this.createModel.update((m) => ({
@@ -378,6 +506,7 @@ export class QuestForgePage implements OnInit {
         journeyLabel: m.journeyLabel.trim() || undefined,
         journeyNote: m.journeyNote.trim() || undefined,
         commitmentLevel: Number(m.commitmentLevel) || 7,
+        deadline: m.deadline.trim() || null,
         coverDataUrl: this.coverDataUrl() ?? undefined,
         skillReqs: this.skillReqs(),
         questReqs: this.questReqs(),
@@ -385,6 +514,7 @@ export class QuestForgePage implements OnInit {
           id: s.id,
           title: s.title,
           gatesJourney: s.gatesJourney,
+          deadline: s.deadline,
         })),
         rewards: m.titleReward.trim()
           ? { title: m.titleReward.trim() }
@@ -403,8 +533,10 @@ export class QuestForgePage implements OnInit {
           : this.questsService.create(payload);
       req.subscribe({
         next: (q) => {
-          this.saving.set(false);
-          void this.router.navigate(['/quests', q.id]);
+          this.saveHabitLink(q.id, () => {
+            this.saving.set(false);
+            void this.router.navigate(['/quests', q.id]);
+          });
         },
         error: (err: { error?: { message?: string } }) => {
           this.saving.set(false);
@@ -439,6 +571,7 @@ export class QuestForgePage implements OnInit {
       journeyLabel: q.journeyLabel ?? '',
       journeyNote: q.journeyNote ?? '',
       commitmentLevel: q.commitmentLevel || 7,
+      deadline: q.deadline ?? '',
       titleReward: q.rewards?.title ?? '',
       totalXp: q.totalXp || 0,
       wealthAmount: centsToInput(q.wealthCents),
@@ -448,6 +581,7 @@ export class QuestForgePage implements OnInit {
         id: s.id,
         title: s.title,
         gatesJourney: Boolean(s.gatesJourney),
+        deadline: s.deadline ?? null,
       })),
     );
     this.skillReqs.set(
@@ -466,6 +600,7 @@ export class QuestForgePage implements OnInit {
     const existing = resolveQuestCoverUrl(q.coverUrl, API_BASE_URL);
     this.coverPreview.set(existing);
     this.coverDataUrl.set(null);
+    this.syncLinkedHabit(q.id);
   }
 
   private loadScriptorium(id: number): void {
@@ -487,11 +622,13 @@ export class QuestForgePage implements OnInit {
       ...m,
       name: work.title,
       summary: work.notes.trim() || work.title,
+      deadline: work.dueDate ?? '',
     }));
     this.subtasks.set(
       work.subtasks.map((s) => ({
         title: s.title,
         gatesJourney: false,
+        deadline: null,
       })),
     );
     this.skillWeights.set(work.skillWeights.map((w) => ({ ...w })));

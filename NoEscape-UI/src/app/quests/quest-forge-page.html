@@ -33,6 +33,12 @@
           <button type="button" class="ghost-btn" (click)="clearCover()">Remove cover</button>
         </div>
       }
+      <app-date-field
+        label="Deadline"
+        placeholder="None"
+        [value]="createModel().deadline"
+        (valueChange)="setDeadline($event)"
+      />
     </fieldset>
 
     <fieldset>
@@ -158,6 +164,13 @@
           [checked]="gateDraft()"
           (checkedChange)="setGateDraft($event)"
         />
+        <app-date-field
+          label=""
+          placeholder="Due"
+          [compact]="true"
+          [value]="subtaskDeadlineDraft()"
+          (valueChange)="setSubtaskDeadlineDraft($event)"
+        />
         <button type="button" class="ghost-btn" (click)="addSubtask()">Add</button>
       </div>
       @if (subtasks().length) {
@@ -165,6 +178,13 @@
           @for (t of subtasks(); track t.id ?? $index) {
             <li>
               <span>{{ t.title }}</span>
+              <app-date-field
+                label=""
+                placeholder="Due"
+                [compact]="true"
+                [value]="t.deadline ?? ''"
+                (valueChange)="setSubtaskDeadline($index, $event)"
+              />
               <app-rune-check
                 label="Gate"
                 [checked]="t.gatesJourney"
@@ -243,6 +263,88 @@
             placeholder="0.00"
           />
         </label>
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Habitus link (optional)</legend>
+      <p class="hint">
+        Pick an existing habit. Completing it can mark a journey day or a subtask, using a count, streak, or window rule.
+      </p>
+      <label>
+        Habit
+        <select
+          [value]="linkedHabitId() ?? 0"
+          (change)="setLinkedHabit($any($event.target).value)"
+        >
+          <option [value]="0">— none —</option>
+          @for (h of habits(); track h.id) {
+            <option [value]="h.id">{{ h.icon || '◆' }} {{ h.name }}</option>
+          }
+        </select>
+      </label>
+      @if (linkedHabitId()) {
+        <div class="chip-row">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="habitTarget() === 'JOURNEY'"
+            (click)="setHabitTarget('JOURNEY')"
+          >
+            Journey day
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="habitTarget() === 'SUBTASK'"
+            (click)="setHabitTarget('SUBTASK')"
+          >
+            Subtask
+          </button>
+        </div>
+        @if (habitTarget() === 'SUBTASK') {
+          <label>
+            Subtask
+            <select
+              [value]="habitSubtaskId() ?? 0"
+              (change)="setHabitSubtask($any($event.target).value)"
+            >
+              <option [value]="0">— pick a subtask —</option>
+              @for (s of subtasks(); track s.id ?? s.title) {
+                <option [value]="s.id ?? 0">{{ s.title }}</option>
+              }
+            </select>
+          </label>
+        }
+        <div class="chip-row">
+          <button type="button" class="chip" [class.selected]="habitRule() === 'COUNT'" (click)="setHabitRule('COUNT')">Count</button>
+          <button type="button" class="chip" [class.selected]="habitRule() === 'STREAK'" (click)="setHabitRule('STREAK')">Streak</button>
+          <button type="button" class="chip" [class.selected]="habitRule() === 'WINDOW'" (click)="setHabitRule('WINDOW')">Window</button>
+        </div>
+        <div class="inline-add">
+          <label>
+            Need
+            <app-number-field
+              ariaLabel="Required successes"
+              [min]="1"
+              [max]="365"
+              [value]="habitRequiredCount()"
+              (valueChange)="setHabitRequiredCount($event)"
+            />
+          </label>
+          @if (habitRule() === 'WINDOW') {
+            <label>
+              Days
+              <app-number-field
+                ariaLabel="Window days"
+                [min]="1"
+                [max]="365"
+                [value]="habitWindowDays()"
+                (valueChange)="setHabitWindowDays($event)"
+              />
+            </label>
+          }
+        </div>
       }
     </fieldset>
 

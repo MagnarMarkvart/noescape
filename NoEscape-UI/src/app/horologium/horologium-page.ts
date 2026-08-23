@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { form, max, min, required } from '@angular/forms/signals';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { HorologiumApiService } from './horologium-api.service';
 import { HorologiumTimerService } from './horologium-timer.service';
@@ -90,6 +90,7 @@ export class HorologiumPage implements OnInit {
   private readonly routinesApi = inject(RoutinesService);
   private readonly scriptoriumApi = inject(ScriptoriumService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly xpFeedback = inject(XpFeedbackService);
   protected readonly shell = inject(AppShellService);
   private readonly destroyRef = inject(DestroyRef);
@@ -212,6 +213,10 @@ export class HorologiumPage implements OnInit {
     () => this.setupKind() === 'consuetudo',
   );
   protected readonly consuetudoUnlocked = signal(false);
+  private pendingConsuetudoId: number | null = null;
+  private routinesReady = false;
+  private profileReady = false;
+  private consuetudoQueryApplied = false;
   protected readonly routines = signal<RoutineView[]>([]);
   protected readonly selectedRoutineId = signal<number | null>(null);
   protected readonly scriptoriumWorks = signal<ScriptoriumWorkView[]>([]);
@@ -429,9 +434,21 @@ export class HorologiumPage implements OnInit {
     this.reloadDailies();
     this.reloadRoutines();
     this.reloadScriptorium();
+    const consuetudoRaw = this.route.snapshot.queryParamMap.get('consuetudo');
+    const consuetudoId = consuetudoRaw ? Number(consuetudoRaw) : NaN;
+    this.pendingConsuetudoId =
+      Number.isFinite(consuetudoId) && consuetudoId > 0 ? consuetudoId : null;
     this.character.getProfile().subscribe({
-      next: (p) => this.consuetudoUnlocked.set(Boolean(p.consuetudoUnlocked)),
-      error: () => this.consuetudoUnlocked.set(false),
+      next: (p) => {
+        this.consuetudoUnlocked.set(Boolean(p.consuetudoUnlocked));
+        this.profileReady = true;
+        this.applyConsuetudoQuery();
+      },
+      error: () => {
+        this.consuetudoUnlocked.set(false);
+        this.profileReady = true;
+        this.applyConsuetudoQuery();
+      },
     });
     if (this.consuetudo.inProgress()) {
       this.setupKind.set('consuetudo');
@@ -889,11 +906,19 @@ export class HorologiumPage implements OnInit {
     this.routinesApi.list().subscribe({
       next: (rows) => {
         this.routines.set(rows);
+        this.routinesReady = true;
+        if (this.applyConsuetudoQuery()) {
+          return;
+        }
         if (this.isConsuetudo()) {
           this.ensureRoutineSelected();
         }
       },
-      error: () => this.routines.set([]),
+      error: () => {
+        this.routines.set([]);
+        this.routinesReady = true;
+        this.applyConsuetudoQuery();
+      },
     });
   }
 
@@ -931,6 +956,32 @@ export class HorologiumPage implements OnInit {
       },
       error: () => this.watches.bindScriptorium(id),
     });
+  }
+
+  private applyConsuetudoQuery(): boolean {
+    const id = this.pendingConsuetudoId;
+    if (id == null || this.consuetudoQueryApplied) {
+      return false;
+    }
+    if (!this.routinesReady || !this.profileReady) {
+      return false;
+    }
+    this.consuetudoQueryApplied = true;
+    this.pendingConsuetudoId = null;
+    if (this.canEdit()) {
+      this.setSetupKind('consuetudo');
+      this.selectRoutine(String(id));
+    }
+    if (this.character.consuetudoStartInScenery()) {
+      this.enterScenery();
+    }
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { consuetudo: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+    return true;
   }
 
   private enterFocus(): void {

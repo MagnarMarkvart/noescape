@@ -16,7 +16,7 @@ import { formatElapsedShort } from '../shared/time';
 import { TimedToast } from '../shared/timed-toast';
 import { LogActivityResponse } from '../skills/skill.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
-import { QuestView, chronicleKindLabel, questCoverBg, weekdayLabel } from './quest.model';
+import { QuestView, chronicleKindLabel, deadlineLabel, deadlineTone, questCoverBg, weekdayLabel } from './quest.model';
 import { QuestRevealService } from './quest-reveal.service';
 import { QuestsService } from './quests.service';
 
@@ -48,6 +48,17 @@ export class QuestRunPage {
   protected readonly logging = signal(false);
   protected readonly weekdayLabel = weekdayLabel;
   protected readonly chronicleKindLabel = chronicleKindLabel;
+
+  protected dueLabel(iso: string | null | undefined): string {
+    if (!iso) {
+      return '';
+    }
+    return deadlineLabel(iso, this.character.formatDate(iso), this.character.todayIso());
+  }
+
+  protected dueTone(iso: string | null | undefined): 'overdue' | 'today' | 'soon' | '' {
+    return deadlineTone(iso, this.character.todayIso());
+  }
   protected readonly coverBg = computed(() =>
     questCoverBg(this.quest()?.coverUrl ?? null, API_BASE_URL),
   );
@@ -100,6 +111,13 @@ export class QuestRunPage {
       next: (res) => {
         this.quest.set(res.quest);
         this.logging.set(false);
+        if (res.completed) {
+          this.xpFeedback.publishQuest({
+            kind: 'completed',
+            name: q.name,
+            subtitle: 'Destination reached',
+          });
+        }
         for (const award of (res.awards ?? []) as LogActivityResponse[]) {
           this.xpFeedback.publishAward(award);
         }
@@ -177,6 +195,11 @@ export class QuestRunPage {
       next: (res) => {
         this.quest.set(res.quest);
         this.logging.set(false);
+        this.xpFeedback.publishQuest({
+          kind: 'completed',
+          name: q.name,
+          subtitle: 'Destination reached',
+        });
         for (const award of (res.awards ?? []) as LogActivityResponse[]) {
           this.xpFeedback.publishAward(award);
         }

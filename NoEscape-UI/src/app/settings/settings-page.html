@@ -16,27 +16,6 @@
         placeholder="Shown on Character"
       />
     </label>
-    <label>
-      Timezone
-      <select [value]="timezone()" (change)="setTimezone($event)">
-        @for (z of zones(); track z) {
-          <option [value]="z">{{ z }}</option>
-        }
-      </select>
-    </label>
-    <p class="hint">
-      Calendar days for dailies, habits, and quests follow this zone.
-    </p>
-    <fieldset class="option-group">
-      <legend>Date format</legend>
-      @for (fmt of dateFormats; track fmt.id) {
-        <app-rune-check
-          [label]="fmt.label + ' · ' + fmt.example"
-          [checked]="dateFormat() === fmt.id"
-          (checkedChange)="setDateFormat(fmt.id, $event)"
-        />
-      }
-    </fieldset>
     <fieldset class="option-group">
       <legend>Week starts on</legend>
       <app-rune-check
@@ -77,6 +56,23 @@
       />
       <p class="hint">
         Close the sidebar after you pick a page. Choose both, one, or neither.
+      </p>
+    </fieldset>
+    <fieldset class="option-group">
+      <legend>Consuetudo start</legend>
+      <app-rune-check
+        label="Scenery view"
+        [checked]="consuetudoStartInScenery()"
+        (checkedChange)="setConsuetudoStartInScenery(true, $event)"
+      />
+      <app-rune-check
+        label="Horologium view"
+        [checked]="!consuetudoStartInScenery()"
+        (checkedChange)="setConsuetudoStartInScenery(false, $event)"
+      />
+      <p class="hint">
+        Opening a practice from the Consuetudo catalog lands here, ready to
+        start. Scenery is the default.
       </p>
     </fieldset>
     <fieldset class="option-group">

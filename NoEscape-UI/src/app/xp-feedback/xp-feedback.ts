@@ -8,7 +8,31 @@ import { XpFeedbackService } from './xp-feedback.service';
   imports: [DecimalPipe, UiIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (current(); as event) {
+    @if (questCeremony(); as quest) {
+      <div
+        class="xp-layer levelup-dim"
+        aria-live="polite"
+        (click)="onLayerClick()"
+      >
+        <div
+          class="levelup-stage"
+          [class.quest-complete]="quest.kind === 'completed'"
+          role="dialog"
+          [attr.aria-label]="quest.kind === 'started' ? 'Quest started' : 'Quest complete'"
+        >
+          <p class="levelup-kicker">
+            {{ quest.kind === 'started' ? 'Quest started' : 'Quest complete' }}
+          </p>
+          <div class="levelup-icon" aria-hidden="true">
+            {{ quest.kind === 'started' ? '⚔' : '✦' }}
+          </div>
+          <h2 class="levelup-title">{{ quest.name }}</h2>
+          @if (quest.subtitle) {
+            <p class="levelup-level">{{ quest.subtitle }}</p>
+          }
+        </div>
+      </div>
+    } @else if (current(); as event) {
       <div
         class="xp-layer"
         [class.levelup-dim]="levelUpActive()"
@@ -583,6 +607,7 @@ export class XpFeedback {
   private readonly feedback = inject(XpFeedbackService);
 
   protected readonly current = this.feedback.current;
+  protected readonly questCeremony = this.feedback.currentQuest;
   protected readonly dropActive = this.feedback.dropActive;
   protected readonly levelUpActive = this.feedback.levelUpActive;
   protected readonly levelDownActive = this.feedback.levelDownActive;

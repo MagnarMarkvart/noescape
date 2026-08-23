@@ -11,7 +11,6 @@ import { RouterLink } from '@angular/router';
 import { CharacterService } from '../character/character.service';
 import { CalendarMarks } from '../shared/rune-calendar';
 import { HistoryLog } from '../shared/ui/history-log';
-import { todayInZone } from '../shared/time';
 import { HorologiumApiService } from './horologium-api.service';
 import {
   HorologiumSessionRecord,
@@ -94,17 +93,11 @@ export class HorologiumLogPage implements OnInit {
   }
 
   protected clock(iso: string): string {
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: this.character.timezone(),
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date(iso));
+    return this.character.formatTime(iso);
   }
 
   protected stamp(iso: string): string {
-    const date = todayInZone(this.character.timezone(), new Date(iso));
-    return `${this.character.formatDate(date)} ${this.clock(iso)}`;
+    return this.character.formatDateTime(iso);
   }
 
   protected minutesLabel(mins: number): string {

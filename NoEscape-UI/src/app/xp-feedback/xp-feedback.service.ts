@@ -8,6 +8,8 @@ import {
   LEVEL_UP_MS,
   mockFocusSkill,
   NOPE_JINGLE,
+  QUEST_CEREMONY_MS,
+  QuestCeremony,
   XP_DROP_MS,
   XP_GAIN_SFX,
   XP_LOSS_SFX,
@@ -21,6 +23,7 @@ export class XpFeedbackService {
   private readonly skills = inject(SkillsService);
   private readonly sound = inject(SoundSettingsService);
   private readonly queue: XpFeedbackEvent[] = [];
+  private readonly questQueue: QuestCeremony[] = [];
   private busy = false;
   private generation = 0;
   private timers: ReturnType<typeof setTimeout>[] = [];
@@ -36,6 +39,8 @@ export class XpFeedbackService {
   readonly dropActive = signal(false);
   readonly levelUpActive = signal(false);
   readonly levelDownActive = signal(false);
+  readonly questActive = signal(false);
+  readonly currentQuest = signal<QuestCeremony | null>(null);
 
   publish(event: XpFeedbackEvent): void {
     if (!event.xpAmount || event.xpAmount <= 0) {
@@ -88,6 +93,19 @@ export class XpFeedbackService {
     if (award.leveledUp) {
       this.skills.noteLevelUp();
     }
+  }
+
+  publishQuest(ceremony: QuestCeremony): void {
+    const name = ceremony.name.trim();
+    if (!name) {
+      return;
+    }
+    this.questQueue.push({
+      kind: ceremony.kind,
+      name,
+      subtitle: ceremony.subtitle?.trim() || undefined,
+    });
+    void this.pump();
   }
 
   /** Convenience for reverse/uncomplete payloads. */
@@ -243,19 +261,36 @@ export class XpFeedbackService {
     });
   }
 
+  mockQuestStarted(): void {
+    this.publishQuest({
+      kind: 'started',
+      name: 'Night Watch',
+      subtitle: 'The path is open',
+    });
+  }
+
+  mockQuestCompleted(): void {
+    this.publishQuest({
+      kind: 'completed',
+      name: 'Custodia Mentis',
+      subtitle: 'Destination reached',
+    });
+  }
+
   /** Drop the queue and hide every XP/level overlay. Jingles keep playing. */
   dismissQueuedVisuals(): void {
-    if (!this.current() && this.queue.length === 0) {
+    if (!this.current() && !this.currentQuest() && this.queue.length === 0 && this.questQueue.length === 0) {
       return;
     }
     this.generation += 1;
     this.queue.length = 0;
+    this.questQueue.length = 0;
     this.resetStage();
   }
 
-  /** Close the current level-up / level-down overlay and continue the queue. */
+  /** Close the current level-up / level-down / quest overlay and continue the queue. */
   skipLevelStage(): void {
-    if (!this.levelUpActive() && !this.levelDownActive()) {
+    if (!this.levelUpActive() && !this.levelDownActive() && !this.questActive()) {
       return;
     }
     this.generation += 1;
@@ -267,13 +302,36 @@ export class XpFeedbackService {
     this.dropActive.set(false);
     this.levelUpActive.set(false);
     this.levelDownActive.set(false);
+    this.questActive.set(false);
     this.phase.set('idle');
     this.current.set(null);
+    this.currentQuest.set(null);
     this.busy = false;
   }
 
   private async pump(): Promise<void> {
     if (this.busy) {
+      return;
+    }
+    const ceremony = this.questQueue.shift();
+    if (ceremony) {
+      const gen = this.generation;
+      this.busy = true;
+      this.currentQuest.set(ceremony);
+      this.questActive.set(true);
+      this.phase.set('quest');
+      this.playSfx(ceremony.kind === 'started' ? 'gain' : 'levelup');
+      if (!(await this.wait(QUEST_CEREMONY_MS, gen))) {
+        return;
+      }
+      if (gen !== this.generation) {
+        return;
+      }
+      this.questActive.set(false);
+      this.currentQuest.set(null);
+      this.phase.set('idle');
+      this.busy = false;
+      void this.pump();
       return;
     }
     const next = this.queue.shift();

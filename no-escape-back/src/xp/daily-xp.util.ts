@@ -78,6 +78,28 @@ export function calculateDailyTaskXp(input: {
   );
 }
 
+/**
+ * Board XP for a tally, or a check that is not offered in dailies:
+ * 25 × the per-minute effort rate (effort 10 → 2500 XP).
+ */
+export const HABIT_BOARD_XP_MULTIPLIER = 25;
+
+export function calculateHabitBoardXp(input: {
+  kind: 'check' | 'tally';
+  allowInDailies: boolean;
+  effortLevel: number;
+  durationMinutes: number;
+}): number {
+  const rate = effortXpPerMinute(input.effortLevel);
+  if (input.kind === 'tally' || !input.allowInDailies) {
+    return HABIT_BOARD_XP_MULTIPLIER * rate;
+  }
+  return calculateDailyTaskXp({
+    effortLevel: input.effortLevel,
+    durationMinutes: input.durationMinutes,
+  });
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }

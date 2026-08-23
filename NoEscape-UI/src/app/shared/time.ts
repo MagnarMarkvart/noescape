@@ -1,6 +1,7 @@
 export const DEFAULT_TZ = 'Europe/Tallinn';
 
 export type DateFormatId = 'DMY' | 'MDY' | 'YMD';
+export type TimeFormatId = 'H24' | 'H12';
 export type WeekStart = 0 | 1;
 
 export const DATE_FORMAT_OPTIONS: Array<{
@@ -13,12 +14,48 @@ export const DATE_FORMAT_OPTIONS: Array<{
   { id: 'YMD', label: 'Year-Month-Day', example: '2026-08-18' },
 ];
 
+export const TIME_FORMAT_OPTIONS: Array<{
+  id: TimeFormatId;
+  label: string;
+  example: string;
+}> = [
+  { id: 'H24', label: '24-hour', example: '17:05' },
+  { id: 'H12', label: '12-hour', example: '5:05 PM' },
+];
+
 export function isDateFormat(value: string): value is DateFormatId {
   return value === 'DMY' || value === 'MDY' || value === 'YMD';
 }
 
+export function isTimeFormat(value: string): value is TimeFormatId {
+  return value === 'H24' || value === 'H12';
+}
+
 export function isWeekStart(value: number): value is WeekStart {
   return value === 0 || value === 1;
+}
+
+export function clampDayStartHour(raw: unknown): number {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) {
+    return 0;
+  }
+  return Math.min(23, Math.max(0, n));
+}
+
+export function dayStartHourLabel(
+  hour: number,
+  format: TimeFormatId = 'H24',
+): string {
+  const h = clampDayStartHour(hour);
+  const h24 = `${String(h).padStart(2, '0')}:00`;
+  const extra = h === 0 ? ' · midnight' : h === 12 ? ' · noon' : '';
+  if (format === 'H24') {
+    return `${h24}${extra}`;
+  }
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  const period = h < 12 ? 'AM' : 'PM';
+  return `${h12}:00 ${period}${extra}`;
 }
 
 export function formatIsoDate(
@@ -101,6 +138,51 @@ export function todayInZone(timeZone: string, input = new Date()): string {
   }).formatToParts(input);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
   return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/**
+ * Log day in the zone: hours before `dayStartHour` belong to the previous date.
+ * Example: 05:00 on 17.08 with start 6 → 2026-08-16.
+ */
+export function civilDateInZone(
+  timeZone: string,
+  dayStartHour = 0,
+  input: Date | string = new Date(),
+): string {
+  const hour = clampDayStartHour(dayStartHour);
+  const instant = typeof input === 'string' ? new Date(input) : input;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(instant);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  const date = `${get('year')}-${get('month')}-${get('day')}`;
+  if (hour <= 0) {
+    return date;
+  }
+  const wallHour = Number(get('hour'));
+  if (Number.isFinite(wallHour) && wallHour < hour) {
+    return shiftIsoDays(date, -1);
+  }
+  return date;
+}
+
+export function formatTimeInZone(
+  input: Date | string,
+  timeZone: string,
+  format: TimeFormatId = 'H24',
+): string {
+  const hour12 = format === 'H12';
+  return new Intl.DateTimeFormat(hour12 ? 'en-US' : 'en-GB', {
+    timeZone,
+    hour: hour12 ? 'numeric' : '2-digit',
+    minute: '2-digit',
+    hour12,
+  }).format(typeof input === 'string' ? new Date(input) : input);
 }
 
 export function formatElapsedMs(ms: number): string {

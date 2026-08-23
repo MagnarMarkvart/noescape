@@ -1,7 +1,14 @@
 import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeService } from '../time/time.service';
-import { DEFAULT_TZ, isDateFormat, isValidTimeZone, isWeekStart } from '../time/zone';
+import {
+  DEFAULT_TZ,
+  clampDayStartHour,
+  isDateFormat,
+  isTimeFormat,
+  isValidTimeZone,
+  isWeekStart,
+} from '../time/zone';
 import {
   DEFAULT_CURRENCY,
   isCurrency,
@@ -69,10 +76,13 @@ export class CharacterService implements OnModuleInit {
       nickname: character.nickname,
       timezone: character.timezone || DEFAULT_TZ,
       dateFormat: isDateFormat(character.dateFormat) ? character.dateFormat : 'DMY',
+      timeFormat: isTimeFormat(character.timeFormat) ? character.timeFormat : 'H24',
+      dayStartHour: clampDayStartHour(character.dayStartHour),
       weekStartsOn: isWeekStart(character.weekStartsOn) ? character.weekStartsOn : 1,
       menuAutoToggleMobile: character.menuAutoToggleMobile !== false,
       menuAutoToggleDesktop: character.menuAutoToggleDesktop !== false,
       pomodoroAutoContinue: character.pomodoroAutoContinue !== false,
+      consuetudoStartInScenery: character.consuetudoStartInScenery !== false,
       wealthCents: character.wealthCents ?? 0,
       currency: isCurrency(character.currency)
         ? character.currency
@@ -95,20 +105,26 @@ export class CharacterService implements OnModuleInit {
     nickname?: string;
     timezone?: string;
     dateFormat?: string;
+    timeFormat?: string;
+    dayStartHour?: number;
     weekStartsOn?: number;
     menuAutoToggleMobile?: boolean;
     menuAutoToggleDesktop?: boolean;
     pomodoroAutoContinue?: boolean;
+    consuetudoStartInScenery?: boolean;
     currency?: string;
   }) {
     const data: {
       nickname?: string;
       timezone?: string;
       dateFormat?: string;
+      timeFormat?: string;
+      dayStartHour?: number;
       weekStartsOn?: number;
       menuAutoToggleMobile?: boolean;
       menuAutoToggleDesktop?: boolean;
       pomodoroAutoContinue?: boolean;
+      consuetudoStartInScenery?: boolean;
       currency?: CurrencyId;
     } = {};
     if (input.nickname !== undefined) {
@@ -128,6 +144,20 @@ export class CharacterService implements OnModuleInit {
       }
       data.dateFormat = fmt;
     }
+    if (input.timeFormat !== undefined) {
+      const fmt = String(input.timeFormat).trim().toUpperCase();
+      if (!isTimeFormat(fmt)) {
+        throw new BadRequestException('timeFormat must be H24 or H12');
+      }
+      data.timeFormat = fmt;
+    }
+    if (input.dayStartHour !== undefined) {
+      const hour = Number(input.dayStartHour);
+      if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+        throw new BadRequestException('dayStartHour must be an integer from 0 to 23');
+      }
+      data.dayStartHour = hour;
+    }
     if (input.weekStartsOn !== undefined) {
       const start = Number(input.weekStartsOn);
       if (!isWeekStart(start)) {
@@ -143,6 +173,9 @@ export class CharacterService implements OnModuleInit {
     }
     if (input.pomodoroAutoContinue !== undefined) {
       data.pomodoroAutoContinue = Boolean(input.pomodoroAutoContinue);
+    }
+    if (input.consuetudoStartInScenery !== undefined) {
+      data.consuetudoStartInScenery = Boolean(input.consuetudoStartInScenery);
     }
     if (input.currency !== undefined) {
       const code = String(input.currency).trim().toUpperCase();

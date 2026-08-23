@@ -1,14 +1,80 @@
 export const DEFAULT_TZ = 'Europe/Tallinn';
 
 export type DateFormatId = 'DMY' | 'MDY' | 'YMD';
+export type TimeFormatId = 'H24' | 'H12';
 export type WeekStart = 0 | 1;
 
 export function isDateFormat(value: string): value is DateFormatId {
   return value === 'DMY' || value === 'MDY' || value === 'YMD';
 }
 
+export function isTimeFormat(value: string): value is TimeFormatId {
+  return value === 'H24' || value === 'H12';
+}
+
 export function isWeekStart(value: number): value is WeekStart {
   return value === 0 || value === 1;
+}
+
+export function clampDayStartHour(raw: unknown): number {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) {
+    return 0;
+  }
+  return Math.min(23, Math.max(0, n));
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** Calendar date in the zone (midnight-to-midnight), ignoring day-start hour. */
+export function dateInZone(
+  timeZone: string,
+  input: Date | string = new Date(),
+): string {
+  return zoneStamp(input, timeZone).date;
+}
+
+/**
+ * Log day in the zone: hours before `dayStartHour` belong to the previous date.
+ * Example: 05:00 on 17.08 with start 6 → 2026-08-16.
+ */
+export function civilDateInZone(
+  timeZone: string,
+  dayStartHour = 0,
+  input: Date | string = new Date(),
+): string {
+  const hour = clampDayStartHour(dayStartHour);
+  const stamp = zoneStamp(input, timeZone);
+  if (hour <= 0) {
+    return stamp.date;
+  }
+  const wallHour = Number(stamp.time.slice(0, 2));
+  if (Number.isFinite(wallHour) && wallHour < hour) {
+    return addDaysIso(stamp.date, -1);
+  }
+  return stamp.date;
+}
+
+export function formatTimeInZone(
+  input: Date | string,
+  timeZone: string,
+  format: TimeFormatId = 'H24',
+): string {
+  const hour12 = format === 'H12';
+  return new Intl.DateTimeFormat(hour12 ? 'en-US' : 'en-GB', {
+    timeZone,
+    hour: hour12 ? 'numeric' : '2-digit',
+    minute: '2-digit',
+    hour12,
+  }).format(typeof input === 'string' ? new Date(input) : input);
 }
 
 export function formatIsoDate(
@@ -37,13 +103,6 @@ export function isValidTimeZone(tz: string): boolean {
   } catch {
     return false;
   }
-}
-
-export function dateInZone(
-  timeZone: string,
-  input: Date | string = new Date(),
-): string {
-  return zoneStamp(input, timeZone).date;
 }
 
 export function zoneStamp(

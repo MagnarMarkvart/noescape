@@ -17,12 +17,16 @@ import { formatElapsedShort } from '../shared/time';
 import {
   QuestView,
   chronicleKindLabel,
+  deadlineLabel,
+  deadlineTone,
   questCoverBg,
+  questDeadline,
   questTasks,
   questTimeframe,
 } from './quest.model';
 import { QuestRevealService } from './quest-reveal.service';
 import { QuestsService } from './quests.service';
+import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 
 @Component({
   selector: 'app-quest-detail-page',
@@ -39,6 +43,7 @@ export class QuestDetailPage {
   private readonly reveal = inject(QuestRevealService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly character = inject(CharacterService);
+  private readonly xpFeedback = inject(XpFeedbackService);
   private loadSeq = 0;
   private loaderTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -59,7 +64,23 @@ export class QuestDetailPage {
     return q ? questTimeframe(q) : '';
   });
 
+  protected readonly dueIso = computed(() => {
+    const q = this.quest();
+    return q ? questDeadline(q) : null;
+  });
+
   protected readonly chronicleKindLabel = chronicleKindLabel;
+
+  protected dueLabel(iso: string | null | undefined): string {
+    if (!iso) {
+      return '';
+    }
+    return deadlineLabel(iso, this.character.formatDate(iso), this.character.todayIso());
+  }
+
+  protected dueTone(iso: string | null | undefined): 'overdue' | 'today' | 'soon' | '' {
+    return deadlineTone(iso, this.character.todayIso());
+  }
 
   protected elapsedLabel(ms: number | null | undefined): string {
     return formatElapsedShort(ms ?? 0);
@@ -140,6 +161,11 @@ export class QuestDetailPage {
     this.starting.set(true);
     this.questsService.start(q.id).subscribe({
       next: () => {
+        this.xpFeedback.publishQuest({
+          kind: 'started',
+          name: q.name,
+          subtitle: 'The path is open',
+        });
         void this.router.navigate(['/quests', q.id, 'run']);
       },
       error: (err: { error?: { message?: string } }) => {

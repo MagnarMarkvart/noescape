@@ -22,6 +22,7 @@ import { parseMoneyToCents } from '../shared/money';
 import { SkillsService } from '../skills/skills.service';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { QuestsService } from '../quests/quests.service';
+import { QuestView } from '../quests/quest.model';
 import { ForgeShell } from '../shared/ui/forge-shell';
 import { IconPicker } from '../shared/ui/icon-picker';
 import { NumberField } from '../shared/ui/number-field';
@@ -39,7 +40,13 @@ import {
   TabulaPolarity,
 } from '../tabularium/tabularium.model';
 import { DEFAULT_HABIT_ICON } from './habit-icons';
-import { HabitKind, HabitsService, HabitWriteBody } from './habits.service';
+import {
+  HabitKind,
+  HabitQuestRule,
+  HabitQuestTarget,
+  HabitsService,
+  HabitWriteBody,
+} from './habits.service';
 
 @Component({
   selector: 'app-habitus-new-page',
@@ -74,7 +81,7 @@ export class HabitusNewPage implements OnInit {
   protected readonly editId = signal<number | null>(null);
   protected readonly skillTree = signal<SkillTree | null>(null);
   protected readonly selectedCategory = signal<string | null>(null);
-  protected readonly quests = signal<Array<{ id: number; name: string }>>([]);
+  protected readonly quests = signal<QuestView[]>([]);
   protected readonly durationPresets = DURATION_PRESETS;
   protected readonly periods = TABULA_PERIOD_OPTIONS;
   protected readonly polarities = TABULA_POLARITY_OPTIONS;
@@ -95,6 +102,11 @@ export class HabitusNewPage implements OnInit {
     normMax: 1,
     step: 1,
     questId: null as number | null,
+    questTarget: 'JOURNEY' as HabitQuestTarget,
+    questSubtaskId: null as number | null,
+    questRule: 'COUNT' as HabitQuestRule,
+    questRequiredCount: 1,
+    questWindowDays: 7,
     wealthAmount: '',
   });
 
@@ -135,17 +147,32 @@ export class HabitusNewPage implements OnInit {
       };
     }),
   );
+  protected readonly canSave = computed(() => {
+    const d = this.draft();
+    const nameOk = d.name.trim().length > 0;
+    const weightsOk = this.weightsValid();
+    const bandOk = d.normMax >= d.normMin;
+    const subtaskOk =
+      !d.questId ||
+      d.questTarget !== 'SUBTASK' ||
+      (d.questSubtaskId != null && d.questSubtaskId > 0);
+    return nameOk && weightsOk && bandOk && subtaskOk;
+  });
   protected readonly showWealth = computed(
     () =>
       boostsWealth(this.draft().skillWeights) ||
       parseMoneyToCents(this.draft().wealthAmount) > 0,
   );
   protected readonly currencyLabel = computed(() => this.character.currency());
-  protected readonly canSave = computed(
-    () =>
-      this.draft().name.trim().length > 0 &&
-      this.weightsValid() &&
-      this.draft().normMax >= this.draft().normMin,
+  protected readonly selectedQuest = computed(() => {
+    const id = this.draft().questId;
+    if (!id) {
+      return null;
+    }
+    return this.quests().find((q) => q.id === id) ?? null;
+  });
+  protected readonly questSubtasks = computed(
+    () => this.selectedQuest()?.subtasks ?? [],
   );
 
   ngOnInit(): void {
@@ -153,8 +180,7 @@ export class HabitusNewPage implements OnInit {
       next: (tree) => this.skillTree.set(tree),
     });
     this.questsService.list('all').subscribe({
-      next: (rows) =>
-        this.quests.set(rows.map((q) => ({ id: q.id, name: q.name }))),
+      next: (rows) => this.quests.set(rows),
     });
     const raw = this.route.snapshot.paramMap.get('id');
     const id = raw ? Number(raw) : NaN;
@@ -172,14 +198,20 @@ export class HabitusNewPage implements OnInit {
           skillWeights: row.skillWeights ?? [],
           effortLevel: row.effortLevel || 5,
           durationMinutes: row.durationMinutes || 30,
-          allowInDailies: row.allowInDailies !== false,
+          allowInDailies:
+            row.kind === 'tally' ? false : row.allowInDailies !== false,
           kind: row.kind === 'tally' ? 'tally' : 'check',
           period: row.period || 'day',
           polarity: row.polarity || 'virtue',
           normMin: row.normMin,
           normMax: row.normMax,
           step: row.step,
-          questId: row.questId,
+          questId: row.questLink?.questId ?? row.questId,
+          questTarget: row.questLink?.target === 'SUBTASK' ? 'SUBTASK' : 'JOURNEY',
+          questSubtaskId: row.questLink?.subtaskId ?? null,
+          questRule: row.questLink?.rule ?? 'COUNT',
+          questRequiredCount: row.questLink?.requiredCount ?? 1,
+          questWindowDays: row.questLink?.windowDays ?? 7,
           wealthAmount:
             row.wealthCents > 0 ? String(row.wealthCents / 100) : '',
         });
@@ -240,11 +272,18 @@ export class HabitusNewPage implements OnInit {
   }
 
   protected setAllowInDailies(allow: boolean): void {
-    this.draft.update((d) => ({ ...d, allowInDailies: allow }));
+    this.draft.update((d) => ({
+      ...d,
+      allowInDailies: d.kind === 'tally' ? false : allow,
+    }));
   }
 
   protected setKind(kind: HabitKind): void {
-    this.draft.update((d) => ({ ...d, kind }));
+    this.draft.update((d) => ({
+      ...d,
+      kind,
+      allowInDailies: kind === 'tally' ? false : d.allowInDailies,
+    }));
   }
 
   protected setPeriod(period: TabulaPeriod): void {
@@ -278,6 +317,41 @@ export class HabitusNewPage implements OnInit {
     this.draft.update((d) => ({
       ...d,
       questId: Number.isFinite(id) && id > 0 ? id : null,
+      questSubtaskId: null,
+    }));
+  }
+
+  protected setQuestTarget(target: HabitQuestTarget): void {
+    this.draft.update((d) => ({
+      ...d,
+      questTarget: target,
+      questSubtaskId: target === 'JOURNEY' ? null : d.questSubtaskId,
+    }));
+  }
+
+  protected setQuestSubtask(raw: string): void {
+    const id = Number(raw);
+    this.draft.update((d) => ({
+      ...d,
+      questSubtaskId: Number.isFinite(id) && id > 0 ? id : null,
+    }));
+  }
+
+  protected setQuestRule(rule: HabitQuestRule): void {
+    this.draft.update((d) => ({ ...d, questRule: rule }));
+  }
+
+  protected setQuestRequiredCount(n: number): void {
+    this.draft.update((d) => ({
+      ...d,
+      questRequiredCount: Math.max(1, Math.round(n) || 1),
+    }));
+  }
+
+  protected setQuestWindowDays(n: number): void {
+    this.draft.update((d) => ({
+      ...d,
+      questWindowDays: Math.max(1, Math.round(n) || 7),
     }));
   }
 
@@ -345,7 +419,7 @@ export class HabitusNewPage implements OnInit {
       skillWeights: d.skillWeights,
       effortLevel: d.effortLevel,
       durationMinutes: d.durationMinutes,
-      allowInDailies: d.allowInDailies,
+      allowInDailies: d.kind === 'tally' ? false : d.allowInDailies,
       kind: d.kind,
       period: d.period,
       polarity: d.polarity,
@@ -353,6 +427,16 @@ export class HabitusNewPage implements OnInit {
       normMax: d.normMax,
       step: d.step,
       questId: d.questId,
+      questLink: d.questId
+        ? {
+            questId: d.questId,
+            target: d.questTarget,
+            subtaskId: d.questTarget === 'SUBTASK' ? d.questSubtaskId : null,
+            rule: d.questRule,
+            requiredCount: d.questRequiredCount,
+            windowDays: d.questRule === 'WINDOW' ? d.questWindowDays : null,
+          }
+        : null,
       wealthCents: boostsWealth(d.skillWeights)
         ? parseMoneyToCents(d.wealthAmount)
         : 0,

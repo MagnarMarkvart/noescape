@@ -43,7 +43,7 @@
         </button>
       </div>
       <p class="hint">
-        Check is a streak day. Tally is a clicker with a normal band, as Tabularium was.
+        Check is a streak day. Tally is a clicker with a normal band — never a daily.
       </p>
     </fieldset>
 
@@ -137,31 +137,47 @@
           </label>
         </div>
       </fieldset>
+    }
+
+    @if (draft().kind === 'check') {
       <fieldset>
-        <legend>Quest (optional)</legend>
-        <select
-          [value]="draft().questId ?? 0"
-          (change)="setQuest($any($event.target).value)"
-        >
-          <option [value]="0">— none —</option>
-          @for (q of quests(); track q.id) {
-            <option [value]="q.id">{{ q.name }}</option>
-          }
-        </select>
+        <legend>Offer in Dailies</legend>
+        <div class="chip-row">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().allowInDailies"
+            (click)="setAllowInDailies(true)"
+          >
+            Yes
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="!draft().allowInDailies"
+            (click)="setAllowInDailies(false)"
+          >
+            No
+          </button>
+        </div>
+        <p class="hint">
+          Offered checks can be picked into a daily. Completing that daily marks the habit done without a second XP grant.
+        </p>
       </fieldset>
+      @if (draft().allowInDailies) {
+        <app-duration-field
+          legend="Duration"
+          [presets]="durationPresets"
+          [minutes]="draft().durationMinutes"
+          [maxHours]="8"
+          (minutesChange)="setDuration($event)"
+        />
+      }
     }
 
     <app-effort-field
       [value]="draft().effortLevel"
       (valueChange)="setEffort($event)"
-    />
-
-    <app-duration-field
-      legend="Time for dailies"
-      [presets]="durationPresets"
-      [minutes]="draft().durationMinutes"
-      [maxHours]="8"
-      (minutesChange)="setDuration($event)"
     />
 
     <fieldset class="picker-block">
@@ -184,6 +200,101 @@
       />
     </fieldset>
 
+    <fieldset>
+      <legend>Quest link (optional)</legend>
+      <select
+        [value]="draft().questId ?? 0"
+        (change)="setQuest($any($event.target).value)"
+      >
+        <option [value]="0">— none —</option>
+        @for (q of quests(); track q.id) {
+          <option [value]="q.id">{{ q.name }}</option>
+        }
+      </select>
+      @if (draft().questId) {
+        <div class="chip-row">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questTarget === 'JOURNEY'"
+            (click)="setQuestTarget('JOURNEY')"
+          >
+            Journey day
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questTarget === 'SUBTASK'"
+            (click)="setQuestTarget('SUBTASK')"
+          >
+            Subtask
+          </button>
+        </div>
+        @if (draft().questTarget === 'SUBTASK') {
+          <select
+            [value]="draft().questSubtaskId ?? 0"
+            (change)="setQuestSubtask($any($event.target).value)"
+          >
+            <option [value]="0">— pick a subtask —</option>
+            @for (s of questSubtasks(); track s.id) {
+              <option [value]="s.id">{{ s.title }}</option>
+            }
+          </select>
+        }
+        <p class="hint">Rule for marking the quest when this habit succeeds.</p>
+        <div class="chip-row">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questRule === 'COUNT'"
+            (click)="setQuestRule('COUNT')"
+          >
+            Count
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questRule === 'STREAK'"
+            (click)="setQuestRule('STREAK')"
+          >
+            Streak
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questRule === 'WINDOW'"
+            (click)="setQuestRule('WINDOW')"
+          >
+            Window
+          </button>
+        </div>
+        <div class="hm">
+          <label>
+            Need
+            <app-number-field
+              ariaLabel="Required successes"
+              [min]="1"
+              [max]="365"
+              [value]="draft().questRequiredCount"
+              (valueChange)="setQuestRequiredCount($event)"
+            />
+          </label>
+          @if (draft().questRule === 'WINDOW') {
+            <label>
+              Days
+              <app-number-field
+                ariaLabel="Window days"
+                [min]="1"
+                [max]="365"
+                [value]="draft().questWindowDays"
+                (valueChange)="setQuestWindowDays($event)"
+              />
+            </label>
+          }
+        </div>
+      }
+    </fieldset>
+
     @if (showWealth()) {
       <fieldset>
         <legend>Wealth gained ({{ currencyLabel() }})</legend>
@@ -196,31 +307,6 @@
         />
       </fieldset>
     }
-
-    <fieldset>
-      <legend>Dailies</legend>
-      <div class="chip-row">
-        <button
-          type="button"
-          class="chip"
-          [class.selected]="draft().allowInDailies"
-          (click)="setAllowInDailies(true)"
-        >
-          Offer in dailies
-        </button>
-        <button
-          type="button"
-          class="chip"
-          [class.selected]="!draft().allowInDailies"
-          (click)="setAllowInDailies(false)"
-        >
-          Hide from dailies
-        </button>
-      </div>
-      <p class="hint">
-        Hidden habits cannot be picked into a daily. Offered ones fill skill split and duration.
-      </p>
-    </fieldset>
 
     <div class="actions">
       <button type="submit" [disabled]="saving() || !canSave()">
@@ -240,7 +326,7 @@
   <app-ui-confirm
     kicker="Habitus"
     title="Archive this habit?"
-    body="Logs stay in Progression, but the habit leaves the active board and dailies."
+    body="Logs stay in the calendar ledger, but the habit leaves the active board and dailies."
     cancelLabel="Keep"
     confirmLabel="Archive"
     tone="danger"

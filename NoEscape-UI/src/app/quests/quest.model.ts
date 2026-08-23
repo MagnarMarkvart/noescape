@@ -12,6 +12,7 @@ export interface QuestSubtaskView {
   title: string;
   sortOrder: number;
   gatesJourney: boolean;
+  deadline: string | null;
   completed: boolean;
   completedAt: string | null;
   completedAtLabel: string | null;
@@ -103,6 +104,7 @@ export interface QuestView {
   journeyLabel: string | null;
   journeyNote: string | null;
   commitmentLevel: number;
+  deadline: string | null;
   coverImage: string | null;
   coverUrl: string | null;
   skillSlug: string | null;
@@ -151,6 +153,7 @@ export interface ActiveQuestSummary {
   journeyLabel: string | null;
   journeyDueToday: boolean;
   journeyUnlocked: boolean;
+  deadline: string | null;
 }
 
 export interface CreateQuestPayload {
@@ -163,17 +166,112 @@ export interface CreateQuestPayload {
   journeyLabel?: string;
   journeyNote?: string;
   commitmentLevel?: number;
+  deadline?: string | null;
   coverDataUrl?: string;
   tier?: string;
   skillSlug?: string;
   skillReqs?: { slug: string; level: number }[];
   questReqs?: string[];
-  subtasks?: Array<{ id?: number; title: string; gatesJourney?: boolean }>;
+  subtasks?: Array<{
+    id?: number;
+    title: string;
+    gatesJourney?: boolean;
+    deadline?: string | null;
+  }>;
   rewards?: { title?: string };
   totalXp?: number;
   skillWeights?: { slug: string; weight: number }[];
   wealthCents?: number | null;
   scriptoriumWorkId?: number;
+}
+
+export function questDeadline(q: {
+  deadline?: string | null;
+  subtasks?: Array<{ deadline?: string | null; completed?: boolean }>;
+}): string | null {
+  if (q.deadline) {
+    return q.deadline;
+  }
+  const open = (q.subtasks ?? [])
+    .filter((s) => !s.completed && s.deadline)
+    .map((s) => s.deadline as string)
+    .sort();
+  if (open[0]) {
+    return open[0];
+  }
+  const any = (q.subtasks ?? [])
+    .filter((s) => s.deadline)
+    .map((s) => s.deadline as string)
+    .sort();
+  return any[0] ?? null;
+}
+
+export function deadlineTone(
+  iso: string | null | undefined,
+  todayIso: string,
+): 'overdue' | 'today' | 'soon' | '' {
+  if (!iso) {
+    return '';
+  }
+  if (iso < todayIso) {
+    return 'overdue';
+  }
+  if (iso === todayIso) {
+    return 'today';
+  }
+  const soon = addIsoDays(todayIso, 3);
+  if (iso <= soon) {
+    return 'soon';
+  }
+  return '';
+}
+
+export function deadlineLabel(
+  iso: string | null | undefined,
+  pretty: string,
+  todayIso: string,
+): string {
+  if (!iso) {
+    return '';
+  }
+  const tone = deadlineTone(iso, todayIso);
+  if (tone === 'overdue') {
+    return `Overdue · ${pretty}`;
+  }
+  if (tone === 'today') {
+    return `Due today · ${pretty}`;
+  }
+  const tomorrow = addIsoDays(todayIso, 1);
+  if (iso === tomorrow) {
+    return `Due tomorrow · ${pretty}`;
+  }
+  return `Due ${pretty}`;
+}
+
+export function questIsTimelyToday(
+  q: Pick<QuestView, 'availability' | 'journeyDueToday'> & {
+    deadline?: string | null;
+    subtasks?: Array<{ deadline?: string | null; completed?: boolean }>;
+  },
+  todayIso: string,
+): boolean {
+  if (q.availability === 'completed') {
+    return false;
+  }
+  if (q.availability === 'active' && q.journeyDueToday) {
+    return true;
+  }
+  const due = questDeadline(q);
+  return !!due && due <= todayIso;
+}
+
+function addIsoDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const stamp = new Date(y, m - 1, d + days);
+  const year = stamp.getFullYear();
+  const month = String(stamp.getMonth() + 1).padStart(2, '0');
+  const day = String(stamp.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /** Resolve cover URL (catalog + uploaded files live on the API host). */

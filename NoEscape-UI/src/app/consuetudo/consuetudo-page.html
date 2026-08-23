@@ -51,7 +51,16 @@
   } @else {
     <ul class="routine-list">
       @for (r of rows(); track r.id) {
-        <li class="card">
+        <li
+          class="card"
+          [class.launchable]="!demo()"
+          [attr.role]="demo() ? null : 'button'"
+          [attr.tabindex]="demo() ? null : 0"
+          [attr.aria-label]="demo() ? null : 'Open ' + r.name + ' in Horologium'"
+          (click)="openPractice($event, r)"
+          (keydown.enter)="openPractice($event, r)"
+          (keydown.space)="$event.preventDefault(); openPractice($event, r)"
+        >
           <header class="card-head">
             <span class="icon" aria-hidden="true">{{ r.icon || '🌅' }}</span>
             <div>

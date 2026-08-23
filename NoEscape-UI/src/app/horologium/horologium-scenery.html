@@ -22,6 +22,7 @@
     ></audio>
   }
 
+  <div class="stage" [class.notes-open]="notesOpen()">
   <section class="session">
     <p class="kicker">
       @if (setupKind === 'vigilia') {
@@ -373,7 +374,7 @@
   </section>
 
   @if (notesOpen()) {
-    <div class="notes-dock">
+    <aside class="notes-dock">
       <textarea
         class="live-notes"
         [value]="notes()"
@@ -381,8 +382,9 @@
         maxlength="4000"
         placeholder="Live notes"
       ></textarea>
-    </div>
+    </aside>
   }
+  </div>
 
   @if (setupKind !== 'vigilia' && setupKind !== 'consuetudo' && widgetVisible && selectedWatch(); as watch) {
     <aside class="watch-widget">

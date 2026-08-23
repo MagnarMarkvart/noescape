@@ -50,9 +50,9 @@
 .session {
   position: relative;
   z-index: 1;
-  width: min(26rem, calc(100vw - 2rem));
+  width: 100%;
   text-align: center;
-  padding: 1.5rem 1rem 5.5rem;
+  padding: 1.5rem 1rem 1.25rem;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
   contain: layout;
 }
@@ -260,17 +260,24 @@ button.task-line:focus-visible {
   color: #f2ead8;
 }
 
+.stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.85rem;
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 6rem);
+  overflow: visible;
+}
+
 .controls {
   margin: 1.15rem 0 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.5rem;
-}
-
-.session.notes-open,
-.scenery.notes-open .session {
-  padding-bottom: 18rem;
 }
 
 .notes-toggle {
@@ -281,19 +288,21 @@ button.task-line:focus-visible {
 
 .notes-dock {
   position: absolute;
-  z-index: 2;
-  left: 50%;
-  bottom: 9.25rem;
-  transform: translateX(-50%);
-  width: min(22rem, calc(100vw - 2rem));
-  pointer-events: auto;
+  z-index: 5;
+  top: 50%;
+  left: calc(100% + 1.15rem);
+  transform: translateY(-50%);
+  width: min(20rem, calc((100vw - 26rem) / 2 - 2rem));
+  height: min(24rem, 62dvh);
+  display: flex;
 }
 
 .live-notes {
   display: block;
   box-sizing: border-box;
   width: 100%;
-  height: 8.5rem;
+  height: 100%;
+  min-height: 0;
   resize: none;
   overflow: auto;
   padding: 0.5rem 0.6rem;
@@ -306,14 +315,14 @@ button.task-line:focus-visible {
   overscroll-behavior: contain;
 }
 
-@media (max-width: 899px) {
+@media (max-width: 959px) {
   .notes-dock {
-    width: min(22rem, calc(100vw - 2rem));
-    bottom: 9rem;
-  }
-
-  .live-notes {
-    height: 7rem;
+    left: 50%;
+    top: auto;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(26rem, calc(100vw - 2rem));
+    height: 7.25rem;
   }
 }
 
@@ -545,7 +554,7 @@ button.task-line:focus-visible {
 
 @media (max-width: 640px) {
   .session {
-    padding: 4.5rem 0.5rem 7.5rem;
+    padding: 4.5rem 0.5rem 1.25rem;
   }
 
   .session dl,

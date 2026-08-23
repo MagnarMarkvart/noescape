@@ -16,16 +16,17 @@ import { DailyBoard, DailyTaskSlot, dailySkillLine } from '../dailies/daily.mode
 import { DailiesService } from '../dailies/dailies.service';
 import { QuickTaskPanel } from '../dailies/quick-task-panel';
 import { UiIconBtn } from '../shared/ui/ui-icon-btn';
-import { HabitsService, HabitView } from '../habits/habits.service';
+import { HabitsService, HabitView, HabitActionResult } from '../habits/habits.service';
 import { HabitCard } from '../habits/habit-card';
 import { HorologiumTimerService } from '../horologium/horologium-timer.service';
 import { HorologiumWatchService } from '../horologium/horologium-watch.service';
 import { LevelUpLogItem } from '../level-ups/level-ups.model';
-import { QuestView } from '../quests/quest.model';
+import { QuestView, deadlineLabel, deadlineTone, questDeadline } from '../quests/quest.model';
 import { QuestsService } from '../quests/quests.service';
 import { formatElapsedShort } from '../shared/time';
 import { TimedToast } from '../shared/timed-toast';
 import { SkillsService } from '../skills/skills.service';
+import { LogActivityResponse, XpReversalResponse } from '../skills/skill.model';
 import { ScriptoriumService } from '../scriptorium/scriptorium.service';
 import {
   durationLabel,
@@ -214,11 +215,28 @@ export class DashboardPage implements OnInit {
   }
 
   protected dueSideCount(quest: QuestView): number {
+    const today = this.todayIso();
     const open = (quest.subtasks ?? []).filter((s) => !s.completed);
+    const dueSubs = open.filter((s) => s.deadline && s.deadline <= today);
     if (quest.journeyDueToday) {
       return open.length;
     }
+    if (dueSubs.length) {
+      return dueSubs.length;
+    }
     return open.filter((s) => s.gatesJourney).length;
+  }
+
+  protected questDueLabel(quest: QuestView): string {
+    const iso = questDeadline(quest);
+    if (!iso) {
+      return '';
+    }
+    return deadlineLabel(iso, this.characterService.formatDate(iso), this.todayIso());
+  }
+
+  protected questDueTone(quest: QuestView): 'overdue' | 'today' | 'soon' | '' {
+    return deadlineTone(questDeadline(quest), this.todayIso());
   }
 
   protected workDueCaption(row: ScriptoriumDueView): string {
@@ -240,9 +258,9 @@ export class DashboardPage implements OnInit {
     return SCRIPTORIUM_TIERS.find((t) => t.id === tier)?.name ?? tier;
   }
 
-  protected completeHabit(habit: HabitView): void {
+  protected plusHabit(habit: HabitView): void {
     if (habit.kind === 'tally') {
-      this.clickHabit(habit);
+      this.stepHabit(habit, habit.step);
       return;
     }
     if (this.habitDoneToday(habit) || this.busyHabitId()) {
@@ -250,12 +268,7 @@ export class DashboardPage implements OnInit {
     }
     this.busyHabitId.set(habit.id);
     this.habitsService.complete(habit.id, this.todayIso()).subscribe({
-      next: () => {
-        this.busyHabitId.set(null);
-        this.timed.set(`Logged ${habit.name}`);
-        this.reloadHabits();
-        void this.characterService.getProfile().subscribe();
-      },
+      next: (result) => this.applyHabitResult(result),
       error: (err: { error?: { message?: string } }) => {
         this.busyHabitId.set(null);
         this.timed.set(err.error?.message ?? 'Could not log habit');
@@ -263,23 +276,53 @@ export class DashboardPage implements OnInit {
     });
   }
 
-  protected clickHabit(habit: HabitView): void {
+  protected minusHabit(habit: HabitView): void {
+    if (habit.kind === 'tally') {
+      this.stepHabit(habit, -habit.step);
+      return;
+    }
     if (this.busyHabitId()) {
       return;
     }
     this.busyHabitId.set(habit.id);
-    this.habitsService.click(habit.id).subscribe({
-      next: (next) => {
-        this.habits.update((rows) =>
-          rows.map((row) => (row.id === next.id ? next : row)),
-        );
+    this.habitsService.uncomplete(habit.id, this.todayIso()).subscribe({
+      next: (result) => this.applyHabitResult(result),
+      error: (err: { error?: { message?: string } }) => {
         this.busyHabitId.set(null);
+        this.timed.set(err.error?.message ?? 'Could not undo habit');
       },
+    });
+  }
+
+  private stepHabit(habit: HabitView, delta: number): void {
+    if (this.busyHabitId()) {
+      return;
+    }
+    this.busyHabitId.set(habit.id);
+    this.habitsService.click(habit.id, delta).subscribe({
+      next: (result) => this.applyHabitResult(result),
       error: (err: { error?: { message?: string } }) => {
         this.busyHabitId.set(null);
         this.timed.set(err.error?.message ?? 'Could not mark');
       },
     });
+  }
+
+  private applyHabitResult(result: HabitActionResult): void {
+    this.busyHabitId.set(null);
+    if (result.habit) {
+      this.habits.update((rows) =>
+        rows.map((row) => (row.id === result.habit!.id ? result.habit! : row)),
+      );
+    }
+    for (const award of result.awards ?? []) {
+      if (award && typeof award === 'object' && 'activity' in award) {
+        this.xpFeedback.publishAward(award as LogActivityResponse);
+      } else if (award && typeof award === 'object' && 'xpRemoved' in award) {
+        this.xpFeedback.publishReversal(award as XpReversalResponse);
+      }
+    }
+    void this.characterService.getProfile().subscribe();
   }
 
   protected onQuickLogged(): void {

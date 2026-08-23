@@ -5,7 +5,7 @@
       <h1>Preview</h1>
     </div>
     <p class="hint">
-      Mock XP feedback — no skills or XP are changed. Play one at a time; they queue if you spam.
+      Mock XP and quest feedback — no skills or XP are changed. Play one at a time; they queue if you spam.
       “Level up + unlock” also shows newly met quest requirements and skill unlocks.
     </p>
   </header>
@@ -18,5 +18,11 @@
     </button>
     <button type="button" class="btn loss" (click)="mockXpLoss()">XP loss</button>
     <button type="button" class="btn down" (click)="mockLevelDown()">Level down</button>
+    <button type="button" class="btn quest-start" (click)="mockQuestStarted()">
+      Quest started
+    </button>
+    <button type="button" class="btn quest-done" (click)="mockQuestCompleted()">
+      Quest complete
+    </button>
   </div>
 </section>

@@ -532,50 +532,24 @@ button.task-line:focus-visible {
 .dial-board {
   display: grid;
   justify-items: stretch;
+  min-width: 0;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.notes-dock {
+  display: flex;
+  min-width: 0;
 }
 
 .dial-panel.notes-open {
-  display: grid;
-  gap: 0.75rem;
-}
-
-@media (min-width: 900px) {
-  .dial-panel.notes-open {
-    grid-template-columns: minmax(0, 1fr) 18rem;
-    align-items: start;
-    gap: 1rem 1.15rem;
-  }
-
-  .dial-panel.notes-open .dial-board {
-    min-width: 0;
-  }
-
-  .dial-panel.notes-open .live-notes {
-    width: 18rem;
-    height: 22rem;
-    max-width: 100%;
-  }
-
-  .dial-panel.notes-open .focus-props {
-    grid-column: 1 / -1;
-  }
-
-  .horologium-shell:not(.focus) .dial-panel.notes-open .ring {
-    width: min(16rem, 100%);
-  }
-
-  .horologium-shell:not(.focus).nav-open .dial-panel.notes-open {
-    grid-template-columns: minmax(0, 1fr) minmax(12.5rem, 16rem);
-  }
-
-  .horologium-shell:not(.focus).nav-open .dial-panel.notes-open .live-notes {
-    width: 100%;
-    height: 18rem;
-  }
-
-  .horologium-shell:not(.focus).nav-open .dial-panel.notes-open .ring {
-    width: min(14.5rem, 100%);
-  }
+  position: relative;
 }
 
 .live-stats {
@@ -991,13 +965,12 @@ button.ghost {
 
 .horologium-shell.focus .layout,
 .horologium-shell.focus .timer-stack,
-.horologium-shell.focus .dial-panel,
-.horologium-shell.focus .dial-board {
+.horologium-shell.focus .dial-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  align-items: center;
+  position: relative;
 }
 
 .horologium-shell.focus .layout,
@@ -1005,22 +978,65 @@ button.ghost {
   gap: 0;
 }
 
-.horologium-shell.focus .dial-panel {
-  align-items: center;
-  justify-content: center;
+.horologium-shell.focus .dial-panel,
+.horologium-shell.focus .dial-panel.notes-open {
+  position: relative;
+  align-items: stretch;
+  justify-content: stretch;
   width: 100%;
-  gap: 0.65rem;
-  overflow: auto;
-  padding: 1rem 1.15rem;
+  gap: 0;
+  overflow: hidden;
+  padding: 0.75rem 1rem 1rem;
+}
+
+.horologium-shell.focus .stage {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: auto;
+  max-width: none;
+  min-width: 0;
 }
 
 .horologium-shell.focus .dial-board {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  width: min(22rem, calc(100% - 2rem));
+  flex: none;
+  z-index: 1;
+}
+
+.horologium-shell.focus .notes-dock {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: calc(50% + 12.25rem);
+  transform: translateY(-50%);
+  display: flex;
+  width: min(18rem, calc(50% - 13.25rem));
+  height: min(24rem, 62dvh);
+  max-height: calc(100% - 1.5rem);
 }
 
 .horologium-shell.focus .live-notes {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.horologium-shell.focus .focus-props {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 0.7rem;
+  transform: translateX(-50%);
+  width: min(22rem, calc(100% - 2rem));
 }
 
 .horologium-shell.focus .ring-wrap {
@@ -1045,51 +1061,14 @@ button.ghost {
 @media (min-width: 900px) {
   .horologium-shell.focus .dial-panel,
   .horologium-shell.focus .dial-panel.notes-open {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    gap: 0.65rem;
-    padding: 1rem 2.25rem;
     border: 0;
     background: none;
     box-shadow: none;
-    overflow: visible;
-    grid-template-columns: none;
-    grid-template-areas: none;
-  }
-
-  .horologium-shell.focus .dial-board {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    flex: 0 0 auto;
-    width: auto;
-    min-width: 18rem;
-  }
-
-  .horologium-shell.focus .live-notes {
-    position: absolute;
-    right: 1.15rem;
-    top: 50%;
-    transform: translateY(-50%);
-    width: min(18rem, 24vw);
-    height: min(26rem, calc(100dvh - 9rem));
-    max-width: none;
-    z-index: 2;
+    padding: 0.75rem 1.5rem 1rem;
   }
 
   .horologium-shell.focus .ring-wrap {
     padding: 0.35rem 0 1.35rem;
-  }
-
-  .horologium-shell.focus .focus-props {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 1rem;
-    width: min(22rem, 100%);
   }
 
   .horologium-shell.focus .ring {
@@ -1109,5 +1088,22 @@ button.ghost {
 
   .horologium-shell.focus .live-stats {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Notes stay out of flow so the clock never shifts. Side panel when there
+   is room to the right of the 22rem board; otherwise a bottom overlay. */
+@media (max-width: 959px) {
+  .horologium-shell.focus .notes-dock {
+    left: 50%;
+    top: auto;
+    bottom: 0.7rem;
+    transform: translateX(-50%);
+    width: min(22rem, calc(100% - 1.5rem));
+    height: 7.5rem;
+  }
+
+  .horologium-shell.focus .dial-panel.notes-open .focus-props {
+    display: none;
   }
 }

@@ -111,12 +111,7 @@ export class TabulariumLogPage implements OnInit {
   }
 
   protected clock(iso: string): string {
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: this.character.timezone(),
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date(iso));
+    return this.character.formatTime(iso);
   }
 
   protected signed(delta: number): string {

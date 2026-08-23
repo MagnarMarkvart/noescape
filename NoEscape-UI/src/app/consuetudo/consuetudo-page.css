@@ -148,6 +148,16 @@
   background: rgba(30, 24, 14, 0.7);
 }
 
+.card.launchable {
+  cursor: pointer;
+}
+
+.card.launchable:hover,
+.card.launchable:focus-visible {
+  border-color: var(--rs-border-bright);
+  outline: none;
+}
+
 .card-head {
   display: grid;
   grid-template-columns: auto 1fr auto;

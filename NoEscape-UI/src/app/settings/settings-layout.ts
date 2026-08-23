@@ -22,6 +22,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         >
           General
         </a>
+        <a routerLink="/settings/time" routerLinkActive="active">Time</a>
         <a routerLink="/settings/pomodoro" routerLinkActive="active">
           Pomodoro
         </a>

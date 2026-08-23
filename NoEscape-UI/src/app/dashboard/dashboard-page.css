@@ -459,6 +459,15 @@ a.done-btn {
   color: #e08a72;
 }
 
+.due-side[data-tone='today'],
+.due-side[data-tone='soon'] {
+  color: var(--rs-accent);
+}
+
+.due-side[data-tone=''] {
+  color: var(--rs-muted);
+}
+
 @media (min-width: 860px) {
   .dash-grid {
     grid-template-columns: 1.1fr 0.9fr;

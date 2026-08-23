@@ -20,6 +20,19 @@ import {
   parseSkillWeights,
   validateSkillWeights,
 } from '../xp/quest-xp.util';
+import { QuestsService } from '../quests/quests.service';
+import { SkillsService } from '../skills/skills.service';
+import {
+  addIsoDays as addIsoDays,
+  evaluateHabitQuest as evaluateHabitQuest,
+  parseHabitQuestRule,
+  parseHabitQuestTarget,
+} from './habit-quest.util';
+import {
+  grantHabitBoardXp,
+  parseActivityIds,
+  reverseHabitBoardXp,
+} from './habits.xp';
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -44,6 +57,15 @@ export type HabitWriteInput = {
   normMax?: number;
   step?: number;
   questId?: number | null;
+  groupId?: number | null;
+  questLink?: {
+    questId: number;
+    target?: string;
+    subtaskId?: number | null;
+    rule?: string;
+    requiredCount?: number;
+    windowDays?: number | null;
+  } | null;
 };
 
 @Injectable()
@@ -52,6 +74,8 @@ export class HabitsService {
     private readonly prisma: PrismaService,
     private readonly characterService: CharacterService,
     private readonly time: TimeService,
+    private readonly skills: SkillsService,
+    private readonly quests: QuestsService,
   ) {}
 
   todayIso(): string {
@@ -109,6 +133,10 @@ export class HabitsService {
       },
       include: this.habitInclude(),
     });
+    if (input.questLink !== undefined) {
+      await this.upsertQuestLink(habit.id, input.questLink);
+      return this.getOne(habit.id, devBypass);
+    }
     return this.present(habit);
   }
 
@@ -131,6 +159,10 @@ export class HabitsService {
       data,
       include: this.habitInclude(),
     });
+    if (input.questLink !== undefined) {
+      await this.upsertQuestLink(habitId, input.questLink);
+      return this.getOne(habitId, devBypass);
+    }
     return this.present(updated);
   }
 
@@ -268,24 +300,26 @@ export class HabitsService {
       if (source === 'manual') {
         throw new BadRequestException('Habit is archived');
       }
-      return null;
+      return { habit: null, awards: [] as unknown[] };
     }
     if (habit.kind === 'tally' && source === 'daily') {
       await this.prisma.habitClick.create({
         data: { habitId, date, delta: Math.max(1, habit.step) },
       });
+      return this.syncTallySuccess(habitId, date, source, dailyTaskId);
     }
     const existing = await this.prisma.habitCompletion.findUnique({
       where: { habitId_date: { habitId, date } },
     });
     if (existing) {
       if (source === 'daily') {
-        return this.prisma.habitCompletion.update({
+        await this.prisma.habitCompletion.update({
           where: { habitId_date: { habitId, date } },
           data: { source, dailyTaskId: dailyTaskId ?? null },
         });
       }
-      return existing;
+      const view = await this.getOne(habitId);
+      return { habit: view, awards: [] as unknown[] };
     }
     const created = await this.prisma.habitCompletion.create({
       data: {
@@ -304,12 +338,33 @@ export class HabitsService {
         sourceId: created.id,
         date,
       });
-      return this.prisma.habitCompletion.update({
+      await this.prisma.habitCompletion.update({
         where: { id: created.id },
         data: { wealthAwardedCents: wealthCents },
       });
     }
-    return created;
+    let awards: unknown[] = [];
+    if (source !== 'daily') {
+      const granted = await grantHabitBoardXp({
+        prisma: this.prisma,
+        skills: this.skills,
+        habit,
+        source,
+      });
+      awards = granted.awards;
+      if (granted.xp > 0) {
+        await this.prisma.habitCompletion.update({
+          where: { id: created.id },
+          data: {
+            xpAwarded: granted.xp,
+            xpActivityIdsJson: JSON.stringify(granted.activityIds),
+          },
+        });
+      }
+    }
+    await this.recordQuestDay(habitId, date, true, false);
+    const view = await this.getOne(habitId);
+    return { habit: view, awards };
   }
 
   async uncomplete(habitId: number, date: string) {
@@ -324,7 +379,7 @@ export class HabitsService {
       where: { habitId_date: { habitId, date } },
     });
     if (!existing) {
-      return { removed: false, date };
+      return { removed: false, date, habit: await this.getOne(habitId), awards: [] };
     }
     const awarded = parseRewardCents(existing.wealthAwardedCents);
     if (awarded > 0) {
@@ -336,10 +391,21 @@ export class HabitsService {
         date,
       });
     }
+    const reversals = await reverseHabitBoardXp({
+      skills: this.skills,
+      prisma: this.prisma,
+      activityIds: parseActivityIds(existing.xpActivityIdsJson),
+    });
     await this.prisma.habitCompletion.delete({
       where: { habitId_date: { habitId, date } },
     });
-    return { removed: true, date };
+    await this.recordQuestDay(habitId, date, false, false);
+    return {
+      removed: true,
+      date,
+      habit: await this.getOne(habitId),
+      awards: reversals,
+    };
   }
 
   async click(habitId: number, delta?: number) {
@@ -351,20 +417,31 @@ export class HabitsService {
       throw new BadRequestException('This habit is not a tally');
     }
     const step = Math.max(1, habit.step);
-    const signed = delta == null || delta === 0 ? step : Math.round(delta);
+    let signed = delta == null || delta === 0 ? step : Math.round(delta);
     if (signed === 0) {
       throw new BadRequestException('delta must not be 0');
     }
     const date = this.localToday();
+    const period = (isTabulaPeriod(habit.period) ? habit.period : 'day') as TabulaPeriod;
+    const window = periodWindow(date, period, this.time.weekStartsOn());
+    const agg = await this.prisma.habitClick.aggregate({
+      where: {
+        habitId,
+        date: { gte: window.from, lte: window.to },
+      },
+      _sum: { delta: true },
+    });
+    const current = Math.max(0, agg._sum.delta ?? 0);
+    if (signed < 0 && current + signed < 0) {
+      signed = -current;
+    }
+    if (signed === 0) {
+      return { habit: await this.getOne(habitId), awards: [] as unknown[] };
+    }
     await this.prisma.habitClick.create({
       data: { habitId, date, delta: signed },
     });
-    await this.ensureCompletion(habitId, date, signed > 0);
-    const fresh = await this.prisma.habit.findUnique({
-      where: { id: habitId },
-      include: this.habitInclude(),
-    });
-    return this.present(fresh!);
+    return this.syncTallySuccess(habitId, date, 'manual');
   }
 
   async undo(habitId: number) {
@@ -384,20 +461,139 @@ export class HabitsService {
       throw new BadRequestException('Nothing to undo today');
     }
     await this.prisma.habitClick.delete({ where: { id: last.id } });
-    const remaining = await this.prisma.habitClick.aggregate({
-      where: { habitId, date: today },
-      _sum: { delta: true },
+    return this.syncTallySuccess(habitId, today, 'manual');
+  }
+
+  async listGroups() {
+    return this.prisma.habitGroup.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
     });
-    await this.ensureCompletion(
-      habitId,
-      today,
-      (remaining._sum.delta ?? 0) > 0,
+  }
+
+  async createGroup(name: string) {
+    const trimmed = name.trim().slice(0, 40);
+    if (!trimmed) {
+      throw new BadRequestException('name is required');
+    }
+    const max = await this.prisma.habitGroup.aggregate({ _max: { sortOrder: true } });
+    return this.prisma.habitGroup.create({
+      data: { name: trimmed, sortOrder: (max._max.sortOrder ?? 0) + 1 },
+    });
+  }
+
+  async renameGroup(id: number, name: string) {
+    await this.requireGroup(id);
+    const trimmed = name.trim().slice(0, 40);
+    if (!trimmed) {
+      throw new BadRequestException('name is required');
+    }
+    return this.prisma.habitGroup.update({ where: { id }, data: { name: trimmed } });
+  }
+
+  async removeGroup(id: number) {
+    await this.requireGroup(id);
+    await this.prisma.habit.updateMany({
+      where: { groupId: id },
+      data: { groupId: null },
+    });
+    await this.prisma.habitGroup.delete({ where: { id } });
+    return { deleted: true, id };
+  }
+
+  async placeHabit(habitId: number, groupId: number | null, sortOrder?: number) {
+    await this.require(habitId);
+    const resolved =
+      groupId != null && groupId > 0 ? groupId : null;
+    if (resolved != null) {
+      await this.requireGroup(resolved);
+    }
+    return this.present(
+      await this.prisma.habit.update({
+        where: { id: habitId },
+        data: {
+          groupId: resolved,
+          ...(sortOrder != null ? { sortOrder } : {}),
+        },
+        include: this.habitInclude(),
+      }),
     );
-    const fresh = await this.prisma.habit.findUnique({
-      where: { id: habitId },
-      include: this.habitInclude(),
+  }
+
+  async upsertQuestLink(
+    habitId: number,
+    link: HabitWriteInput['questLink'] | undefined | null,
+  ) {
+    await this.require(habitId);
+    if (link === undefined) {
+      return this.getOne(habitId);
+    }
+    if (link === null || !link.questId) {
+      await this.prisma.habitQuestLink.deleteMany({ where: { habitId } });
+      await this.prisma.habit.update({
+        where: { id: habitId },
+        data: { questId: null },
+      });
+      return this.getOne(habitId);
+    }
+    const questId = await this.resolveQuestId(link.questId);
+    if (!questId) {
+      throw new BadRequestException('questId is required');
+    }
+    const target = parseHabitQuestTarget(link.target);
+    let subtaskId: number | null = null;
+    if (target === 'SUBTASK') {
+      const sid = Math.round(Number(link.subtaskId) || 0);
+      if (sid < 1) {
+        throw new BadRequestException('subtaskId is required for SUBTASK links');
+      }
+      const sub = await this.prisma.questSubtask.findFirst({
+        where: { id: sid, questId },
+        select: { id: true },
+      });
+      if (!sub) {
+        throw new BadRequestException('Subtask does not belong to that quest');
+      }
+      subtaskId = sub.id;
+    }
+    const rule = parseHabitQuestRule(link.rule);
+    const requiredCount = Math.max(1, Math.round(link.requiredCount ?? 1));
+    const windowDays =
+      rule === 'WINDOW'
+        ? Math.max(1, Math.round(link.windowDays ?? 7))
+        : null;
+    await this.prisma.habitQuestLink.upsert({
+      where: { habitId },
+      create: {
+        habitId,
+        questId,
+        target,
+        subtaskId,
+        rule,
+        requiredCount,
+        windowDays,
+      },
+      update: {
+        questId,
+        target,
+        subtaskId,
+        rule,
+        requiredCount,
+        windowDays,
+      },
     });
-    return this.present(fresh!);
+    await this.prisma.habit.update({
+      where: { id: habitId },
+      data: { questId },
+    });
+    return this.getOne(habitId);
+  }
+
+  async listQuestEvents(habitId: number) {
+    await this.require(habitId);
+    return this.prisma.habitQuestEvent.findMany({
+      where: { habitId },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+    });
   }
 
   async stats(input: {
@@ -605,25 +801,249 @@ export class HabitsService {
     return { key: iso, label: iso };
   }
 
-  private async ensureCompletion(
+  private async syncTallySuccess(
     habitId: number,
     date: string,
-    keep: boolean,
+    source: string,
+    dailyTaskId?: number | null,
   ) {
+    const habit = await this.require(habitId);
+    const today = this.localToday();
+    const period = (isTabulaPeriod(habit.period) ? habit.period : 'day') as TabulaPeriod;
+    const polarity = (isTabulaPolarity(habit.polarity)
+      ? habit.polarity
+      : 'virtue') as TabulaPolarity;
+    const window = periodWindow(today, period, this.time.weekStartsOn());
+    const agg = await this.prisma.habitClick.aggregate({
+      where: {
+        habitId,
+        date: { gte: window.from, lte: window.to },
+      },
+      _sum: { delta: true },
+    });
+    const count = Math.max(0, agg._sum.delta ?? 0);
+    const inBand =
+      tabulaTone(count, habit.normMin, habit.normMax, polarity) !== 'poor';
     const existing = await this.prisma.habitCompletion.findUnique({
       where: { habitId_date: { habitId, date } },
     });
-    if (keep && !existing) {
-      await this.prisma.habitCompletion.create({
-        data: { habitId, date, source: 'manual' },
+    let awards: unknown[] = [];
+    if (inBand && !existing) {
+      const created = await this.prisma.habitCompletion.create({
+        data: {
+          habitId,
+          date,
+          source,
+          dailyTaskId: dailyTaskId ?? null,
+        },
       });
-      return;
-    }
-    if (!keep && existing && existing.source === 'manual') {
+      if (source !== 'daily') {
+        const granted = await grantHabitBoardXp({
+          prisma: this.prisma,
+          skills: this.skills,
+          habit,
+          source,
+        });
+        awards = granted.awards;
+        if (granted.xp > 0) {
+          await this.prisma.habitCompletion.update({
+            where: { id: created.id },
+            data: {
+              xpAwarded: granted.xp,
+              xpActivityIdsJson: JSON.stringify(granted.activityIds),
+            },
+          });
+        }
+      }
+      await this.recordQuestDay(habitId, date, true, true);
+    } else if (!inBand && existing) {
+      awards = await reverseHabitBoardXp({
+        skills: this.skills,
+        prisma: this.prisma,
+        activityIds: parseActivityIds(existing.xpActivityIdsJson),
+      });
       await this.prisma.habitCompletion.delete({
         where: { habitId_date: { habitId, date } },
       });
+      await this.recordQuestDay(habitId, date, false, false);
+    } else if (inBand && existing && source === 'daily') {
+      await this.prisma.habitCompletion.update({
+        where: { id: existing.id },
+        data: { source, dailyTaskId: dailyTaskId ?? null },
+      });
     }
+    return { habit: await this.getOne(habitId), awards };
+  }
+
+  private async recordQuestDay(
+    habitId: number,
+    date: string,
+    success: boolean,
+    tallyInBand: boolean,
+  ) {
+    const link = await this.prisma.habitQuestLink.findUnique({
+      where: { habitId },
+      include: {
+        events: { orderBy: [{ date: 'asc' }, { id: 'asc' }] },
+      },
+    });
+    if (!link) {
+      return;
+    }
+    const today = this.localToday();
+    const rule = parseHabitQuestRule(link.rule);
+    let snapshot = evaluateHabitQuest(
+      link.events,
+      rule,
+      link.requiredCount,
+      link.windowDays,
+      today,
+    );
+    if (snapshot.needsReset) {
+      await this.prisma.habitQuestEvent.create({
+        data: {
+          linkId: link.id,
+          habitId,
+          date,
+          success: false,
+          kind: 'reset',
+          tallyInBand,
+          note: 'Rule reset',
+        },
+      });
+    }
+    await this.prisma.habitQuestEvent.create({
+      data: {
+        linkId: link.id,
+        habitId,
+        date,
+        success,
+        kind: success ? 'progress' : 'miss',
+        tallyInBand,
+      },
+    });
+    const events = await this.prisma.habitQuestEvent.findMany({
+      where: { linkId: link.id },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+    });
+    snapshot = evaluateHabitQuest(
+      events,
+      rule,
+      link.requiredCount,
+      link.windowDays,
+      today,
+    );
+    if (snapshot.completed && !events.some((e) => e.kind === 'complete')) {
+      await this.prisma.habitQuestEvent.create({
+        data: {
+          linkId: link.id,
+          habitId,
+          date,
+          success: true,
+          kind: 'complete',
+          tallyInBand,
+        },
+      });
+      await this.quests.applyHabitusProgress({
+        questId: link.questId,
+        target: parseHabitQuestTarget(link.target),
+        subtaskId: link.subtaskId,
+        date,
+        note: 'Habitus',
+      });
+    }
+  }
+
+  private withBoardFlags(
+    habit: {
+      cadence: string;
+      everyNDays: number;
+      kind?: string;
+      period?: string;
+      group?: { id: number; name: string; sortOrder: number } | null;
+      groupId?: number | null;
+      questLink?: {
+        id: number;
+        questId: number;
+        target: string;
+        subtaskId: number | null;
+        rule: string;
+        requiredCount: number;
+        windowDays: number | null;
+        quest?: { id: number; name: string };
+        subtask?: { id: number; title: string } | null;
+        events: Array<{
+          date: string;
+          success: boolean;
+          kind: string;
+          tallyInBand: boolean;
+          note: string | null;
+        }>;
+      } | null;
+    },
+    view: Record<string, unknown> & {
+      lastLog?: string | null;
+      doneToday?: boolean;
+    },
+    today: string,
+    successfulToday: boolean,
+  ) {
+    const n =
+      habit.cadence === 'EVERY_N_DAYS'
+        ? Math.max(1, habit.everyNDays || 1)
+        : 1;
+    const last = view.lastLog ?? null;
+    const period = habit.period ?? 'day';
+    let dueToday = !successfulToday;
+    if (habit.kind === 'tally' && period !== 'day') {
+      dueToday = !successfulToday;
+    } else if (successfulToday) {
+      dueToday = false;
+    } else if (last) {
+      dueToday = addIsoDays(last, n) <= today;
+    } else {
+      dueToday = true;
+    }
+    const link = habit.questLink;
+    const progress = link
+      ? evaluateHabitQuest(
+          link.events,
+          parseHabitQuestRule(link.rule),
+          link.requiredCount,
+          link.windowDays,
+          today,
+        )
+      : null;
+    return {
+      ...view,
+      successfulToday,
+      dueToday,
+      groupId: habit.group?.id ?? habit.groupId ?? null,
+      groupName: habit.group?.name ?? null,
+      questLink: link
+        ? {
+            questId: link.questId,
+            questName: link.quest?.name ?? null,
+            target: parseHabitQuestTarget(link.target),
+            subtaskId: link.subtaskId,
+            subtaskTitle: link.subtask?.title ?? null,
+            rule: parseHabitQuestRule(link.rule),
+            requiredCount: link.requiredCount,
+            windowDays: link.windowDays,
+            progress: progress?.progress ?? 0,
+            completed: progress?.completed ?? false,
+            events: link.events,
+          }
+        : null,
+    };
+  }
+
+  private async requireGroup(id: number) {
+    const group = await this.prisma.habitGroup.findUnique({ where: { id } });
+    if (!group) {
+      throw new NotFoundException(`Habit group #${id} not found`);
+    }
+    return group;
   }
 
   private async require(id: number) {
@@ -746,6 +1166,17 @@ export class HabitsService {
     if (input.kind !== undefined || creating) {
       data.kind = kind;
     }
+    if (kind === 'tally') {
+      data.allowInDailies = false;
+    }
+    if (input.groupId !== undefined) {
+      if (input.groupId == null || input.groupId === 0) {
+        data.groupId = null;
+      } else {
+        await this.requireGroup(input.groupId);
+        data.groupId = input.groupId;
+      }
+    }
 
     if (input.period !== undefined || creating) {
       const period = String(input.period ?? current?.period ?? 'day');
@@ -824,6 +1255,14 @@ export class HabitsService {
         },
       },
       quest: { select: { id: true, name: true } },
+      group: { select: { id: true, name: true, sortOrder: true } },
+      questLink: {
+        include: {
+          events: { orderBy: { date: 'asc' as const } },
+          subtask: { select: { id: true, title: true } },
+          quest: { select: { id: true, name: true } },
+        },
+      },
       completions: {
         orderBy: { date: 'desc' as const },
         ...(allCompletions ? {} : { take: 120 }),
@@ -861,6 +1300,25 @@ export class HabitsService {
       level: number;
     } | null;
     quest?: { id: number; name: string } | null;
+    group?: { id: number; name: string; sortOrder: number } | null;
+    questLink?: {
+      id: number;
+      questId: number;
+      target: string;
+      subtaskId: number | null;
+      rule: string;
+      requiredCount: number;
+      windowDays: number | null;
+      quest?: { id: number; name: string };
+      subtask?: { id: number; title: string } | null;
+      events: Array<{
+        date: string;
+        success: boolean;
+        kind: string;
+        tallyInBand: boolean;
+        note: string | null;
+      }>;
+    } | null;
     completions: Array<{ date: string }>;
   }) {
     const base = this.enrich(habit);
@@ -874,7 +1332,7 @@ export class HabitsService {
       skillWeights: weights,
       effortLevel: habit.effortLevel ?? 5,
       durationMinutes: habit.durationMinutes ?? 30,
-      allowInDailies: habit.allowInDailies !== false,
+      allowInDailies: kind === 'tally' ? false : habit.allowInDailies !== false,
       period: (isTabulaPeriod(habit.period ?? '')
         ? habit.period
         : 'day') as TabulaPeriod,
@@ -890,14 +1348,19 @@ export class HabitsService {
       doneToday,
     };
     if (kind !== 'tally') {
-      return {
-        ...shared,
-        count: doneToday ? 1 : 0,
-        tone: null as string | null,
-        windowFrom: today,
-        windowTo: today,
-        windowLabel: 'Today',
-      };
+      return this.withBoardFlags(
+        habit,
+        {
+          ...shared,
+          count: doneToday ? 1 : 0,
+          tone: null as string | null,
+          windowFrom: today,
+          windowTo: today,
+          windowLabel: 'Today',
+        },
+        today,
+        doneToday,
+      );
     }
     const period = shared.period;
     const polarity = shared.polarity;
@@ -910,14 +1373,21 @@ export class HabitsService {
       _sum: { delta: true },
     });
     const count = Math.max(0, agg._sum.delta ?? 0);
-    return {
-      ...shared,
-      count,
-      tone: tabulaTone(count, shared.normMin, shared.normMax, polarity),
-      windowFrom: window.from,
-      windowTo: window.to,
-      windowLabel: periodLabel(period, window, today),
-    };
+    const tone = tabulaTone(count, shared.normMin, shared.normMax, polarity);
+    return this.withBoardFlags(
+      habit,
+      {
+        ...shared,
+        count,
+        tone,
+        windowFrom: window.from,
+        windowTo: window.to,
+        windowLabel: periodLabel(period, window, today),
+        doneToday: tone !== 'poor',
+      },
+      today,
+      tone !== 'poor',
+    );
   }
 
   private parseJson(raw: string | null | undefined): unknown {

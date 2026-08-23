@@ -34,6 +34,7 @@ type SubtaskInput = {
   id?: number;
   title: string;
   gatesJourney?: boolean;
+  deadline?: string | null;
 };
 
 type CreateQuestInput = {
@@ -47,6 +48,7 @@ type CreateQuestInput = {
   journeyLabel?: string;
   journeyNote?: string;
   commitmentLevel?: number;
+  deadline?: string | null;
   coverDataUrl?: string;
   tier?: string;
   skillSlug?: string;
@@ -167,6 +169,7 @@ export class QuestsService {
         journeyLabel: run.quest.journeyLabel,
         journeyDueToday,
         journeyUnlocked,
+        deadline: run.quest.deadline ?? null,
       };
     });
   }
@@ -214,6 +217,7 @@ export class QuestsService {
     const destination = input.destination?.trim() || null;
     const journeyLabel = input.journeyLabel?.trim() || null;
     const journeyNote = input.journeyNote?.trim() || null;
+    const deadline = this.parseDeadline(input.deadline);
     const { totalXp, weights, completionBonus } = this.normalizeSkillXp(input);
     const description =
       input.description?.trim() ||
@@ -235,6 +239,7 @@ export class QuestsService {
         journeyLabel,
         journeyNote,
         commitmentLevel: commitment,
+        deadline,
         totalXp,
         skillWeightsJson: weights.length ? JSON.stringify(weights) : null,
         wealthCents: boostsWealth(weights)
@@ -268,6 +273,7 @@ export class QuestsService {
                 title: row.title,
                 sortOrder: i,
                 gatesJourney: row.gatesJourney,
+                deadline: row.deadline,
               })),
             }
           : undefined,
@@ -341,6 +347,10 @@ export class QuestsService {
       input.journeyNote !== undefined
         ? input.journeyNote.trim() || null
         : quest.journeyNote;
+    const deadline =
+      input.deadline !== undefined
+        ? this.parseDeadline(input.deadline)
+        : quest.deadline;
     const summary = input.summary?.trim() || quest.summary;
     const description =
       input.description?.trim() ||
@@ -361,6 +371,7 @@ export class QuestsService {
         journeyLabel,
         journeyNote,
         commitmentLevel: commitment,
+        deadline,
         totalXp,
         skillWeightsJson: weights.length ? JSON.stringify(weights) : null,
         wealthCents:
@@ -418,6 +429,7 @@ export class QuestsService {
               title: row.title,
               sortOrder: i,
               gatesJourney: row.gatesJourney,
+              deadline: row.deadline,
             },
           });
         } else {
@@ -427,6 +439,7 @@ export class QuestsService {
               title: row.title,
               sortOrder: i,
               gatesJourney: row.gatesJourney,
+              deadline: row.deadline,
             },
           });
         }
@@ -665,6 +678,39 @@ export class QuestsService {
       date,
       quest: await this.getOne(run.questId),
     };
+  }
+
+  /** Habitus auto-progress: journey day or subtask on the active run. */
+  async applyHabitusProgress(input: {
+    questId: number;
+    target: 'JOURNEY' | 'SUBTASK';
+    subtaskId?: number | null;
+    date: string;
+    note?: string;
+  }): Promise<void> {
+    const run = await this.prisma.questRun.findFirst({
+      where: { questId: input.questId, status: 'ACTIVE' },
+    });
+    if (!run) {
+      return;
+    }
+    if (input.target === 'SUBTASK' && input.subtaskId) {
+      try {
+        await this.toggleSubtask(run.id, input.subtaskId, true);
+      } catch {
+        /* already done or gated */
+      }
+      return;
+    }
+    try {
+      await this.logJourney(run.id, {
+        date: input.date,
+        note: input.note,
+        done: true,
+      });
+    } catch {
+      /* already logged today */
+    }
   }
 
   /**
@@ -1035,6 +1081,7 @@ export class QuestsService {
       journeyLabel?: string | null;
       journeyNote?: string | null;
       commitmentLevel?: number;
+      deadline?: string | null;
       totalXp?: number;
       skillWeightsJson?: string | null;
       wealthCents?: number | null;
@@ -1051,6 +1098,7 @@ export class QuestsService {
         title: string;
         sortOrder: number;
         gatesJourney?: boolean;
+        deadline?: string | null;
       }>;
       runs: Array<{
         id: number;
@@ -1163,6 +1211,7 @@ export class QuestsService {
         title: s.title,
         sortOrder: s.sortOrder,
         gatesJourney: Boolean(s.gatesJourney),
+        deadline: s.deadline ?? null,
         completed: doneSubtaskIds.has(s.id),
         completedAt: stamp?.iso ?? null,
         completedAtLabel: stamp?.label ?? null,
@@ -1256,6 +1305,7 @@ export class QuestsService {
       journeyLabel: quest.journeyLabel ?? null,
       journeyNote: quest.journeyNote ?? null,
       commitmentLevel,
+      deadline: quest.deadline ?? null,
       coverImage: quest.coverImage,
       coverUrl: this.coverUrl(quest.coverImage),
       skillSlug: quest.skillSlug,
@@ -1386,19 +1436,48 @@ export class QuestsService {
 
   private normalizeSubtasks(
     raw?: Array<string | SubtaskInput>,
-  ): Array<{ id?: number; title: string; gatesJourney: boolean }> {
+  ): Array<{
+    id?: number;
+    title: string;
+    gatesJourney: boolean;
+    deadline: string | null;
+  }> {
     return (raw ?? [])
       .map((row) =>
         typeof row === 'string'
-          ? { title: row.trim(), gatesJourney: false }
+          ? { title: row.trim(), gatesJourney: false, deadline: null }
           : {
               id: row.id,
               title: String(row.title || '').trim(),
               gatesJourney: Boolean(row.gatesJourney),
+              deadline: this.parseDeadline(row.deadline),
             },
       )
       .filter((row) => row.title)
       .slice(0, 24);
+  }
+
+  private parseDeadline(raw?: string | null): string | null {
+    if (raw == null) {
+      return null;
+    }
+    const value = String(raw).trim();
+    if (!value) {
+      return null;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      throw new BadRequestException('deadline must be YYYY-MM-DD');
+    }
+    const [year, month, day] = value.split('-').map(Number);
+    const stamp = new Date(Date.UTC(year, month - 1, day));
+    if (
+      stamp.getUTCFullYear() !== year ||
+      stamp.getUTCMonth() + 1 !== month ||
+      stamp.getUTCDate() !== day
+    ) {
+      throw new BadRequestException('deadline is not a valid date');
+    }
+    return value;
   }
 
   private missedDays(

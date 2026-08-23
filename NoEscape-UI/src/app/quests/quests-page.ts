@@ -10,13 +10,18 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { API_BASE_URL } from '../core/api.config';
+import { CharacterService } from '../character/character.service';
 import { ImageWarmService } from '../shared/image-warm.service';
 import { TimedToast } from '../shared/timed-toast';
 import { UiConfirm } from '../shared/ui/ui-confirm';
 import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import {
   QuestView,
+  deadlineLabel,
+  deadlineTone,
   questCoverBg,
+  questDeadline,
+  questIsTimelyToday,
   resolveQuestCoverUrl,
   weekdayLabel,
 } from './quest.model';
@@ -64,6 +69,7 @@ function saveQuestBoard(id: QuestBoard): void {
 export class QuestsPage implements OnInit {
   private readonly questsService = inject(QuestsService);
   private readonly images = inject(ImageWarmService);
+  private readonly character = inject(CharacterService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly timed = new TimedToast();
@@ -95,9 +101,27 @@ export class QuestsPage implements OnInit {
     this.quests().filter((q) => q.availability === 'active'),
   );
 
-  protected readonly todayQuests = computed(() =>
-    this.inProgress().filter((q) => q.journeyDueToday),
-  );
+  protected readonly todayQuests = computed(() => {
+    const today = this.character.todayIso();
+    return this.quests()
+      .filter((q) => questIsTimelyToday(q, today))
+      .sort((a, b) => {
+        const da = questDeadline(a) ?? '9999-99-99';
+        const db = questDeadline(b) ?? '9999-99-99';
+        return da.localeCompare(db) || a.name.localeCompare(b.name);
+      });
+  });
+
+  protected readonly scheduled = computed(() => {
+    const rows = this.quests()
+      .filter((q) => q.availability !== 'completed' && questDeadline(q))
+      .sort((a, b) => {
+        const da = questDeadline(a) ?? '';
+        const db = questDeadline(b) ?? '';
+        return da.localeCompare(db) || a.name.localeCompare(b.name);
+      });
+    return rows;
+  });
 
   protected readonly notStarted = computed(() =>
     this.quests().filter(
@@ -118,6 +142,8 @@ export class QuestsPage implements OnInit {
         return this.todayQuests();
       case 'progress':
         return this.inProgress();
+      case 'schedule':
+        return this.scheduled();
       case 'ready':
         return this.notStarted();
       case 'done':
@@ -132,9 +158,11 @@ export class QuestsPage implements OnInit {
       case 'all':
         return 'No quests yet.';
       case 'today':
-        return 'Nothing due today. In-progress quests are waiting in the next tab.';
+        return 'Nothing due today. Deadlines and daily journeys land here when they come due.';
       case 'progress':
         return 'No quests in progress.';
+      case 'schedule':
+        return 'No deadlines yet. Add a due day on a quest or subtask.';
       case 'ready':
         return 'No waiting quests.';
       case 'done':
@@ -175,9 +203,30 @@ export class QuestsPage implements OnInit {
 
   protected statusLabel(q: QuestView): string {
     if (!this.editing() && this.board() === 'today') {
-      return 'Due today';
+      const due = questDeadline(q);
+      if (due) {
+        return this.dueLabel(due);
+      }
+      if (q.journeyDueToday) {
+        return 'Due today';
+      }
     }
     return q.tier;
+  }
+
+  protected dueIso(q: QuestView): string | null {
+    return questDeadline(q);
+  }
+
+  protected dueLabel(iso: string | null | undefined): string {
+    if (!iso) {
+      return '';
+    }
+    return deadlineLabel(iso, this.character.formatDate(iso), this.character.todayIso());
+  }
+
+  protected dueTone(iso: string | null | undefined): 'overdue' | 'today' | 'soon' | '' {
+    return deadlineTone(iso, this.character.todayIso());
   }
 
   protected coverBg(q: QuestView): string | null {

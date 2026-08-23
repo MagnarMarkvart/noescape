@@ -34,10 +34,13 @@ export class CharacterController {
       nickname?: string;
       timezone?: string;
       dateFormat?: string;
+      timeFormat?: string;
+      dayStartHour?: number;
       weekStartsOn?: number;
       menuAutoToggleMobile?: boolean;
       menuAutoToggleDesktop?: boolean;
       pomodoroAutoContinue?: boolean;
+      consuetudoStartInScenery?: boolean;
       currency?: string;
     },
   ) {

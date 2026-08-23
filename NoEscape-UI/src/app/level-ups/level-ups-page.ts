@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { SkillsService } from '../skills/skills.service';
 import { CharacterService } from '../character/character.service';
-import { todayInZone } from '../shared/time';
 import { LevelUpLogPage } from './level-ups.model';
 
 @Component({
@@ -40,14 +39,7 @@ export class LevelUpsPage implements OnInit {
   }
 
   protected formatWhen(iso: string): string {
-    const date = todayInZone(this.character.timezone(), new Date(iso));
-    const time = new Intl.DateTimeFormat('en-GB', {
-      timeZone: this.character.timezone(),
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date(iso));
-    return `${this.character.formatDate(date)} ${time}`;
+    return this.character.formatDateTime(iso);
   }
 
   private load(page: number): void {

@@ -270,6 +270,10 @@ model Character {
   timezone     String   @default("Europe/Tallinn")
   /// DMY 18.08.2026 · MDY 08/18/2026 · YMD 2026-08-18
   dateFormat   String   @default("DMY")
+  /// H24 | H12
+  timeFormat   String   @default("H24")
+  /// Wall-clock hour (0–23) when the log day begins. 6 = 06:00 → next 06:00.
+  dayStartHour Int      @default(0)
   /// 0 = Sunday, 1 = Monday
   weekStartsOn Int      @default(1)
   /// Close the sidebar after a menu click on compact viewports
@@ -278,6 +282,8 @@ model Character {
   menuAutoToggleDesktop Boolean @default(true)
   /// Horologium sessio/track: auto-start rest and the next lap
   pomodoroAutoContinue Boolean @default(true)
+  /// Consuetudo catalog: open scenery (true) or the Horologium dial (false)
+  consuetudoStartInScenery Boolean @default(true)
   /// Purse balance in minor units (cents). Default 0.
   wealthCents  Int      @default(0)
   /// EUR | USD | GBP
@@ -344,12 +350,15 @@ model Quest {
   xpPlanJson     String?
   createdByUser  Boolean    @default(false)
   sortOrder      Int        @default(0)
+  /// Optional calendar due day (YYYY-MM-DD) for IRL projects.
+  deadline       String?
   createdAt      DateTime   @default(now())
   runs           QuestRun[]
   subtasks       QuestSubtask[]
   scriptoriumWorks ScriptoriumWork[]
   tabulae        Tabula[]
   habits         Habit[]
+  habitLinks     HabitQuestLink[]
 }
 
 model QuestSubtask {
@@ -360,7 +369,10 @@ model QuestSubtask {
   sortOrder     Int                      @default(0)
   /// When true, daily journey check-in stays locked until this subtask is done.
   gatesJourney  Boolean                  @default(false)
+  /// Optional calendar due day (YYYY-MM-DD) for this slice of the work.
+  deadline      String?
   completions   QuestSubtaskCompletion[]
+  habitLinks    HabitQuestLink[]
 
   @@index([questId])
 }
@@ -453,15 +465,68 @@ model Habit {
   step             Int      @default(1)
   questId          Int?
   quest            Quest?   @relation(fields: [questId], references: [id], onDelete: SetNull)
+  groupId          Int?
+  group            HabitGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   sortOrder        Int      @default(0)
   createdAt        DateTime @default(now())
   completions      HabitCompletion[]
   clicks           HabitClick[]
   dailyTasks       DailyTask[]
   taskTemplates    DailyTaskTemplate[]
+  questLink        HabitQuestLink?
+  questEvents      HabitQuestEvent[]
 
   @@index([kind])
   @@index([questId])
+  @@index([groupId])
+}
+
+model HabitGroup {
+  id        Int      @id @default(autoincrement())
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  habits    Habit[]
+}
+
+/// One habit ↔ one quest target (journey day or a subtask) with a completion rule.
+model HabitQuestLink {
+  id            Int      @id @default(autoincrement())
+  habitId       Int      @unique
+  habit         Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  questId       Int
+  quest         Quest    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  /// JOURNEY | SUBTASK
+  target        String   @default("JOURNEY")
+  subtaskId     Int?
+  subtask       QuestSubtask? @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
+  /// COUNT | STREAK | WINDOW
+  rule          String   @default("COUNT")
+  requiredCount Int      @default(1)
+  windowDays    Int?
+  createdAt     DateTime @default(now())
+  events        HabitQuestEvent[]
+
+  @@index([questId])
+}
+
+/// Append-only journey of a habit–quest link. Resets never delete earlier rows.
+model HabitQuestEvent {
+  id          Int            @id @default(autoincrement())
+  linkId      Int
+  link        HabitQuestLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  habitId     Int
+  habit       Habit          @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date        String
+  success     Boolean
+  /// progress | reset | complete | miss
+  kind        String
+  tallyInBand Boolean        @default(false)
+  note        String?
+  createdAt   DateTime       @default(now())
+
+  @@index([linkId])
+  @@index([habitId, date])
 }
 
 model HabitCompletion {
@@ -472,6 +537,8 @@ model HabitCompletion {
   source      String   @default("manual")
   dailyTaskId Int?
   wealthAwardedCents Int @default(0)
+  xpAwarded   Int      @default(0)
+  xpActivityIdsJson String?
   createdAt   DateTime @default(now())
 
   @@unique([habitId, date])

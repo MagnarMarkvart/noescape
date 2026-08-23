@@ -16,50 +16,23 @@ import { HabitView } from './habits.service';
       class="card"
       [class.compact]="compact()"
       [class.tally]="habit().kind === 'tally'"
+      [class.done]="habit().successfulToday"
+      [class.dragging]="draggable()"
+      [attr.draggable]="draggable() ? 'true' : null"
       [attr.data-tone]="habit().kind === 'tally' ? habit().tone : null"
+      (dragstart)="onDragStart($event)"
     >
-      @if (habit().kind === 'tally') {
-        <button
-          type="button"
-          class="hit"
-          [disabled]="busy() || readonly()"
-          [attr.aria-label]="'Mark ' + habit().name"
-          (click)="clicked.emit(habit())"
-        >
-          <span class="glyph" aria-hidden="true">{{ habit().icon || '◆' }}</span>
-          <span class="meta">
-            <strong>{{ habit().name }}</strong>
-            @if (!compact()) {
-              <small>
+      <div class="check-row">
+        <span class="glyph" aria-hidden="true">{{ habit().icon || '◆' }}</span>
+        <span class="meta">
+          <strong>{{ habit().name }}</strong>
+          @if (!compact()) {
+            <small>
+              @if (habit().kind === 'tally') {
                 {{ habit().windowLabel }}
                 · {{ habit().period }}
                 · {{ band() }}
-                @if (habit().questName) {
-                  · {{ habit().questName }}
-                }
-              </small>
-            }
-          </span>
-          <span class="count">{{ habit().count }}</span>
-        </button>
-        @if (!compact()) {
-          <button
-            type="button"
-            class="undo"
-            [disabled]="busy() || readonly() || habit().count <= 0"
-            [attr.aria-label]="'Undo last mark on ' + habit().name"
-            (click)="undone.emit(habit())"
-          >
-            −
-          </button>
-        }
-      } @else {
-        <div class="check-row">
-          <span class="glyph" aria-hidden="true">{{ habit().icon || '◆' }}</span>
-          <span class="meta">
-            <strong>{{ habit().name }}</strong>
-            @if (!compact()) {
-              <small>
+              } @else {
                 🔥 {{ habit().currentStreak }} · best {{ habit().bestStreak }}
                 ·
                 {{
@@ -67,25 +40,61 @@ import { HabitView } from './habits.service';
                     ? 'Every ' + habit().everyNDays + 'd'
                     : 'Daily'
                 }}
-              </small>
-            } @else {
-              <small>🔥 {{ habit().currentStreak }}</small>
-            }
-          </span>
-          @if (habit().doneToday) {
-            <span class="done-flag">Done</span>
+              }
+              @if (habit().questLink?.questName || habit().questName) {
+                · {{ habit().questLink?.questName || habit().questName }}
+              }
+            </small>
+          } @else if (habit().kind === 'check') {
+            <small>🔥 {{ habit().currentStreak }}</small>
+          }
+        </span>
+        @if (habit().kind === 'tally') {
+          <span class="count">{{ habit().count }}</span>
+        }
+        <span class="steppers">
+          @if (habit().kind === 'tally') {
+            <button
+              type="button"
+              class="step"
+              [disabled]="busy() || readonly() || habit().count <= 0"
+              [attr.aria-label]="'Decrease ' + habit().name"
+              (click)="minus.emit(habit())"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              class="step"
+              [disabled]="busy() || readonly()"
+              [attr.aria-label]="'Increase ' + habit().name"
+              (click)="plus.emit(habit())"
+            >
+              {{ busy() ? '…' : '+' }}
+            </button>
+          } @else if (habit().successfulToday) {
+            <button
+              type="button"
+              class="step"
+              [disabled]="busy() || readonly()"
+              [attr.aria-label]="'Undo ' + habit().name"
+              (click)="minus.emit(habit())"
+            >
+              {{ busy() ? '…' : '−' }}
+            </button>
           } @else {
             <button
               type="button"
-              class="done-btn"
+              class="step plus"
               [disabled]="busy() || readonly()"
-              (click)="completed.emit(habit())"
+              [attr.aria-label]="'Complete ' + habit().name"
+              (click)="plus.emit(habit())"
             >
-              {{ busy() ? '…' : 'Done' }}
+              {{ busy() ? '…' : '+' }}
             </button>
           }
-        </div>
-      }
+        </span>
+      </div>
       @if (!compact() && !readonly()) {
         <a class="edit" [routerLink]="['/habitus', habit().id]">Edit</a>
       }
@@ -98,12 +107,16 @@ import { HabitView } from './habits.service';
     }
     .card {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 0.35rem;
-      align-items: stretch;
+      gap: 0.15rem;
       padding: 0.2rem;
       border: 1px solid #8a7340;
       background: rgba(30, 24, 14, 0.72);
+    }
+    .card.done {
+      border-color: #6a9a58;
+    }
+    .card.dragging {
+      cursor: grab;
     }
     .card.tally[data-tone='good'] {
       border-color: #6a9a58;
@@ -138,27 +151,16 @@ import { HabitView } from './habits.service';
         rgba(30, 24, 14, 0.72)
       );
     }
-    .hit,
     .check-row {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
       gap: 0.55rem;
       align-items: center;
       min-width: 0;
       padding: 0.55rem 0.65rem;
-      border: 0;
-      background: transparent;
-      color: inherit;
-      font: inherit;
-      text-align: left;
     }
-    .hit {
-      cursor: pointer;
-    }
-    .hit:disabled,
-    .done-btn:disabled {
-      opacity: 0.55;
-      cursor: wait;
+    .card.tally .check-row {
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
     }
     .glyph {
       font-size: 1.45rem;
@@ -185,58 +187,42 @@ import { HabitView } from './habits.service';
       min-width: 1.6rem;
       text-align: right;
     }
-    .undo,
-    .done-btn {
+    .steppers {
+      display: flex;
+      gap: 0.25rem;
+    }
+    .step {
+      width: 2.15rem;
+      height: 2.15rem;
       border: 1px solid #8a7340;
       background: rgba(18, 14, 8, 0.5);
       color: #f0e6c8;
       cursor: pointer;
       font: inherit;
-    }
-    .undo {
-      width: 2.15rem;
       font-size: 1.15rem;
     }
-    .done-btn {
-      padding: 0.35rem 0.55rem;
-      font-family: 'Cinzel', 'Palatino Linotype', Palatino, serif;
-      font-size: 0.78rem;
+    .step:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
-    .done-flag {
-      color: #8fbc7a;
-      font-size: 0.78rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+    .step:hover:not(:disabled),
+    .step:focus-visible,
+    .edit:hover,
+    .edit:focus-visible {
+      border-color: #c6a85a;
+      color: #d4a84b;
+      outline: none;
     }
     .edit {
-      grid-column: 1 / -1;
       justify-self: end;
       padding: 0.15rem 0.45rem 0.35rem;
       color: #b8a878;
       font-size: 0.75rem;
       text-decoration: none;
     }
-    .undo:hover,
-    .hit:hover,
-    .done-btn:hover,
-    .edit:hover,
-    .undo:focus-visible,
-    .hit:focus-visible,
-    .done-btn:focus-visible,
-    .edit:focus-visible {
-      border-color: #c6a85a;
-      color: #d4a84b;
-      outline: none;
-    }
-    .undo:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
     .card.compact {
-      grid-template-columns: minmax(0, 1fr);
       padding: 0;
     }
-    .card.compact .hit,
     .card.compact .check-row {
       padding: 0.4rem 0.5rem;
       gap: 0.4rem;
@@ -253,6 +239,10 @@ import { HabitView } from './habits.service';
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .card.compact .step {
+      width: 1.85rem;
+      height: 1.85rem;
+    }
   `,
 })
 export class HabitCard {
@@ -260,9 +250,10 @@ export class HabitCard {
   readonly compact = input(false);
   readonly busy = input(false);
   readonly readonly = input(false);
-  readonly clicked = output<HabitView>();
-  readonly undone = output<HabitView>();
-  readonly completed = output<HabitView>();
+  readonly draggable = input(false);
+  readonly plus = output<HabitView>();
+  readonly minus = output<HabitView>();
+  readonly dragStart = output<DragEvent>();
 
   protected band(): string {
     const row = this.habit();
@@ -270,5 +261,13 @@ export class HabitCard {
       return `norm ${row.normMin}`;
     }
     return `norm ${row.normMin}–${row.normMax}`;
+  }
+
+  protected onDragStart(event: DragEvent): void {
+    if (!this.draggable()) {
+      return;
+    }
+    event.dataTransfer?.setData('text/plain', String(this.habit().id));
+    this.dragStart.emit(event);
   }
 }

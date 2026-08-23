@@ -4,6 +4,37 @@ import { API_BASE_URL } from '../core/api.config';
 import { TabulaPeriod, TabulaPolarity, TabulaTone } from '../tabularium/tabularium.model';
 
 export type HabitKind = 'check' | 'tally';
+export type HabitQuestRule = 'COUNT' | 'STREAK' | 'WINDOW';
+export type HabitQuestTarget = 'JOURNEY' | 'SUBTASK';
+
+export interface HabitQuestEventView {
+  id?: number;
+  date: string;
+  success: boolean;
+  kind: string;
+  tallyInBand: boolean;
+  note: string | null;
+}
+
+export interface HabitQuestLinkView {
+  questId: number;
+  questName: string | null;
+  target: HabitQuestTarget;
+  subtaskId: number | null;
+  subtaskTitle: string | null;
+  rule: HabitQuestRule;
+  requiredCount: number;
+  windowDays: number | null;
+  progress: number;
+  completed: boolean;
+  events: HabitQuestEventView[];
+}
+
+export interface HabitGroupView {
+  id: number;
+  name: string;
+  sortOrder: number;
+}
 
 export interface HabitView {
   id: number;
@@ -43,11 +74,25 @@ export interface HabitView {
   questName: string | null;
   sortOrder: number;
   doneToday: boolean;
+  successfulToday: boolean;
+  dueToday: boolean;
+  groupId: number | null;
+  groupName: string | null;
+  questLink: HabitQuestLinkView | null;
   count: number;
   tone: TabulaTone | null;
   windowFrom: string;
   windowTo: string;
   windowLabel: string;
+}
+
+export interface HabitQuestLinkBody {
+  questId: number;
+  target?: HabitQuestTarget;
+  subtaskId?: number | null;
+  rule?: HabitQuestRule;
+  requiredCount?: number;
+  windowDays?: number | null;
 }
 
 export interface HabitWriteBody {
@@ -68,6 +113,15 @@ export interface HabitWriteBody {
   normMax?: number;
   step?: number;
   questId?: number | null;
+  groupId?: number | null;
+  questLink?: HabitQuestLinkBody | null;
+}
+
+export interface HabitActionResult {
+  habit: HabitView | null;
+  awards?: unknown[];
+  removed?: boolean;
+  date?: string;
 }
 
 export interface HabitMonthLog {
@@ -147,6 +201,40 @@ export class HabitsService {
     );
   }
 
+  listGroups() {
+    return this.http.get<HabitGroupView[]>(`${this.baseUrl}/groups`);
+  }
+
+  createGroup(name: string) {
+    return this.http.post<HabitGroupView>(`${this.baseUrl}/groups`, { name });
+  }
+
+  renameGroup(id: number, name: string) {
+    return this.http.patch<HabitGroupView>(`${this.baseUrl}/groups/${id}`, {
+      name,
+    });
+  }
+
+  removeGroup(id: number) {
+    return this.http.delete<{ deleted: boolean; id: number }>(
+      `${this.baseUrl}/groups/${id}`,
+    );
+  }
+
+  place(habitId: number, groupId: number | null, sortOrder?: number) {
+    return this.http.patch<HabitView>(
+      `${this.baseUrl}/${habitId}/place${this.devQuery()}`,
+      { groupId, sortOrder },
+    );
+  }
+
+  upsertQuestLink(habitId: number, link: HabitQuestLinkBody | null) {
+    return this.http.patch<HabitView>(
+      `${this.baseUrl}/${habitId}/quest-link${this.devQuery()}`,
+      link ?? { clear: true },
+    );
+  }
+
   getOne(habitId: number) {
     return this.http.get<HabitView>(
       `${this.baseUrl}/${habitId}${this.devQuery()}`,
@@ -196,27 +284,27 @@ export class HabitsService {
   }
 
   complete(habitId: number, date?: string) {
-    return this.http.post(
+    return this.http.post<HabitActionResult>(
       `${this.baseUrl}/${habitId}/complete${this.devQuery()}`,
       { date },
     );
   }
 
   uncomplete(habitId: number, date: string) {
-    return this.http.delete(
+    return this.http.delete<HabitActionResult>(
       `${this.baseUrl}/${habitId}/complete/${encodeURIComponent(date)}${this.devQuery()}`,
     );
   }
 
   click(habitId: number, delta?: number) {
-    return this.http.post<HabitView>(
+    return this.http.post<HabitActionResult>(
       `${this.baseUrl}/${habitId}/click${this.devQuery()}`,
       { delta },
     );
   }
 
   undo(habitId: number) {
-    return this.http.post<HabitView>(
+    return this.http.post<HabitActionResult>(
       `${this.baseUrl}/${habitId}/undo${this.devQuery()}`,
       {},
     );

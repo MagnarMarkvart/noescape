@@ -6,7 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { CharacterService } from '../character/character.service';
 import { QuestsService } from '../quests/quests.service';
@@ -36,6 +36,7 @@ export class ConsuetudoPage implements OnInit {
   private readonly character = inject(CharacterService);
   private readonly quests = inject(QuestsService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly timed = new TimedToast();
 
   protected readonly demo = toSignal(
@@ -92,6 +93,19 @@ export class ConsuetudoPage implements OnInit {
 
   protected closeNotes(): void {
     this.notesText.set(null);
+  }
+
+  protected openPractice(event: Event, routine: RoutineView): void {
+    if (this.demo()) {
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('a, button, app-ui-icon-btn')) {
+      return;
+    }
+    void this.router.navigate(['/horologium'], {
+      queryParams: { consuetudo: routine.id },
+    });
   }
 
   protected plannedLabel(routine: RoutineView): string {

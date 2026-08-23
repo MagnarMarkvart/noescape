@@ -30,7 +30,15 @@ export interface XpFeedbackEvent {
 /** @deprecated alias — prefer XpFeedbackEvent */
 export type XpGainEvent = XpFeedbackEvent;
 
-export type XpFeedbackPhase = 'idle' | 'drop' | 'levelup' | 'leveldown';
+export type XpFeedbackPhase = 'idle' | 'drop' | 'levelup' | 'leveldown' | 'quest';
+
+export interface QuestCeremony {
+  kind: 'started' | 'completed';
+  name: string;
+  subtitle?: string;
+}
+
+export const QUEST_CEREMONY_MS = 3000;
 
 export const WORK_END_JINGLE = '/assets/jingles/Pomodoro.ogg';
 export const REST_END_JINGLE = '/assets/jingles/rest-timer-end.ogg';

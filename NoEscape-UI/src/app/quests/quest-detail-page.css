@@ -129,6 +129,17 @@
   max-width: 32rem;
 }
 
+.deadline {
+  margin: 0.55rem 0 0;
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  color: var(--gold);
+}
+
+.deadline[data-tone='overdue'] {
+  color: #e08a72;
+}
+
 .progress-block {
   margin-top: 1rem;
   max-width: 22rem;
@@ -225,6 +236,15 @@
   margin-left: 1.1rem;
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.panel .detail.due[data-tone='overdue'] {
+  color: #e08a72;
+}
+
+.panel .detail.due[data-tone='today'],
+.panel .detail.due[data-tone='soon'] {
+  color: var(--gold);
 }
 
 .panel em {

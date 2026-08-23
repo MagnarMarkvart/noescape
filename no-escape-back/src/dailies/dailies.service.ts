@@ -934,6 +934,14 @@ export class DailiesService {
       include: { skill: { select: this.skillSelect() } },
     });
 
+    if (updated.habitId) {
+      try {
+        await this.habitsService.uncomplete(updated.habitId, updated.date);
+      } catch {
+        /* habit may already be open */
+      }
+    }
+
     return {
       task: this.enrichTask(updated),
       reversal: reversals[0] ?? null,
@@ -1439,9 +1447,9 @@ export class DailiesService {
     }
     const habit = await this.prisma.habit.findUnique({
       where: { id: habitId },
-      select: { id: true, active: true, allowInDailies: true },
+      select: { id: true, active: true, allowInDailies: true, kind: true },
     });
-    if (!habit?.active || habit.allowInDailies === false) {
+    if (!habit?.active || habit.allowInDailies === false || habit.kind === 'tally') {
       return null;
     }
     return habit.id;
@@ -1457,7 +1465,7 @@ export class DailiesService {
     return date;
   }
 
-  /** Calendar date in the player's timezone. */
+  /** Civil log day in the player's timezone (respects start-of-day). */
   private localToday(): string {
     return this.time.today();
   }

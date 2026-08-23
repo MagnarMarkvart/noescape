@@ -13,6 +13,9 @@
       <p class="kicker">In progress</p>
       @if (quest(); as q) {
         <h1>{{ q.name }}</h1>
+        @if (q.deadline) {
+          <p class="head-due" [attr.data-tone]="dueTone(q.deadline)">{{ dueLabel(q.deadline) }}</p>
+        }
       } @else {
         <h1>Quest run</h1>
       }
@@ -149,6 +152,11 @@
                   {{ t.title }}
                   @if (t.gatesJourney) {
                     <em class="gate-flag">Gate</em>
+                  }
+                  @if (t.deadline) {
+                    <span class="sub-meta due" [attr.data-tone]="dueTone(t.deadline)">
+                      {{ dueLabel(t.deadline) }}
+                    </span>
                   }
                   @if (t.elapsedMs) {
                     <span class="sub-meta">{{ elapsedLabel(t.elapsedMs) }} tracked</span>

@@ -53,6 +53,7 @@ import { RuneCalendar } from '../rune-calendar';
     </div>
   `,
   host: {
+    '[class.compact]': 'compact()',
     '(document:pointerdown)': 'onDoc($event)',
     '(document:keydown.escape)': 'open.set(false)',
   },
@@ -117,6 +118,21 @@ import { RuneCalendar } from '../rune-calendar';
       top: calc(100% + 0.4rem);
       left: 0;
     }
+    :host.compact .field {
+      gap: 0.2rem;
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+    :host.compact .date-btn {
+      min-width: 8rem;
+      padding: 0.35rem 0.55rem;
+      font-size: 0.82rem;
+    }
+    :host.compact .ghost {
+      padding: 0.35rem 0.5rem;
+      font-size: 0.78rem;
+    }
   `,
 })
 export class DateField {
@@ -128,6 +144,7 @@ export class DateField {
   readonly placeholder = input('None');
   readonly allowClear = input(true);
   readonly clearLabel = input('None');
+  readonly compact = input(false);
   readonly valueChange = output<string>();
 
   protected readonly open = signal(false);

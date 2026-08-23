@@ -36,6 +36,7 @@
   <div class="layout">
     <div class="timer-stack">
     <section class="dial-panel" [class.notes-open]="focusMode() && notesOpen()" aria-live="polite">
+      <div class="stage">
       <div class="dial-board">
       <div class="ring-wrap">
         <div
@@ -196,14 +197,17 @@
       </div>
 
       @if (focusMode() && notesOpen()) {
-        <textarea
-          class="live-notes"
-          [value]="notes()"
-          (input)="setLiveNotes($any($event.target).value)"
-          maxlength="4000"
-          placeholder="Live notes"
-        ></textarea>
+        <aside class="notes-dock">
+          <textarea
+            class="live-notes"
+            [value]="notes()"
+            (input)="setLiveNotes($any($event.target).value)"
+            maxlength="4000"
+            placeholder="Live notes"
+          ></textarea>
+        </aside>
       }
+      </div>
 
       <div class="focus-props">
       @if (showWatchWidget()) {

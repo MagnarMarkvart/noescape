@@ -76,6 +76,24 @@
   color: var(--rs-accent);
 }
 
+.head-due {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--rs-muted);
+}
+
+.head-due[data-tone='overdue'],
+.sub-meta.due[data-tone='overdue'] {
+  color: #e08a72;
+}
+
+.head-due[data-tone='today'],
+.head-due[data-tone='soon'],
+.sub-meta.due[data-tone='today'],
+.sub-meta.due[data-tone='soon'] {
+  color: var(--rs-accent);
+}
+
 .head-actions {
   display: flex;
   gap: 0.5rem;

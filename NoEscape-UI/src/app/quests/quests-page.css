@@ -267,6 +267,21 @@
   color: var(--rs-muted);
 }
 
+.due {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--rs-muted);
+}
+
+.due[data-tone='overdue'] {
+  color: #e08a72;
+}
+
+.due[data-tone='today'],
+.due[data-tone='soon'] {
+  color: var(--rs-accent);
+}
+
 .mini-bar {
   margin-top: 0.55rem;
   height: 0.4rem;
