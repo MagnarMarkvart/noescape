@@ -42,6 +42,7 @@ import {
 import { DEFAULT_HABIT_ICON } from './habit-icons';
 import {
   HabitKind,
+  HabitGroupView,
   HabitQuestRule,
   HabitQuestTarget,
   HabitsService,
@@ -82,6 +83,8 @@ export class HabitusNewPage implements OnInit {
   protected readonly skillTree = signal<SkillTree | null>(null);
   protected readonly selectedCategory = signal<string | null>(null);
   protected readonly quests = signal<QuestView[]>([]);
+  protected readonly groups = signal<HabitGroupView[]>([]);
+  protected readonly newGroupName = signal('');
   protected readonly durationPresets = DURATION_PRESETS;
   protected readonly periods = TABULA_PERIOD_OPTIONS;
   protected readonly polarities = TABULA_POLARITY_OPTIONS;
@@ -108,6 +111,7 @@ export class HabitusNewPage implements OnInit {
     questRequiredCount: 1,
     questWindowDays: 7,
     wealthAmount: '',
+    groupId: null as number | null,
   });
 
   protected readonly heading = computed(() =>
@@ -182,6 +186,10 @@ export class HabitusNewPage implements OnInit {
     this.questsService.list('all').subscribe({
       next: (rows) => this.quests.set(rows),
     });
+    this.habitsService.listGroups().subscribe({
+      next: (rows) => this.groups.set(rows),
+      error: () => this.groups.set([]),
+    });
     const raw = this.route.snapshot.paramMap.get('id');
     const id = raw ? Number(raw) : NaN;
     if (!Number.isFinite(id) || id < 1) {
@@ -214,6 +222,7 @@ export class HabitusNewPage implements OnInit {
           questWindowDays: row.questLink?.windowDays ?? 7,
           wealthAmount:
             row.wealthCents > 0 ? String(row.wealthCents / 100) : '',
+          groupId: row.groupId,
         });
         const skill = this.allSkills().find((s) => s.id === row.skillId);
         if (skill) {
@@ -235,6 +244,35 @@ export class HabitusNewPage implements OnInit {
 
   protected setName(value: string): void {
     this.draft.update((d) => ({ ...d, name: value }));
+  }
+
+  protected setGroupId(raw: string): void {
+    const id = Number(raw);
+    this.draft.update((d) => ({
+      ...d,
+      groupId: Number.isInteger(id) && id > 0 ? id : null,
+    }));
+  }
+
+  protected onNewGroupName(event: Event): void {
+    this.newGroupName.set((event.target as HTMLInputElement).value);
+  }
+
+  protected addGroup(): void {
+    const name = this.newGroupName().trim();
+    if (!name || this.saving()) {
+      return;
+    }
+    this.habitsService.createGroup(name).subscribe({
+      next: (group) => {
+        this.groups.update((rows) => [...rows, group]);
+        this.newGroupName.set('');
+        this.draft.update((d) => ({ ...d, groupId: group.id }));
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.timed.set(err.error?.message ?? 'Could not add group');
+      },
+    });
   }
 
   protected setCadence(cadence: string): void {
@@ -440,6 +478,7 @@ export class HabitusNewPage implements OnInit {
       wealthCents: boostsWealth(d.skillWeights)
         ? parseMoneyToCents(d.wealthAmount)
         : 0,
+      groupId: d.groupId,
     };
   }
 }

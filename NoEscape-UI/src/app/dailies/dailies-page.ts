@@ -16,7 +16,7 @@ import {
   required,
   submit,
 } from '@angular/forms/signals';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import {
@@ -51,11 +51,14 @@ import {
 import { centsToInput, formatMoney, parseMoneyToCents } from '../shared/money';
 import { TimedToast } from '../shared/timed-toast';
 import { UiIconBtn } from '../shared/ui/ui-icon-btn';
+import { WorkIntervalLog } from '../shared/work-interval-log';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import { CharacterService } from '../character/character.service';
 import { formatElapsedShort, monthRange } from '../shared/time';
 import { DailiesService } from './dailies.service';
 import { DefaultTaskPicker } from './default-task-picker';
+import { DailyDayCard } from './daily-day-card';
+import { filledSlotsFromBoard, scoreFromSlots } from './day-score';
 import { calculateDailyTaskXp } from './daily-xp';
 import { splitQuestXp } from '../quests/quest.model';
 
@@ -65,6 +68,7 @@ import { splitQuestXp } from '../quests/quest.model';
     DecimalPipe,
     FormField,
     RuneCheck,
+    RouterLink,
     DateNav,
     SkillWeightList,
     SkillTreePicker,
@@ -72,6 +76,8 @@ import { splitQuestXp } from '../quests/quest.model';
     EffortField,
     DefaultTaskPicker,
     UiIconBtn,
+    DailyDayCard,
+    WorkIntervalLog,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dailies-page.html',
@@ -150,7 +156,7 @@ export class DailiesPage implements OnInit {
 
   protected readonly canMutate = computed(() => {
     const board = this.board();
-    if (!board?.isEditable) {
+    if (!board || board.isSealed || !board.isEditable) {
       return false;
     }
     if (board.sealRequired) {
@@ -222,6 +228,18 @@ export class DailiesPage implements OnInit {
     );
   });
 
+  protected readonly filledTasks = computed(() =>
+    this.board() ? filledSlotsFromBoard(this.board()!) : [],
+  );
+
+  protected readonly dayVerdict = computed(() => {
+    const board = this.board();
+    if (!board) {
+      return null;
+    }
+    return board.verdict ?? scoreFromSlots(this.filledTasks());
+  });
+
   ngOnInit(): void {
     const queryDate = this.route.snapshot.queryParamMap.get('date');
     if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
@@ -290,7 +308,9 @@ export class DailiesPage implements OnInit {
       next: (rows) => {
         const marks: CalendarMarks = {};
         for (const row of rows) {
-          marks[row.date] = { status: row.status };
+          marks[row.date] = row.grade
+            ? { grade: row.grade }
+            : { status: row.status };
         }
         this.calendarMarks.set(marks);
       },
@@ -602,6 +622,23 @@ export class DailiesPage implements OnInit {
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.timed.set(this.readError(err, 'Seal failed'));
+      },
+    });
+  }
+
+  protected unsealDay(): void {
+    const day = this.selectedDate();
+    this.dailiesService.unsealDay(day).subscribe({
+      next: (board) => {
+        if (this.isPast()) {
+          this.historyUnlocked.set(true);
+        }
+        this.applyBoard(board);
+        this.timed.set(`Unsealed ${day}.`);
+        this.refreshCalendar();
+      },
+      error: (err: { error?: { message?: string | string[] } }) => {
+        this.timed.set(this.readError(err, 'Unseal failed'));
       },
     });
   }

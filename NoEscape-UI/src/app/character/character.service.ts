@@ -34,6 +34,10 @@ export interface CharacterProfile {
   menuAutoToggleDesktop: boolean;
   pomodoroAutoContinue: boolean;
   consuetudoStartInScenery: boolean;
+  vigiliaTrackQuests: boolean;
+  vigiliaTrackDailies: boolean;
+  vigiliaTrackScriptorium: boolean;
+  vigiliaTrackCustom: boolean;
   wealthCents: number;
   currency: CurrencyId;
   habitusUnlocked: boolean;
@@ -86,6 +90,17 @@ export class CharacterService {
   readonly menuAutoToggleDesktop = signal(true);
   readonly pomodoroAutoContinue = signal(true);
   readonly consuetudoStartInScenery = signal(true);
+  readonly vigiliaTrackQuests = signal(true);
+  readonly vigiliaTrackDailies = signal(false);
+  readonly vigiliaTrackScriptorium = signal(false);
+  readonly vigiliaTrackCustom = signal(false);
+  readonly vigiliaEnabled = computed(
+    () =>
+      this.vigiliaTrackQuests() ||
+      this.vigiliaTrackDailies() ||
+      this.vigiliaTrackScriptorium() ||
+      this.vigiliaTrackCustom(),
+  );
   readonly wealthCents = signal(0);
   readonly currency = signal<CurrencyId>(DEFAULT_CURRENCY);
   readonly todayIso = computed(() =>
@@ -121,6 +136,10 @@ export class CharacterService {
     menuAutoToggleDesktop?: boolean;
     pomodoroAutoContinue?: boolean;
     consuetudoStartInScenery?: boolean;
+    vigiliaTrackQuests?: boolean;
+    vigiliaTrackDailies?: boolean;
+    vigiliaTrackScriptorium?: boolean;
+    vigiliaTrackCustom?: boolean;
     currency?: CurrencyId;
   }) {
     return this.http
@@ -161,6 +180,10 @@ export class CharacterService {
     this.menuAutoToggleDesktop.set(p.menuAutoToggleDesktop !== false);
     this.pomodoroAutoContinue.set(p.pomodoroAutoContinue !== false);
     this.consuetudoStartInScenery.set(p.consuetudoStartInScenery !== false);
+    this.vigiliaTrackQuests.set(p.vigiliaTrackQuests !== false);
+    this.vigiliaTrackDailies.set(p.vigiliaTrackDailies === true);
+    this.vigiliaTrackScriptorium.set(p.vigiliaTrackScriptorium === true);
+    this.vigiliaTrackCustom.set(p.vigiliaTrackCustom === true);
     this.wealthCents.set(Math.round(Number(p.wealthCents) || 0));
     this.currency.set(isCurrency(p.currency) ? p.currency : DEFAULT_CURRENCY);
   }

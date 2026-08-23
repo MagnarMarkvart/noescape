@@ -19,10 +19,12 @@ import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import { QuestView, chronicleKindLabel, deadlineLabel, deadlineTone, questCoverBg, weekdayLabel } from './quest.model';
 import { QuestRevealService } from './quest-reveal.service';
 import { QuestsService } from './quests.service';
+import { DailiesService } from '../dailies/dailies.service';
+import { WorkIntervalLog } from '../shared/work-interval-log';
 
 @Component({
   selector: 'app-quest-run-page',
-  imports: [RouterLink, RuneCheck, RuneLoader],
+  imports: [RouterLink, RuneCheck, RuneLoader, WorkIntervalLog],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-run-page.html',
   styleUrl: './quest-run-page.css',
@@ -38,7 +40,9 @@ export class QuestRunPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly character = inject(CharacterService);
   private readonly xpFeedback = inject(XpFeedbackService);
+  private readonly dailiesService = inject(DailiesService);
   private readonly timed = new TimedToast();
+  protected readonly addingToToday = signal<number | 'daily_work' | null>(null);
 
   protected readonly quest = signal<QuestView | null>(null);
   protected readonly loading = signal(true);
@@ -182,6 +186,28 @@ export class QuestRunPage {
         this.timed.set(err.error?.message ?? 'Could not update subtask');
       },
     });
+  }
+
+  /** Copy a subtask (or the daily-work slice when subtaskId is null) onto today's board. */
+  protected addToToday(subtaskId: number | null): void {
+    const q = this.quest();
+    if (!q || this.addingToToday() != null) {
+      return;
+    }
+    const key = subtaskId ?? 'daily_work';
+    this.addingToToday.set(key);
+    this.dailiesService
+      .fromQuest({ questId: q.id, questSubtaskId: subtaskId })
+      .subscribe({
+        next: () => {
+          this.addingToToday.set(null);
+          this.timed.set('Added to today’s dailies');
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.addingToToday.set(null);
+          this.timed.set(err.error?.message ?? 'Could not add to today');
+        },
+      });
   }
 
   protected completeDestination(): void {

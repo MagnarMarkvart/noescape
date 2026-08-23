@@ -15,9 +15,12 @@ import {
 
 export type CalendarDayStatus = 'sealed' | 'abandoned' | 'open';
 
+export type CalendarDayGrade = 'poor' | 'average' | 'strong' | 'peak';
+
 export interface CalendarDayMark {
   stars?: number;
   status?: CalendarDayStatus;
+  grade?: CalendarDayGrade;
 }
 
 export type CalendarMarks = Record<string, CalendarDayMark>;
@@ -51,6 +54,10 @@ export const CALENDAR_STAR_CAP = 5;
             class="cell"
             [class.selected]="day.iso === selected()"
             [class.today]="day.iso === today()"
+            [class.grade-poor]="gradeOf(day.iso) === 'poor'"
+            [class.grade-average]="gradeOf(day.iso) === 'average'"
+            [class.grade-strong]="gradeOf(day.iso) === 'strong'"
+            [class.grade-peak]="gradeOf(day.iso) === 'peak'"
             (click)="pick(day.iso)"
           >
             <span class="num">{{ day.n }}</span>
@@ -60,7 +67,7 @@ export const CALENDAR_STAR_CAP = 5;
                   <i class="star"></i>
                 }
               </span>
-            } @else if (statusOf(day.iso); as st) {
+            } @else if (!gradeOf(day.iso) && statusOf(day.iso); as st) {
               <span class="pip" [class]="st" aria-hidden="true"></span>
             }
           </button>
@@ -171,10 +178,45 @@ export const CALENDAR_STAR_CAP = 5;
       color: var(--rc-gold);
     }
 
-    .cell.selected {
+    .cell.selected:not(.grade-poor):not(.grade-average):not(.grade-strong):not(.grade-peak) {
       color: #1a1408;
       background: linear-gradient(180deg, #e0c06a, #d4a84b);
       border-color: #8a6a28;
+    }
+
+    .cell.grade-poor,
+    .cell.grade-average,
+    .cell.grade-strong,
+    .cell.grade-peak {
+      color: var(--rc-text);
+    }
+
+    .cell.grade-poor {
+      background: rgba(196, 92, 74, 0.62);
+      border-color: #c45c4a;
+    }
+
+    .cell.grade-average {
+      background: rgba(212, 137, 58, 0.62);
+      border-color: #d4893a;
+    }
+
+    .cell.grade-strong,
+    .cell.grade-peak {
+      background: rgba(47, 143, 58, 0.62);
+      border-color: #2f8f3a;
+    }
+
+    .cell.grade-peak {
+      background: rgba(47, 143, 58, 0.78);
+    }
+
+    .cell.selected.grade-poor,
+    .cell.selected.grade-average,
+    .cell.selected.grade-strong,
+    .cell.selected.grade-peak {
+      box-shadow: inset 0 0 0 2px #e0c06a;
+      border-color: #e0c06a;
     }
 
     .num {
@@ -291,6 +333,10 @@ export class RuneCalendar {
 
   protected statusOf(iso: string): CalendarDayStatus | null {
     return this.marks()[iso]?.status ?? null;
+  }
+
+  protected gradeOf(iso: string): CalendarDayGrade | null {
+    return this.marks()[iso]?.grade ?? null;
   }
 
   protected pick(iso: string): void {

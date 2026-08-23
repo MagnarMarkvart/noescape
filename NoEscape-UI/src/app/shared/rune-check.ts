@@ -28,6 +28,7 @@ import {
   `,
   host: {
     '[class.is-disabled]': 'disabled()',
+    '[class.compact]': 'compact()',
   },
   styles: `
     :host {
@@ -37,9 +38,10 @@ import {
       --rc-ink: #1a1408;
       --rc-muted: #b8a878;
       --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
-      display: inline-flex;
-      align-items: center;
-      vertical-align: middle;
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
     }
 
     :host.is-disabled {
@@ -47,11 +49,24 @@ import {
       pointer-events: none;
     }
 
+    :host.compact {
+      display: inline-block;
+      width: auto;
+    }
+
+    :host.compact .caption {
+      flex: 0 1 auto;
+      font-size: 0.78rem;
+    }
+
     .rune-check {
       position: relative;
-      display: inline-flex;
-      align-items: center;
+      display: flex;
+      align-items: flex-start;
       gap: 0.5rem;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       cursor: pointer;
       user-select: none;
     }
@@ -120,10 +135,12 @@ import {
     }
 
     .caption {
-      display: inline-flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 0.35rem 0.45rem;
+      display: block;
+      flex: 1 1 0;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       color: var(--rc-muted);
       font-family: var(--font-display);
       font-size: 0.82rem;
@@ -134,6 +151,7 @@ import {
 export class RuneCheck {
   readonly checked = input(false);
   readonly disabled = input(false);
+  readonly compact = input(false);
   readonly label = input('');
   readonly checkedChange = output<boolean>();
 

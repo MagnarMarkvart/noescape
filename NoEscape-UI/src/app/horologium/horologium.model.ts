@@ -175,6 +175,14 @@ export function formatElapsedMs(ms: number): string {
   return formatElapsedMsShared(ms);
 }
 
+export type VigiliaBindKind =
+  | 'custom'
+  | 'quest'
+  | 'quest_daily_work'
+  | 'daily'
+  | 'subtask'
+  | 'scriptorium';
+
 export interface HorologiumWatchRecord {
   id: number;
   name: string;
@@ -185,6 +193,12 @@ export interface HorologiumWatchRecord {
   lastStartedAt: string | null;
   archivedAt: string | null;
   scriptoriumWorkId?: number | null;
+  bindKind?: VigiliaBindKind;
+  questId?: number | null;
+  questRunId?: number | null;
+  questSubtaskId?: number | null;
+  dailyTaskId?: number | null;
+  completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

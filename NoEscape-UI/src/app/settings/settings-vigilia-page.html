@@ -1,0 +1,53 @@
+@if (toast()) {
+  <p class="toast" role="status">{{ toast() }}</p>
+}
+
+<p class="lede">
+  Vigilia is extra count-up tracking on top of Sessio/Track. Pick what it may
+  follow. Turn everything off and the Vigilia option disappears from
+  Horologium entirely.
+</p>
+
+<fieldset class="option-group">
+  <legend>Trackable targets</legend>
+  <app-rune-check
+    label="Quests — whole quest, its daily-work slice, and subtasks"
+    [checked]="trackQuests()"
+    [disabled]="saving() === 'vigiliaTrackQuests'"
+    (checkedChange)="toggle('vigiliaTrackQuests', $event)"
+  />
+  <app-rune-check
+    label="Dailies — any task on today's board"
+    [checked]="trackDailies()"
+    [disabled]="saving() === 'vigiliaTrackDailies'"
+    (checkedChange)="toggle('vigiliaTrackDailies', $event)"
+  />
+  <app-rune-check
+    label="Scriptorium projects"
+    [checked]="trackScriptorium()"
+    [disabled]="saving() === 'vigiliaTrackScriptorium'"
+    (checkedChange)="toggle('vigiliaTrackScriptorium', $event)"
+  />
+  <app-rune-check
+    label="Custom Vigilia tasks — free-named, not tied to anything"
+    [checked]="trackCustom()"
+    [disabled]="saving() === 'vigiliaTrackCustom'"
+    (checkedChange)="toggle('vigiliaTrackCustom', $event)"
+  />
+</fieldset>
+
+<p class="hint">
+  @if (!vigiliaEnabled()) {
+    Nothing selected — Horologium hides Vigilia until you turn one of these
+    back on.
+  } @else if (!trackCustom()) {
+    Custom is off, so the "new Vigilia" box stays hidden. Existing custom
+    Vigilias remain visible until archived.
+  } @else {
+    All picked targets appear as Vigilia options in Horologium.
+  }
+</p>
+<p class="hint">
+  A whole-quest Vigilia can pause and resume, but it can never finish a
+  quest — that still happens from the quest's own briefing.
+</p>

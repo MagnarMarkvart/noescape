@@ -10,6 +10,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { CharacterService } from '../character/character.service';
+import { RuneCheck } from '../shared/rune-check';
 import { TimedToast } from '../shared/timed-toast';
 import {
   monthGridLead,
@@ -39,7 +40,7 @@ type DueFilter = 'all' | 'today';
 
 @Component({
   selector: 'app-habitus-page',
-  imports: [RouterLink, UiIconBtn, HabitCard],
+  imports: [RouterLink, UiIconBtn, HabitCard, RuneCheck],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './habitus-page.html',
   styleUrl: './habitus-page.css',
@@ -72,7 +73,6 @@ export class HabitusPage implements OnInit {
   protected readonly showCompleted = signal(false);
   protected readonly skillFilter = signal<string | null>(null);
   protected readonly dragMode = signal(false);
-  protected readonly newGroupName = signal('');
   protected readonly grain = signal<HabitStatsGrain>('month');
   protected readonly anchor = signal(this.character.todayIso());
   protected readonly selectedIds = signal<number[]>([]);
@@ -136,14 +136,18 @@ export class HabitusPage implements OnInit {
     if (this.dueFilter() === 'all') {
       return rows;
     }
-    return rows.filter((row) => row.dueToday && !row.successfulToday);
+    return rows.filter((row) =>
+      row.kind === 'tally' ? true : row.dueToday && !row.successfulToday,
+    );
   });
 
   protected readonly doneCards = computed(() => {
     if (this.dueFilter() !== 'today' || !this.showCompleted()) {
       return [] as HabitView[];
     }
-    return this.searched().filter((row) => row.successfulToday);
+    return this.searched().filter(
+      (row) => row.kind === 'check' && row.successfulToday,
+    );
   });
 
   protected readonly grouped = computed(() => {
@@ -256,6 +260,35 @@ export class HabitusPage implements OnInit {
     return this.character.formatDate(iso);
   }
 
+  protected dayTone(
+    day: { marks?: Array<{ done: boolean }> },
+  ): 'full' | 'mixed' | 'miss' | null {
+    const marks = day.marks ?? [];
+    if (!marks.length) {
+      return null;
+    }
+    const done = marks.filter((m) => m.done).length;
+    if (done === marks.length) {
+      return 'full';
+    }
+    if (done === 0) {
+      return 'miss';
+    }
+    return 'mixed';
+  }
+
+  protected dayIcons(day: {
+    marks?: Array<{ id: number; icon: string | null; done: boolean }>;
+  }): Array<{ id: number; icon: string | null }> {
+    const tone = this.dayTone(day);
+    if (tone === 'miss' || tone == null) {
+      return [];
+    }
+    const marks = day.marks ?? [];
+    const rows = tone === 'full' ? marks : marks.filter((m) => m.done);
+    return rows.map((m) => ({ id: m.id, icon: m.icon }));
+  }
+
   protected onQuery(event: Event): void {
     this.query.set((event.target as HTMLInputElement).value);
   }
@@ -281,8 +314,8 @@ export class HabitusPage implements OnInit {
     }
   }
 
-  protected toggleCompleted(): void {
-    this.showCompleted.update((v) => !v);
+  protected setShowCompleted(on: boolean): void {
+    this.showCompleted.set(on);
   }
 
   protected setSkillFilter(slug: string | null): void {
@@ -291,41 +324,6 @@ export class HabitusPage implements OnInit {
 
   protected setDragMode(on: boolean): void {
     this.dragMode.set(on);
-  }
-
-  protected onNewGroup(event: Event): void {
-    this.newGroupName.set((event.target as HTMLInputElement).value);
-  }
-
-  protected addGroup(): void {
-    const name = this.newGroupName().trim();
-    if (!name || this.demo()) {
-      return;
-    }
-    this.habitsService.createGroup(name).subscribe({
-      next: (group) => {
-        this.groups.update((rows) => [...rows, group]);
-        this.newGroupName.set('');
-      },
-      error: (err: { error?: { message?: string } }) => {
-        this.timed.set(err.error?.message ?? 'Could not add group');
-      },
-    });
-  }
-
-  protected deleteGroup(id: number): void {
-    if (this.demo()) {
-      return;
-    }
-    this.habitsService.removeGroup(id).subscribe({
-      next: () => {
-        this.groups.update((rows) => rows.filter((g) => g.id !== id));
-        this.reload();
-      },
-      error: (err: { error?: { message?: string } }) => {
-        this.timed.set(err.error?.message ?? 'Could not remove group');
-      },
-    });
   }
 
   protected onDrop(groupId: number | null, event: DragEvent): void {

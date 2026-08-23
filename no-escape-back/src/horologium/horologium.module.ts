@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { QuestsModule } from '../quests/quests.module';
 import { SkillsModule } from '../skills/skills.module';
+import { WorkIntervalsModule } from '../work-intervals/work-intervals.module';
 import { HorologiumController } from './horologium.controller';
 import { HorologiumService } from './horologium.service';
 import { HorologiumPresetsService } from './horologium-presets.service';
 import { HorologiumWatchesService } from './horologium-watches.service';
 
 @Module({
-  imports: [SkillsModule, QuestsModule],
+  imports: [SkillsModule, QuestsModule, WorkIntervalsModule],
   controllers: [HorologiumController],
   providers: [
     HorologiumService,

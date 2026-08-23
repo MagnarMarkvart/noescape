@@ -165,6 +165,7 @@ export interface HabitStats {
     points: number;
     completions: number;
     clicks: number;
+    marks?: Array<{ id: number; icon: string | null; done: boolean }>;
   }>;
   habits: Array<{
     id: number;

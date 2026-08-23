@@ -60,6 +60,7 @@ import { calculateConsuetudoXp } from '../consuetudo/consuetudo-xp';
 import { ScriptoriumService } from '../scriptorium/scriptorium.service';
 import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
+import { WorkIntervalLog } from '../shared/work-interval-log';
 
 @Component({
   selector: 'app-horologium-page',
@@ -71,6 +72,7 @@ import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
     UiConfirm,
     UiIconBtn,
     NumberField,
+    WorkIntervalLog,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './horologium-page.html',
@@ -184,6 +186,8 @@ export class HorologiumPage implements OnInit {
   protected readonly watchRunning = this.watches.desiredRunning;
   protected readonly watchHint = this.watches.linkedHint;
   protected readonly watchWidgetVisible = this.watches.widgetVisible;
+  protected readonly attachableWatches = this.watches.attachableWatches;
+  protected readonly extraWatches = this.watches.extraWatches;
   protected readonly taskElapsedLabel = this.taskClock.elapsedLabel;
   protected readonly setupKind = signal<HorologiumSetupKind>('planned');
   protected readonly focusMode = signal(false);
@@ -226,6 +230,8 @@ export class HorologiumPage implements OnInit {
       this.consuetudoUnlocked() ||
       this.quests.activeQuests().some((q) => q.slug === 'ordo-diei'),
   );
+  protected readonly showVigiliaMode = this.character.vigiliaEnabled;
+  protected readonly vigiliaCustomAllowed = this.character.vigiliaTrackCustom;
   protected readonly selectedRoutine = computed((): RoutineView | null => {
     const rows = this.routines();
     const id = this.selectedRoutineId();
@@ -861,6 +867,34 @@ export class HorologiumPage implements OnInit {
       return;
     }
     this.watches.archive(id);
+  }
+
+  protected completeWatch(id: number): void {
+    this.watches.completeExtra(id);
+  }
+
+  protected canFinishWatch(watch: HorologiumWatchRecord): boolean {
+    return watch.bindKind !== 'quest';
+  }
+
+  protected toggleExtraWatch(raw: string): void {
+    const id = Number(raw);
+    if (!Number.isFinite(id) || id <= 0) {
+      return;
+    }
+    this.watches.attachExtra(id);
+  }
+
+  protected detachExtraWatch(id: number): void {
+    this.watches.detachExtra(id);
+  }
+
+  protected extraWatchElapsed(watch: HorologiumWatchRecord): string {
+    return this.watches.elapsedLabel(watch);
+  }
+
+  protected isExtraWatch(id: number): boolean {
+    return this.watches.isExtra(id);
   }
 
   protected selectRoutine(raw: string): void {

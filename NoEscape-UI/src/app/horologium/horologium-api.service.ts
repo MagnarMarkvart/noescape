@@ -9,6 +9,7 @@ import {
   HorologiumSessionRecord,
   HorologiumWatchRecord,
   HorologiumXpPreview,
+  VigiliaBindKind,
 } from './horologium.model';
 
 export interface HorologiumSessionPage {
@@ -177,11 +178,28 @@ export class HorologiumApiService {
     );
   }
 
-  createWatch(name: string, scriptoriumWorkId?: number) {
+  createWatch(
+    name: string,
+    scriptoriumWorkId?: number,
+    bind?: {
+      bindKind?: VigiliaBindKind;
+      questId?: number;
+      questSubtaskId?: number;
+      dailyTaskId?: number;
+    },
+  ) {
     return this.http.post<HorologiumWatchRecord>(`${this.baseUrl}/watches`, {
       name,
       ...(scriptoriumWorkId ? { scriptoriumWorkId } : {}),
+      ...(bind ?? {}),
     });
+  }
+
+  completeWatch(id: number) {
+    return this.http.post<HorologiumWatchRecord>(
+      `${this.baseUrl}/watches/${id}/complete`,
+      {},
+    );
   }
 
   updateWatch(

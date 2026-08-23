@@ -83,6 +83,10 @@ export class CharacterService implements OnModuleInit {
       menuAutoToggleDesktop: character.menuAutoToggleDesktop !== false,
       pomodoroAutoContinue: character.pomodoroAutoContinue !== false,
       consuetudoStartInScenery: character.consuetudoStartInScenery !== false,
+      vigiliaTrackQuests: character.vigiliaTrackQuests !== false,
+      vigiliaTrackDailies: character.vigiliaTrackDailies === true,
+      vigiliaTrackScriptorium: character.vigiliaTrackScriptorium === true,
+      vigiliaTrackCustom: character.vigiliaTrackCustom === true,
       wealthCents: character.wealthCents ?? 0,
       currency: isCurrency(character.currency)
         ? character.currency
@@ -112,6 +116,10 @@ export class CharacterService implements OnModuleInit {
     menuAutoToggleDesktop?: boolean;
     pomodoroAutoContinue?: boolean;
     consuetudoStartInScenery?: boolean;
+    vigiliaTrackQuests?: boolean;
+    vigiliaTrackDailies?: boolean;
+    vigiliaTrackScriptorium?: boolean;
+    vigiliaTrackCustom?: boolean;
     currency?: string;
   }) {
     const data: {
@@ -125,6 +133,10 @@ export class CharacterService implements OnModuleInit {
       menuAutoToggleDesktop?: boolean;
       pomodoroAutoContinue?: boolean;
       consuetudoStartInScenery?: boolean;
+      vigiliaTrackQuests?: boolean;
+      vigiliaTrackDailies?: boolean;
+      vigiliaTrackScriptorium?: boolean;
+      vigiliaTrackCustom?: boolean;
       currency?: CurrencyId;
     } = {};
     if (input.nickname !== undefined) {
@@ -176,6 +188,18 @@ export class CharacterService implements OnModuleInit {
     }
     if (input.consuetudoStartInScenery !== undefined) {
       data.consuetudoStartInScenery = Boolean(input.consuetudoStartInScenery);
+    }
+    if (input.vigiliaTrackQuests !== undefined) {
+      data.vigiliaTrackQuests = Boolean(input.vigiliaTrackQuests);
+    }
+    if (input.vigiliaTrackDailies !== undefined) {
+      data.vigiliaTrackDailies = Boolean(input.vigiliaTrackDailies);
+    }
+    if (input.vigiliaTrackScriptorium !== undefined) {
+      data.vigiliaTrackScriptorium = Boolean(input.vigiliaTrackScriptorium);
+    }
+    if (input.vigiliaTrackCustom !== undefined) {
+      data.vigiliaTrackCustom = Boolean(input.vigiliaTrackCustom);
     }
     if (input.currency !== undefined) {
       const code = String(input.currency).trim().toUpperCase();

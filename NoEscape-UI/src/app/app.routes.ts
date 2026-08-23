@@ -59,6 +59,14 @@ export const routes: Routes = [
           ),
         title: 'Pomodoro — Settings',
       },
+      {
+        path: 'vigilia',
+        loadComponent: () =>
+          import('./settings/settings-vigilia-page').then(
+            (m) => m.SettingsVigiliaPage,
+          ),
+        title: 'Vigilia — Settings',
+      },
     ],
   },
   {
@@ -189,6 +197,12 @@ export const routes: Routes = [
     title: 'Default Tasks — No Escape',
   },
   {
+    path: 'dailies/log',
+    loadComponent: () =>
+      import('./dailies/dailies-log-page').then((m) => m.DailiesLogPage),
+    title: 'Daily Log — No Escape',
+  },
+  {
     path: 'dailies',
     loadComponent: () =>
       import('./dailies/dailies-page').then((m) => m.DailiesPage),
@@ -196,14 +210,14 @@ export const routes: Routes = [
   },
   {
     path: 'dailies/logs',
-    redirectTo: 'dailies',
+    redirectTo: 'dailies/log',
     pathMatch: 'full',
   },
   {
     path: 'dailies/logs/:date',
     redirectTo: ({ params }) => {
       const date = params['date'];
-      return date ? `/dailies?date=${date}` : '/dailies';
+      return date ? `/dailies/log?date=${date}` : '/dailies/log';
     },
   },
   {

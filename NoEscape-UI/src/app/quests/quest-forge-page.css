@@ -99,6 +99,15 @@
   flex: 0 0 auto;
 }
 
+.minutes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--rs-muted);
+  flex: 0 0 auto;
+}
+
 .ghost-btn {
   font-family: var(--font-display);
   padding: 0.5rem 0.75rem;
@@ -142,6 +151,7 @@
 .chip-list li,
 .subtask-list li {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;

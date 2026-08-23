@@ -49,6 +49,7 @@ interface ForgeSubtask {
   title: string;
   gatesJourney: boolean;
   deadline: string | null;
+  estimateMinutes: number | null;
 }
 
 @Component({
@@ -100,6 +101,7 @@ export class QuestForgePage implements OnInit {
   protected readonly subtaskDraft = signal('');
   protected readonly gateDraft = signal(false);
   protected readonly subtaskDeadlineDraft = signal('');
+  protected readonly subtaskEstimateDraft = signal<number | null>(null);
   protected readonly skillReqs = signal<Array<{ slug: string; level: number }>>(
     [],
   );
@@ -125,6 +127,8 @@ export class QuestForgePage implements OnInit {
     titleReward: '',
     totalXp: 0,
     wealthAmount: '',
+    dailyWorkMinutes: null as number | null,
+    dailyWorkTitle: '',
   });
   protected readonly createForm = form(this.createModel, (p) => {
     required(p.name);
@@ -277,11 +281,13 @@ export class QuestForgePage implements OnInit {
         title,
         gatesJourney: this.gateDraft(),
         deadline: this.subtaskDeadlineDraft().trim() || null,
+        estimateMinutes: this.subtaskEstimateDraft(),
       },
     ]);
     this.subtaskDraft.set('');
     this.gateDraft.set(false);
     this.subtaskDeadlineDraft.set('');
+    this.subtaskEstimateDraft.set(null);
   }
 
   protected removeSubtask(index: number): void {
@@ -297,6 +303,29 @@ export class QuestForgePage implements OnInit {
 
   protected setSubtaskDeadlineDraft(iso: string): void {
     this.subtaskDeadlineDraft.set(iso);
+  }
+
+  protected setSubtaskEstimateDraft(minutes: number): void {
+    this.subtaskEstimateDraft.set(minutes > 0 ? Math.round(minutes) : null);
+  }
+
+  protected setSubtaskEstimate(index: number, minutes: number): void {
+    const estimateMinutes = minutes > 0 ? Math.round(minutes) : null;
+    this.subtasks.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, estimateMinutes } : row)),
+    );
+  }
+
+  protected setDailyWorkMinutes(minutes: number): void {
+    this.createModel.update((m) => ({
+      ...m,
+      dailyWorkMinutes: minutes > 0 ? Math.round(minutes) : null,
+    }));
+  }
+
+  protected setDailyWorkTitle(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.createModel.update((m) => ({ ...m, dailyWorkTitle: value }));
   }
 
   protected setDeadline(iso: string): void {
@@ -515,6 +544,7 @@ export class QuestForgePage implements OnInit {
           title: s.title,
           gatesJourney: s.gatesJourney,
           deadline: s.deadline,
+          estimateMinutes: s.estimateMinutes,
         })),
         rewards: m.titleReward.trim()
           ? { title: m.titleReward.trim() }
@@ -525,6 +555,8 @@ export class QuestForgePage implements OnInit {
           ? parseMoneyToCents(m.wealthAmount)
           : 0,
         scriptoriumWorkId: this.scriptoriumWorkId() ?? undefined,
+        dailyWorkMinutes: m.dailyWorkMinutes,
+        dailyWorkTitle: m.dailyWorkTitle.trim() || null,
       };
       const id = this.editId();
       const req =
@@ -575,6 +607,8 @@ export class QuestForgePage implements OnInit {
       titleReward: q.rewards?.title ?? '',
       totalXp: q.totalXp || 0,
       wealthAmount: centsToInput(q.wealthCents),
+      dailyWorkMinutes: q.dailyWorkMinutes ?? null,
+      dailyWorkTitle: q.dailyWorkTitle ?? '',
     });
     this.subtasks.set(
       q.subtasks.map((s) => ({
@@ -582,6 +616,7 @@ export class QuestForgePage implements OnInit {
         title: s.title,
         gatesJourney: Boolean(s.gatesJourney),
         deadline: s.deadline ?? null,
+        estimateMinutes: s.estimateMinutes ?? null,
       })),
     );
     this.skillReqs.set(
@@ -629,6 +664,7 @@ export class QuestForgePage implements OnInit {
         title: s.title,
         gatesJourney: false,
         deadline: null,
+        estimateMinutes: null,
       })),
     );
     this.skillWeights.set(work.skillWeights.map((w) => ({ ...w })));

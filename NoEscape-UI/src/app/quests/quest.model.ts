@@ -19,6 +19,7 @@ export interface QuestSubtaskView {
   completedDate: string | null;
   completionOrder: number | null;
   elapsedMs?: number;
+  estimateMinutes?: number | null;
 }
 
 export interface QuestMissedDay {
@@ -105,6 +106,10 @@ export interface QuestView {
   journeyNote: string | null;
   commitmentLevel: number;
   deadline: string | null;
+  /** Expected minutes for the main daily-work slice (e.g. "4h of subtask work today"). */
+  dailyWorkMinutes: number | null;
+  /** Label used when adding the daily-work slice to today's dailies. */
+  dailyWorkTitle: string | null;
   coverImage: string | null;
   coverUrl: string | null;
   skillSlug: string | null;
@@ -177,12 +182,15 @@ export interface CreateQuestPayload {
     title: string;
     gatesJourney?: boolean;
     deadline?: string | null;
+    estimateMinutes?: number | null;
   }>;
   rewards?: { title?: string };
   totalXp?: number;
   skillWeights?: { slug: string; weight: number }[];
   wealthCents?: number | null;
   scriptoriumWorkId?: number;
+  dailyWorkMinutes?: number | null;
+  dailyWorkTitle?: string | null;
 }
 
 export function questDeadline(q: {

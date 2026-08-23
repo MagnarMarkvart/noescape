@@ -14,6 +14,7 @@ import { ScriptoriumModule } from './scriptorium/scriptorium.module';
 import { SkillsModule } from './skills/skills.module';
 import { TabulariumModule } from './tabularium/tabularium.module';
 import { TimeModule } from './time/time.module';
+import { WorkIntervalsModule } from './work-intervals/work-intervals.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { TimeModule } from './time/time.module';
     ScriptoriumModule,
     ClocksModule,
     TabulariumModule,
+    WorkIntervalsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

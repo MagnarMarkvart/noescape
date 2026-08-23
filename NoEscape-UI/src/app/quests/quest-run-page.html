@@ -153,6 +153,9 @@
                   @if (t.gatesJourney) {
                     <em class="gate-flag">Gate</em>
                   }
+                  @if (t.estimateMinutes) {
+                    <span class="sub-meta">~{{ t.estimateMinutes }}m expected</span>
+                  }
                   @if (t.deadline) {
                     <span class="sub-meta due" [attr.data-tone]="dueTone(t.deadline)">
                       {{ dueLabel(t.deadline) }}
@@ -167,9 +170,45 @@
                     </span>
                   }
                 </app-rune-check>
+                @if (!t.completed && q.run?.status === 'ACTIVE') {
+                  <button
+                    type="button"
+                    class="ghost-btn add-today"
+                    [disabled]="addingToToday() === t.id"
+                    (click)="addToToday(t.id)"
+                  >
+                    {{ addingToToday() === t.id ? '…' : 'Add to today' }}
+                  </button>
+                }
+                @if (t.elapsedMs) {
+                  <app-work-interval-log [target]="{ questSubtaskId: t.id }" />
+                }
               </li>
             }
           </ul>
+        </div>
+      }
+
+      @if (q.dailyWorkMinutes || q.dailyWorkTitle) {
+        <div class="log-panel subtasks">
+          <h2>Daily work</h2>
+          <p class="hint">
+            {{ q.dailyWorkTitle || q.journeyLabel || q.name }}
+            @if (q.dailyWorkMinutes) {
+              · ~{{ q.dailyWorkMinutes }}m expected
+            }
+          </p>
+          @if (q.run?.status === 'ACTIVE') {
+            <button
+              type="button"
+              class="ghost-btn add-today"
+              [disabled]="addingToToday() === 'daily_work'"
+              (click)="addToToday(null)"
+            >
+              {{ addingToToday() === 'daily_work' ? '…' : 'Add to today' }}
+            </button>
+          }
+          <app-work-interval-log [target]="{ questId: q.id }" />
         </div>
       }
 

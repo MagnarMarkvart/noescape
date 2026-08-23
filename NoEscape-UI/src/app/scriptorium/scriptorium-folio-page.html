@@ -162,6 +162,9 @@
         <button type="button" class="ghost" (click)="openVigilia()">
           Open in Vigilia
         </button>
+        @if (vigiliaLogVisible()) {
+          <app-work-interval-log [target]="{ scriptoriumWorkId: current.id }" />
+        }
         @if (current.questId; as qid) {
           <a class="ghost" [routerLink]="['/quests', qid]">Open quest →</a>
         }

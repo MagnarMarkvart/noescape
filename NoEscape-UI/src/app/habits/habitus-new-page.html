@@ -23,6 +23,37 @@
     />
 
     <fieldset>
+      <legend>Group</legend>
+      <select
+        [value]="draft().groupId ?? 0"
+        (change)="setGroupId($any($event.target).value)"
+      >
+        <option [value]="0">The Cloister</option>
+        @for (g of groups(); track g.id) {
+          <option [value]="g.id">{{ g.name }}</option>
+        }
+      </select>
+      <div class="group-create">
+        <input
+          type="text"
+          maxlength="40"
+          placeholder="New group"
+          [value]="newGroupName()"
+          (input)="onNewGroupName($event)"
+        />
+        <button
+          type="button"
+          class="chip"
+          [disabled]="!newGroupName().trim()"
+          (click)="addGroup()"
+        >
+          Add
+        </button>
+      </div>
+      <p class="hint">Groups are made here. The catalog only shows them once they exist.</p>
+    </fieldset>
+
+    <fieldset>
       <legend>Variant</legend>
       <div class="chip-row">
         <button

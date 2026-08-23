@@ -171,6 +171,16 @@
           [value]="subtaskDeadlineDraft()"
           (valueChange)="setSubtaskDeadlineDraft($event)"
         />
+        <label class="minutes-field">
+          Est. min
+          <app-number-field
+            ariaLabel="Estimated minutes"
+            [min]="0"
+            [max]="1440"
+            [value]="subtaskEstimateDraft() ?? 0"
+            (valueChange)="setSubtaskEstimateDraft($event)"
+          />
+        </label>
         <button type="button" class="ghost-btn" (click)="addSubtask()">Add</button>
       </div>
       @if (subtasks().length) {
@@ -185,6 +195,16 @@
                 [value]="t.deadline ?? ''"
                 (valueChange)="setSubtaskDeadline($index, $event)"
               />
+              <label class="minutes-field">
+                Est. min
+                <app-number-field
+                  ariaLabel="Estimated minutes"
+                  [min]="0"
+                  [max]="1440"
+                  [value]="t.estimateMinutes ?? 0"
+                  (valueChange)="setSubtaskEstimate($index, $event)"
+                />
+              </label>
               <app-rune-check
                 label="Gate"
                 [checked]="t.gatesJourney"
@@ -195,6 +215,36 @@
           }
         </ol>
       }
+    </fieldset>
+
+    <fieldset>
+      <legend>Daily work slice (optional)</legend>
+      <p class="hint">
+        Expected time for the quest's main daily work — e.g. "4h of subtask
+        work today". Add it to a daily and Horologium can track it as both a
+        daily and a quest task.
+      </p>
+      <div class="inline-add">
+        <label class="grow">
+          Label on the daily
+          <input
+            type="text"
+            [value]="createModel().dailyWorkTitle"
+            (input)="setDailyWorkTitle($event)"
+            placeholder="Falls back to journey label / quest name"
+          />
+        </label>
+        <label class="minutes-field">
+          Minutes
+          <app-number-field
+            ariaLabel="Daily work minutes"
+            [min]="0"
+            [max]="1440"
+            [value]="createModel().dailyWorkMinutes ?? 0"
+            (valueChange)="setDailyWorkMinutes($event)"
+          />
+        </label>
+      </div>
     </fieldset>
 
     <fieldset>

@@ -49,6 +49,11 @@ export class DailiesController {
     return this.dailiesService.sealDay(body?.date);
   }
 
+  @Post('unseal')
+  unsealDay(@Body() body: { date?: string }) {
+    return this.dailiesService.unsealDay(body?.date);
+  }
+
   @Post('copy-incomplete')
   copyIncomplete(@Body() dto: CopyIncompleteDto) {
     return this.dailiesService.copyIncomplete(dto ?? {});
@@ -62,6 +67,20 @@ export class DailiesController {
   @Put('slots')
   upsertSlot(@Body() dto: UpsertDailyTaskDto) {
     return this.dailiesService.upsertSlot(dto);
+  }
+
+  @Post('from-quest')
+  fromQuest(
+    @Body()
+    body: {
+      date?: string;
+      questId: number;
+      questSubtaskId?: number | null;
+      importance?: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR';
+      slotIndex?: number;
+    },
+  ) {
+    return this.dailiesService.fromQuest(body);
   }
 
   @Get('templates')

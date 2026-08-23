@@ -195,6 +195,28 @@ export function habitusDemoRange(
   };
 }
 
+function isoDayDiff(from: string, to: string): number {
+  return Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      86_400_000,
+  );
+}
+
+function demoAssigned(habit: HabitView, date: string, today: string): boolean {
+  if (habit.kind === 'tally') {
+    return false;
+  }
+  const created = habit.createdAt.slice(0, 10);
+  if (date < created || date > today) {
+    return false;
+  }
+  if (habit.cadence !== 'EVERY_N_DAYS') {
+    return true;
+  }
+  const n = Math.max(1, habit.everyNDays || 1);
+  return isoDayDiff(created, date) % n === 0;
+}
+
 export function habitusDemoStats(input: {
   from?: string;
   to?: string;
@@ -242,6 +264,7 @@ export function habitusDemoStats(input: {
     row.points += n;
     byHabit.set(habitId, row);
   };
+  const doneDates = new Map<number, Set<string>>();
   for (const habit of rows) {
     const log = habitusDemoRange(habit.id, from, to);
     if (!log) {
@@ -254,6 +277,9 @@ export function habitusDemoStats(input: {
       if (habit.kind === 'tally') {
         bump(day.date, habit.id, 'clicks', day.count || 1);
       } else {
+        const set = doneDates.get(habit.id) ?? new Set<string>();
+        set.add(day.date);
+        doneDates.set(habit.id, set);
         bump(day.date, habit.id, 'completions', 1);
       }
     }
@@ -264,6 +290,13 @@ export function habitusDemoStats(input: {
     days.push({
       date: cursor,
       ...(dayMap.get(cursor) ?? { points: 0, completions: 0, clicks: 0 }),
+      marks: rows
+        .filter((h) => demoAssigned(h, cursor, today))
+        .map((h) => ({
+          id: h.id,
+          icon: h.icon,
+          done: doneDates.get(h.id)?.has(cursor) ?? false,
+        })),
     });
     cursor = isoOffset(cursor, 1);
   }

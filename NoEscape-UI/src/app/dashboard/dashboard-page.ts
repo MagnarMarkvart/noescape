@@ -96,6 +96,10 @@ export class DashboardPage implements OnInit {
     );
   });
 
+  protected readonly dailiesSealed = computed(
+    () => this.board()?.isSealed === true,
+  );
+
   protected readonly todayQuests = computed(() =>
     this.quests().filter((q) => q.availability === 'active'),
   );
@@ -333,7 +337,7 @@ export class DashboardPage implements OnInit {
   }
 
   protected completeDaily(slot: DailyTaskSlot): void {
-    if (!slot.id || slot.completed || this.busyDailyId()) {
+    if (!slot.id || slot.completed || this.busyDailyId() || this.dailiesSealed()) {
       return;
     }
     this.busyDailyId.set(slot.id);

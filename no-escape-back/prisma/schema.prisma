@@ -93,12 +93,22 @@ model DailyTask {
   /// Literal cash awarded on complete when Finance is among skill weights.
   wealthCents     Int       @default(0)
   wealthAwardedCents Int?
+  /// Quest this daily was added from. Null means it is not quest-linked.
+  questId         Int?
+  /// Active QuestRun at the time this daily was added.
+  questRunId      Int?
+  /// Set when bound to a specific subtask; null means the quest's daily-work slice.
+  questSubtaskId  Int?
+  /// subtask | daily_work
+  questBindKind   String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@unique([date, importance, slotIndex])
   @@index([date])
   @@index([habitId])
+  @@index([questId])
+  @@index([questSubtaskId])
 }
 
 /// Reusable daily presets — fill title, skill, effort, duration, optional habit.
@@ -159,6 +169,13 @@ model DailyLog {
   snapshotJson        String
   /// True after Carry Over copied leftover tasks off this sealed day.
   incompletesCarried  Boolean  @default(false)
+  /// Frozen 0–100 verdict at seal time. Empty verdict string means not scored yet.
+  score               Int      @default(0)
+  /// poor | average | strong | peak
+  grade               String   @default("poor")
+  assignedMinutes     Int      @default(0)
+  trackedCount        Int      @default(0)
+  verdict             String   @default("")
 }
 
 /// Recorded whenever a skill gains one or more levels.
@@ -242,10 +259,48 @@ model HorologiumWatch {
   archivedAt        DateTime?
   scriptoriumWorkId Int?
   scriptoriumWork   ScriptoriumWork? @relation(fields: [scriptoriumWorkId], references: [id], onDelete: SetNull)
+  /// custom | quest | quest_daily_work | daily | subtask | scriptorium
+  bindKind          String           @default("custom")
+  questId           Int?
+  questRunId        Int?
+  questSubtaskId    Int?
+  dailyTaskId       Int?
+  /// Set when this Vigilia is marked done from the dial. Never ends a quest.
+  completedAt       DateTime?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
   @@index([status])
+  @@index([scriptoriumWorkId])
+  @@index([questId])
+  @@index([questSubtaskId])
+  @@index([dailyTaskId])
+}
+
+/// Append-only projection log — every flushed slice of work time from a clock
+/// or Vigilia watch, with the target(s) it counts toward. Source of truth for
+/// "how much time was logged and when"; daily/subtask elapsedMs are running
+/// totals derived from these rows.
+model WorkInterval {
+  id                Int      @id @default(autoincrement())
+  /// sessio | track | vigilia
+  clockKind         String
+  watchId           Int?
+  dailyTaskId       Int?
+  questRunId        Int?
+  questSubtaskId    Int?
+  /// Set when the interval counts toward a quest's daily-work slice (no subtask).
+  questId           Int?
+  scriptoriumWorkId Int?
+  startedAt         DateTime
+  endedAt           DateTime
+  elapsedMs         Int
+  createdAt         DateTime @default(now())
+
+  @@index([dailyTaskId])
+  @@index([questSubtaskId])
+  @@index([questId])
+  @@index([watchId])
   @@index([scriptoriumWorkId])
 }
 
@@ -284,6 +339,12 @@ model Character {
   pomodoroAutoContinue Boolean @default(true)
   /// Consuetudo catalog: open scenery (true) or the Horologium dial (false)
   consuetudoStartInScenery Boolean @default(true)
+  /// Vigilia settings — which targets Horologium's count-up layer may track.
+  /// When all four are false, Vigilia is hidden from Horologium entirely.
+  vigiliaTrackQuests      Boolean @default(true)
+  vigiliaTrackDailies     Boolean @default(false)
+  vigiliaTrackScriptorium Boolean @default(false)
+  vigiliaTrackCustom      Boolean @default(false)
   /// Purse balance in minor units (cents). Default 0.
   wealthCents  Int      @default(0)
   /// EUR | USD | GBP
@@ -352,6 +413,10 @@ model Quest {
   sortOrder      Int        @default(0)
   /// Optional calendar due day (YYYY-MM-DD) for IRL projects.
   deadline       String?
+  /// Expected minutes for the main daily work slice (e.g. "4h of subtask work today"). Optional.
+  dailyWorkMinutes Int?
+  /// Label shown when adding the daily work slice to today's dailies. Falls back to journeyLabel / name.
+  dailyWorkTitle   String?
   createdAt      DateTime   @default(now())
   runs           QuestRun[]
   subtasks       QuestSubtask[]
@@ -371,6 +436,8 @@ model QuestSubtask {
   gatesJourney  Boolean                  @default(false)
   /// Optional calendar due day (YYYY-MM-DD) for this slice of the work.
   deadline      String?
+  /// Optional expected minutes for this subtask, copied onto dailies when added.
+  estimateMinutes Int?
   completions   QuestSubtaskCompletion[]
   habitLinks    HabitQuestLink[]
 

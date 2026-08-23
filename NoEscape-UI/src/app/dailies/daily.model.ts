@@ -43,6 +43,11 @@ export interface DailyTaskSlot {
   } | null;
   wealthCents?: number;
   wealthAwardedCents?: number | null;
+  questId?: number | null;
+  questRunId?: number | null;
+  questSubtaskId?: number | null;
+  /** subtask | daily_work */
+  questBindKind?: string | null;
 }
 
 export interface DailyTier {
@@ -79,6 +84,22 @@ export interface DailyBoard {
   incompleteInLastLog: number;
   isBaseFilled: boolean;
   canAddRegular: boolean;
+  verdict?: DailyVerdict;
+}
+
+export interface DailyVerdict {
+  score: number;
+  grade: 'poor' | 'average' | 'strong' | 'peak';
+  tone: 'bad' | 'warn' | 'ok';
+  label: string;
+  summary: string;
+  filledCount: number;
+  completedCount: number;
+  leftoverCount: number;
+  assignedMinutes: number;
+  trackedCount: number;
+  loadMet: boolean;
+  allDone: boolean;
 }
 
 export interface UpsertDailyTaskPayload {
@@ -142,11 +163,21 @@ export interface DailyLogSummary {
   completedCount: number;
   earnedXp: number;
   projectedXp: number;
+  assignedMinutes?: number;
+  trackedCount?: number;
+  score?: number;
+  grade?: DailyVerdict['grade'];
+  tone?: DailyVerdict['tone'];
+  verdict?: string;
+  summary?: string;
 }
 
 export interface DailyCalendarDay {
   date: string;
   status: 'sealed' | 'abandoned' | 'open';
+  grade?: DailyVerdict['grade'];
+  score?: number;
+  tone?: DailyVerdict['tone'];
 }
 
 export interface DailyLogDetail extends DailyLogSummary {
@@ -160,6 +191,7 @@ export interface DailyLogDetail extends DailyLogSummary {
       | 'activeLogDate'
       | 'isEditable'
       | 'readOnly'
+      | 'verdict'
     >;
     skillTree: SkillTree;
   };

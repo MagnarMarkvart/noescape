@@ -101,14 +101,27 @@ export class HorologiumController {
     return this.presetsService.remove(id);
   }
 
+  @Get('watches/allowed-kinds')
+  allowedWatchKinds() {
+    return this.watchesService
+      .allowedBindKinds()
+      .then((set) => ({ bindKinds: [...set] }));
+  }
+
   @Post('watches')
   createWatch(
-    @Body() body: { name?: string; scriptoriumWorkId?: number },
+    @Body()
+    body: {
+      name?: string;
+      scriptoriumWorkId?: number;
+      bindKind?: string;
+      questId?: number;
+      questRunId?: number;
+      questSubtaskId?: number;
+      dailyTaskId?: number;
+    },
   ) {
-    return this.watchesService.create(
-      body?.name ?? '',
-      body?.scriptoriumWorkId,
-    );
+    return this.watchesService.create(body ?? {});
   }
 
   @Patch('watches/:id')
@@ -123,6 +136,11 @@ export class HorologiumController {
     },
   ) {
     return this.watchesService.update(id, body);
+  }
+
+  @Post('watches/:id/complete')
+  completeWatch(@Param('id', ParseIntPipe) id: number) {
+    return this.watchesService.completeWatch(id);
   }
 
   @Post('watches/:id/archive')

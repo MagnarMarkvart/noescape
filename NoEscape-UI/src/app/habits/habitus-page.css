@@ -216,10 +216,20 @@
   color: var(--rs-muted);
 }
 
+.board-bar app-rune-check,
+.board-check {
+  width: auto;
+  flex: 0 0 auto;
+}
+
 .day {
-  min-height: 2.6rem;
-  display: grid;
-  place-content: center;
+  min-height: 3.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 0.12rem;
+  padding: 0.18rem;
   border: 1px solid rgba(138, 115, 64, 0.4);
   background: #1a1610;
   font-size: 0.78rem;
@@ -231,14 +241,54 @@
   background: transparent;
 }
 
-.day.hot {
+.day.full {
   border-color: #4a9a52;
-  background: rgba(47, 143, 58, 0.28);
+  background: rgba(47, 143, 58, 0.42);
+  color: var(--rs-text);
+}
+
+.day.mixed {
+  border-color: #c6a85a;
+  background: rgba(212, 168, 75, 0.4);
+  color: var(--rs-text);
+}
+
+.day.miss {
+  border-color: #c45c4a;
+  background: rgba(196, 92, 74, 0.42);
   color: var(--rs-text);
 }
 
 .day.today {
   border-color: var(--rs-accent);
+}
+
+.day .glyph {
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.day .dot {
+  display: none;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: #f0e6c8;
+}
+
+@media (max-width: 719px) {
+  .day {
+    min-height: 2.2rem;
+    padding: 0.12rem;
+  }
+
+  .day .glyph {
+    display: none;
+  }
+
+  .day .dot {
+    display: block;
+  }
 }
 
 .day em {
@@ -303,20 +353,6 @@
   gap: 0.65rem;
   align-items: center;
   margin-bottom: 0.75rem;
-}
-
-.toggle {
-  display: inline-flex;
-  gap: 0.35rem;
-  align-items: center;
-  font-size: 0.82rem;
-  color: var(--rs-muted);
-}
-
-.group-add {
-  display: flex;
-  gap: 0.35rem;
-  margin-left: auto;
 }
 
 .group-add input {

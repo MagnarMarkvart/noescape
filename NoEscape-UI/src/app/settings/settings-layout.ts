@@ -26,6 +26,9 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         <a routerLink="/settings/pomodoro" routerLinkActive="active">
           Pomodoro
         </a>
+        <a routerLink="/settings/vigilia" routerLinkActive="active">
+          Vigilia
+        </a>
       </nav>
       <router-outlet />
     </section>

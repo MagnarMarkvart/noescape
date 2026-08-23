@@ -485,6 +485,26 @@ button.ghost.icon {
   flex-wrap: wrap;
 }
 
+.quest-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.3rem 0 0;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--rs-border);
+  color: var(--rs-accent);
+  text-decoration: none;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quest-link-chip:hover {
+  border-color: var(--rs-border-bright);
+}
+
 .xp-badge {
   flex-shrink: 0;
   padding: 0.35rem 0.55rem;

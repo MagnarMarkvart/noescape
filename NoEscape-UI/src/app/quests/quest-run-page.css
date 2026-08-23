@@ -13,6 +13,8 @@
 
   display: block;
   min-height: 100dvh;
+  max-width: 100%;
+  overflow-x: hidden;
   color: var(--rs-text);
   font-family: var(--font-body);
   background:
@@ -25,7 +27,9 @@
 
 .run-shell {
   padding: 0.85rem 1rem 2rem;
-  max-width: 52rem;
+  width: min(52rem, 100%);
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .progress-block {
@@ -61,6 +65,11 @@
   margin-bottom: 1rem;
 }
 
+.run-head > div {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
 .kicker {
   margin: 0;
   font-size: 0.72rem;
@@ -74,6 +83,7 @@
   font-family: var(--font-display);
   font-size: clamp(1.6rem, 3vw, 2.2rem);
   color: var(--rs-accent);
+  overflow-wrap: anywhere;
 }
 
 .head-due {
@@ -96,8 +106,10 @@
 
 .head-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: end;
+  min-width: 0;
 }
 
 .ghost-btn {
@@ -130,11 +142,13 @@
 .run-grid {
   display: grid;
   gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
 }
 
 @media (min-width: 720px) {
   .run-grid {
-    grid-template-columns: 1fr 1.2fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   }
 
   .log-history {
@@ -145,6 +159,7 @@
 .streak-card,
 .log-panel,
 .log-history {
+  min-width: 0;
   padding: 1rem;
   border: 1px solid var(--rs-border);
   background: rgba(30, 24, 14, 0.72);
@@ -174,6 +189,7 @@
 .streak-num.journey-label {
   font-size: clamp(1.35rem, 3vw, 1.85rem);
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .best,
@@ -195,6 +211,7 @@
   margin: 0.45rem 0 0;
   color: var(--rs-muted);
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .log-actions {
@@ -206,6 +223,7 @@
 
 .primary,
 .danger {
+  max-width: 100%;
   font-family: var(--font-display);
   letter-spacing: 0.04em;
   padding: 0.6rem 0.95rem;
@@ -213,6 +231,7 @@
   background: rgba(212, 168, 75, 0.14);
   color: var(--rs-text);
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .danger {
@@ -258,9 +277,13 @@
 
 .sub-meta {
   display: block;
+  width: 100%;
+  max-width: 100%;
   margin-top: 0.15rem;
   font-size: 0.75rem;
   color: var(--rs-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .missed-head {
@@ -270,8 +293,17 @@
 }
 
 .chronicle .when {
-  min-width: 11.5rem;
+  min-width: 0;
+  flex: 1 1 8rem;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 720px) {
+  .chronicle .when {
+    flex: 0 0 11.5rem;
+    min-width: 11.5rem;
+  }
 }
 
 .log-history li.missed strong,
@@ -314,6 +346,25 @@
   display: flex;
   gap: 0.5rem;
   align-items: start;
+  min-width: 0;
+}
+
+.subtask-checks app-rune-check {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.add-today {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.subtask-checks li app-work-interval-log {
+  flex: 1 1 100%;
+  margin-top: 0.2rem;
 }
 
 .open-tag {
@@ -363,12 +414,19 @@
 
 .log-history li {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   align-items: baseline;
+  min-width: 0;
   padding: 0.4rem 0.5rem;
   border-bottom: 1px solid rgba(138, 115, 64, 0.35);
   color: var(--rs-muted);
   font-size: 0.9rem;
+}
+
+.log-history li > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .log-history li.clean strong {

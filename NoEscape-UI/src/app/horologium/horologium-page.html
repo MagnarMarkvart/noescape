@@ -407,14 +407,16 @@
           >
             Track
           </button>
-          <button
-            type="button"
-            class="ghost chip"
-            [class.selected]="isVigilia()"
-            (click)="setSetupKind('vigilia')"
-          >
-            Vigilia
-          </button>
+          @if (showVigiliaMode()) {
+            <button
+              type="button"
+              class="ghost chip"
+              [class.selected]="isVigilia()"
+              (click)="setSetupKind('vigilia')"
+            >
+              Vigilia
+            </button>
+          }
           @if (showConsuetudoMode()) {
             <button
               type="button"
@@ -564,77 +566,130 @@
         </fieldset>
         }
 
-        @if (isVigilia()) {
-        <fieldset class="task-bind" [disabled]="!canEdit()">
-          <legend>Vigilia</legend>
-          <select
-            [value]="selectedWatchId() ?? ''"
-            (change)="selectWatch($any($event.target).value)"
-          >
-            <option value="">None</option>
-            @for (w of projectWatches(); track w.id) {
-              <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
+        @if (showVigiliaMode()) {
+          @if (isVigilia()) {
+          <fieldset class="task-bind" [disabled]="!canEdit()">
+            <legend>Vigilia</legend>
+            <select
+              [value]="selectedWatchId() ?? ''"
+              (change)="selectWatch($any($event.target).value)"
+            >
+              <option value="">None</option>
+              @for (w of projectWatches(); track w.id) {
+                <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
+              }
+            </select>
+            @if (scriptoriumWorks().length) {
+              <label class="scriptorium-bind">
+                From Scriptorium
+                <select (change)="bindScriptoriumWork($any($event.target).value)">
+                  <option value="">Choose a work…</option>
+                  @for (w of scriptoriumWorks(); track w.id) {
+                    <option [value]="w.id">{{ w.icon || '📜' }} {{ w.title }}</option>
+                  }
+                </select>
+              </label>
             }
-          </select>
-          @if (scriptoriumWorks().length) {
-            <label class="scriptorium-bind">
-              From Scriptorium
-              <select (change)="bindScriptoriumWork($any($event.target).value)">
-                <option value="">Choose a work…</option>
-                @for (w of scriptoriumWorks(); track w.id) {
-                  <option [value]="w.id">{{ w.icon || '📜' }} {{ w.title }}</option>
+            @if (vigiliaCustomAllowed()) {
+              <form class="watch-create" (submit)="$event.preventDefault(); createWatch()">
+                <input
+                  type="text"
+                  maxlength="80"
+                  [value]="watchDraftName()"
+                  (input)="setWatchDraftName($any($event.target).value)"
+                  placeholder="New project"
+                />
+                <button type="submit" class="ghost chip" [disabled]="!watchDraftName().trim()">
+                  Create
+                </button>
+              </form>
+            }
+            @if (selectedWatch(); as watch) {
+              <div class="watch-actions">
+                @if (canFinishWatch(watch)) {
+                  <button type="button" class="ghost chip" (click)="completeWatch(watch.id)">
+                    Done
+                  </button>
+                } @else {
+                  <span class="muted">Whole-quest — finish it from the quest briefing.</span>
                 }
-              </select>
-            </label>
-          }
-          <form class="watch-create" (submit)="$event.preventDefault(); createWatch()">
-            <input
-              type="text"
-              maxlength="80"
-              [value]="watchDraftName()"
-              (input)="setWatchDraftName($any($event.target).value)"
-              placeholder="New project"
-            />
-            <button type="submit" class="ghost chip" [disabled]="!watchDraftName().trim()">
-              Create
-            </button>
-          </form>
-          @if (selectedWatch(); as watch) {
-            <div class="watch-actions">
-              <button type="button" class="ghost chip" (click)="archiveWatch(watch.id)">
-                Archive
-              </button>
-            </div>
-            <p class="muted">{{ watchHint() }}</p>
-          }
-          <a routerLink="/scriptorium" class="preset-manage">Scriptorium →</a>
-        </fieldset>
-        } @else if (!isConsuetudo() && projectWatches().length > 0) {
-        <fieldset class="task-bind" [disabled]="!canEdit()">
-          <legend>Vigilia</legend>
-          <select
-            [value]="selectedWatchId() ?? ''"
-            (change)="selectWatch($any($event.target).value)"
-          >
-            <option value="">None</option>
-            @for (w of projectWatches(); track w.id) {
-              <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
+                <button type="button" class="ghost chip" (click)="archiveWatch(watch.id)">
+                  Archive
+                </button>
+              </div>
+              <p class="muted">{{ watchHint() }}</p>
+              <app-work-interval-log [target]="{ watchId: watch.id }" />
             }
-          </select>
-          @if (selectedWatch(); as watch) {
-            <div class="watch-actions">
-              <button
-                type="button"
-                class="ghost chip"
-                [class.selected]="watchWidgetVisible()"
-                (click)="toggleWatchWidget()"
-              >
-                {{ watchWidgetVisible() ? 'Widget on' : 'Widget off' }}
-              </button>
-            </div>
-            <p class="muted">{{ watchHint() }}</p>
+            <a routerLink="/scriptorium" class="preset-manage">Scriptorium →</a>
+          </fieldset>
+          } @else if (!isConsuetudo() && projectWatches().length > 0) {
+          <fieldset class="task-bind" [disabled]="!canEdit()">
+            <legend>Vigilia</legend>
+            <select
+              [value]="selectedWatchId() ?? ''"
+              (change)="selectWatch($any($event.target).value)"
+            >
+              <option value="">None</option>
+              @for (w of projectWatches(); track w.id) {
+                <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
+              }
+            </select>
+            @if (selectedWatch(); as watch) {
+              <div class="watch-actions">
+                @if (canFinishWatch(watch)) {
+                  <button type="button" class="ghost chip" (click)="completeWatch(watch.id)">
+                    Done
+                  </button>
+                }
+                <button
+                  type="button"
+                  class="ghost chip"
+                  [class.selected]="watchWidgetVisible()"
+                  (click)="toggleWatchWidget()"
+                >
+                  {{ watchWidgetVisible() ? 'Widget on' : 'Widget off' }}
+                </button>
+              </div>
+              <p class="muted">{{ watchHint() }}</p>
+              <app-work-interval-log [target]="{ watchId: watch.id }" />
+            }
+
+            @if (attachableWatches().length > 0) {
+              <div class="extra-vigilias">
+                <p class="muted">Attach more Vigilias to this sessio (e.g. the whole quest, or its daily slice):</p>
+                <select (change)="toggleExtraWatch($any($event.target).value)">
+                  <option value="">+ Attach a Vigilia…</option>
+                  @for (w of attachableWatches(); track w.id) {
+                    @if (!isExtraWatch(w.id)) {
+                      <option [value]="w.id">{{ w.name }}</option>
+                    }
+                  }
+                </select>
+                @if (extraWatches().length > 0) {
+                  <ul class="extra-watch-list">
+                    @for (w of extraWatches(); track w.id) {
+                      <li>
+                        <span class="extra-watch-name">{{ w.name }}</span>
+                        <span class="extra-watch-elapsed">{{ extraWatchElapsed(w) }}</span>
+                        @if (canFinishWatch(w)) {
+                          <button type="button" class="ghost chip" (click)="completeWatch(w.id)">
+                            Done
+                          </button>
+                        } @else {
+                          <span class="muted small">quest — no finish here</span>
+                        }
+                        <button type="button" class="ghost chip" (click)="detachExtraWatch(w.id)">
+                          Detach
+                        </button>
+                        <app-work-interval-log [target]="{ watchId: w.id }" />
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+          </fieldset>
           }
-        </fieldset>
         }
       </section>
 

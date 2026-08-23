@@ -53,7 +53,13 @@ export class QuestsController {
       questReqs?: string[];
       subtasks?: Array<
         | string
-        | { id?: number; title: string; gatesJourney?: boolean; deadline?: string | null }
+        | {
+            id?: number;
+            title: string;
+            gatesJourney?: boolean;
+            deadline?: string | null;
+            estimateMinutes?: number | null;
+          }
       >;
       rewards?: {
         title?: string;
@@ -65,6 +71,8 @@ export class QuestsController {
       completionBonus?: Record<string, number>;
       wealthCents?: number | null;
       scriptoriumWorkId?: number;
+      dailyWorkMinutes?: number | null;
+      dailyWorkTitle?: string | null;
     },
   ) {
     return this.questsService.create(body);
@@ -93,7 +101,13 @@ export class QuestsController {
       questReqs?: string[];
       subtasks?: Array<
         | string
-        | { id?: number; title: string; gatesJourney?: boolean; deadline?: string | null }
+        | {
+            id?: number;
+            title: string;
+            gatesJourney?: boolean;
+            deadline?: string | null;
+            estimateMinutes?: number | null;
+          }
       >;
       rewards?: {
         title?: string;
@@ -103,6 +117,8 @@ export class QuestsController {
       totalXp?: number;
       skillWeights?: { slug: string; weight: number }[];
       wealthCents?: number | null;
+      dailyWorkMinutes?: number | null;
+      dailyWorkTitle?: string | null;
     },
   ) {
     return this.questsService.update(id, body);

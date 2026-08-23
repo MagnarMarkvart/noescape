@@ -61,6 +61,13 @@ export class HorologiumWatchService {
   readonly soloRunning = signal(false);
   /** Small project clock during a pomodoro. Default on. */
   readonly widgetVisible = signal(loadWidgetVisible());
+  /**
+   * Extra Vigilias riding alongside the primary selected watch — e.g. a
+   * whole-quest watch plus its daily-work slice under the same sessio. They
+   * cascade with the main timer's work/rest phase exactly like the primary,
+   * but never run "solo" without a sessio and are never widgeted.
+   */
+  readonly extraIds = signal<Set<number>>(new Set());
 
   private localBaseMs = 0;
   private localStartedAt: number | null = null;
@@ -116,6 +123,21 @@ export class HorologiumWatchService {
     return 'Counts while this watch is running.';
   });
 
+  /** Watches attachable as extra Vigilias: active, not the primary pick, not already closed. */
+  readonly attachableWatches = computed(() =>
+    this.watches().filter(
+      (w) => w.id !== this.selectedId() && w.status === 'ACTIVE' && !w.completedAt,
+    ),
+  );
+
+  readonly extraWatches = computed(() => {
+    const ids = this.extraIds();
+    if (ids.size === 0) {
+      return [];
+    }
+    return this.watches().filter((w) => ids.has(w.id));
+  });
+
   constructor() {
     this.reload();
     this.bindPageLifecycle();
@@ -127,6 +149,99 @@ export class HorologiumWatchService {
     });
     effect(() => {
       this.timer.linkedWatchName.set(this.selected()?.name ?? null);
+    });
+    effect(() => {
+      const wantExtras = this.timer.phase() === 'work' && this.timer.running();
+      const ids = Array.from(this.extraIds());
+      const watches = this.watches();
+      queueMicrotask(() => this.reconcileExtras(wantExtras, ids, watches));
+    });
+    effect(() => {
+      if (this.timer.phase() === 'idle' && this.extraIds().size > 0) {
+        queueMicrotask(() => this.extraIds.set(new Set()));
+      }
+    });
+  }
+
+  isExtra(id: number): boolean {
+    return this.extraIds().has(id);
+  }
+
+  /** Attach an extra Vigilia to ride alongside the current sessio. Starts it right away if the main timer is mid-work. */
+  attachExtra(id: number): void {
+    if (id === this.selectedId() || this.extraIds().has(id)) {
+      return;
+    }
+    this.extraIds.update((set) => new Set(set).add(id));
+    if (this.timer.phase() === 'work' && this.timer.running()) {
+      this.startExtra(id);
+    }
+  }
+
+  detachExtra(id: number): void {
+    if (!this.extraIds().has(id)) {
+      return;
+    }
+    const watch = this.watches().find((w) => w.id === id);
+    this.extraIds.update((set) => {
+      const next = new Set(set);
+      next.delete(id);
+      return next;
+    });
+    if (watch?.running) {
+      this.pauseExtra(id);
+    }
+  }
+
+  toggleExtra(id: number): void {
+    if (this.isExtra(id)) {
+      this.detachExtra(id);
+    } else {
+      this.attachExtra(id);
+    }
+  }
+
+  /** Mark an extra Vigilia done from the dial. Never allowed for whole-quest binds. */
+  completeExtra(id: number): void {
+    const watch = this.watches().find((w) => w.id === id);
+    if (!watch || watch.bindKind === 'quest') {
+      return;
+    }
+    this.api.completeWatch(id).subscribe({
+      next: (row) => {
+        this.watches.update((list) => list.map((w) => (w.id === id ? row : w)));
+        this.detachExtra(id);
+      },
+    });
+  }
+
+  private reconcileExtras(
+    want: boolean,
+    ids: number[],
+    watches: HorologiumWatchRecord[],
+  ): void {
+    for (const id of ids) {
+      const watch = watches.find((w) => w.id === id);
+      if (!watch) {
+        continue;
+      }
+      if (want && !watch.running) {
+        this.startExtra(id);
+      } else if (!want && watch.running) {
+        this.pauseExtra(id);
+      }
+    }
+  }
+
+  private startExtra(id: number): void {
+    this.clockApi.startVigilia(id).subscribe({
+      next: (snap) => this.applyClockSnapshot(snap),
+    });
+  }
+
+  private pauseExtra(id: number): void {
+    this.clockApi.pauseVigilia(id).subscribe({
+      next: (snap) => this.applyClockSnapshot(snap),
     });
   }
 

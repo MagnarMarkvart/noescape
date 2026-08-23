@@ -13,6 +13,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { SkillsService } from '../skills/skills.service';
 import { TimeService } from '../time/time.service';
+import { WorkIntervalsService } from '../work-intervals/work-intervals.service';
 import {
   QUEST_WEIGHT_TOTAL,
   QuestSkillShare,
@@ -35,6 +36,7 @@ type SubtaskInput = {
   title: string;
   gatesJourney?: boolean;
   deadline?: string | null;
+  estimateMinutes?: number | string | null;
 };
 
 type CreateQuestInput = {
@@ -66,6 +68,9 @@ type CreateQuestInput = {
   completionBonus?: Record<string, number>;
   wealthCents?: number | null;
   scriptoriumWorkId?: number;
+  /// Expected minutes for the main daily-work slice. Optional.
+  dailyWorkMinutes?: number | null;
+  dailyWorkTitle?: string | null;
 };
 
 const MAX_COVER_BYTES = 4 * 1024 * 1024;
@@ -83,6 +88,7 @@ export class QuestsService {
     private readonly skillsService: SkillsService,
     private readonly characterService: CharacterService,
     private readonly time: TimeService,
+    private readonly workIntervals: WorkIntervalsService,
   ) {}
 
   async list(filter: string = 'all') {
@@ -267,6 +273,10 @@ export class QuestsService {
           : null,
         createdByUser: true,
         sortOrder: 100,
+        dailyWorkMinutes: this.normalizeEstimateMinutes(
+          input.dailyWorkMinutes,
+        ),
+        dailyWorkTitle: input.dailyWorkTitle?.trim() || null,
         subtasks: subtasks.length
           ? {
               create: subtasks.map((row, i) => ({
@@ -274,6 +284,7 @@ export class QuestsService {
                 sortOrder: i,
                 gatesJourney: row.gatesJourney,
                 deadline: row.deadline,
+                estimateMinutes: row.estimateMinutes,
               })),
             }
           : undefined,
@@ -408,6 +419,14 @@ export class QuestsService {
               completionBonus,
             })
           : quest.xpPlanJson,
+        dailyWorkMinutes:
+          input.dailyWorkMinutes !== undefined
+            ? this.normalizeEstimateMinutes(input.dailyWorkMinutes)
+            : quest.dailyWorkMinutes,
+        dailyWorkTitle:
+          input.dailyWorkTitle !== undefined
+            ? input.dailyWorkTitle?.trim() || null
+            : quest.dailyWorkTitle,
       },
     });
 
@@ -430,6 +449,7 @@ export class QuestsService {
               sortOrder: i,
               gatesJourney: row.gatesJourney,
               deadline: row.deadline,
+              estimateMinutes: row.estimateMinutes,
             },
           });
         } else {
@@ -440,6 +460,7 @@ export class QuestsService {
               sortOrder: i,
               gatesJourney: row.gatesJourney,
               deadline: row.deadline,
+              estimateMinutes: row.estimateMinutes,
             },
           });
         }
@@ -831,6 +852,12 @@ export class QuestsService {
     return this.getOne(run.questId);
   }
 
+  /**
+   * Absolute elapsed patch from Horologium's task clock bound directly to a
+   * subtask. Records the delta as an append-only WorkInterval and, when
+   * today's board already carries this subtask as a daily, projects the
+   * same delta onto that DailyTask.elapsedMs so both logs agree.
+   */
   async addSubtaskElapsed(runId: number, subtaskId: number, elapsedMs: number) {
     const run = await this.requireActiveRun(runId);
     const subtask = await this.prisma.questSubtask.findFirst({
@@ -839,7 +866,12 @@ export class QuestsService {
     if (!subtask) {
       throw new NotFoundException(`Subtask #${subtaskId} not found`);
     }
+    const existing = await this.prisma.questSubtaskCompletion.findUnique({
+      where: { runId_subtaskId: { runId, subtaskId } },
+    });
     const ms = Math.max(0, Math.round(Number(elapsedMs) || 0));
+    const previousMs = Number(existing?.elapsedMs ?? 0);
+    const delta = ms - previousMs;
     const row = await this.prisma.questSubtaskCompletion.upsert({
       where: { runId_subtaskId: { runId, subtaskId } },
       create: {
@@ -850,6 +882,26 @@ export class QuestsService {
       },
       update: { elapsedMs: BigInt(ms) },
     });
+    if (delta > 0) {
+      await this.workIntervals.recordFlush('track', delta, new Date(), {
+        questId: run.questId,
+        questRunId: runId,
+        questSubtaskId: subtaskId,
+      });
+      const linkedDaily = await this.prisma.dailyTask.findFirst({
+        where: {
+          date: this.time.today(),
+          questRunId: runId,
+          questSubtaskId: subtaskId,
+        },
+      });
+      if (linkedDaily) {
+        await this.prisma.dailyTask.update({
+          where: { id: linkedDaily.id },
+          data: { elapsedMs: { increment: BigInt(delta) } },
+        });
+      }
+    }
     return {
       runId,
       subtaskId,
@@ -1093,12 +1145,15 @@ export class QuestsService {
       createdByUser: boolean;
       sortOrder: number;
       createdAt: Date;
+      dailyWorkMinutes?: number | null;
+      dailyWorkTitle?: string | null;
       subtasks?: Array<{
         id: number;
         title: string;
         sortOrder: number;
         gatesJourney?: boolean;
         deadline?: string | null;
+        estimateMinutes?: number | null;
       }>;
       runs: Array<{
         id: number;
@@ -1218,6 +1273,7 @@ export class QuestsService {
         completedDate: stamp?.date ?? null,
         completionOrder: completionOrder.get(s.id) ?? null,
         elapsedMs,
+        estimateMinutes: s.estimateMinutes ?? null,
       };
     });
     const gateSubtasks = subtasks.filter((s) => s.gatesJourney);
@@ -1306,6 +1362,8 @@ export class QuestsService {
       journeyNote: quest.journeyNote ?? null,
       commitmentLevel,
       deadline: quest.deadline ?? null,
+      dailyWorkMinutes: quest.dailyWorkMinutes ?? null,
+      dailyWorkTitle: quest.dailyWorkTitle ?? null,
       coverImage: quest.coverImage,
       coverUrl: this.coverUrl(quest.coverImage),
       skillSlug: quest.skillSlug,
@@ -1441,20 +1499,40 @@ export class QuestsService {
     title: string;
     gatesJourney: boolean;
     deadline: string | null;
+    estimateMinutes: number | null;
   }> {
     return (raw ?? [])
       .map((row) =>
         typeof row === 'string'
-          ? { title: row.trim(), gatesJourney: false, deadline: null }
+          ? {
+              title: row.trim(),
+              gatesJourney: false,
+              deadline: null,
+              estimateMinutes: null,
+            }
           : {
               id: row.id,
               title: String(row.title || '').trim(),
               gatesJourney: Boolean(row.gatesJourney),
               deadline: this.parseDeadline(row.deadline),
+              estimateMinutes: this.normalizeEstimateMinutes(
+                row.estimateMinutes,
+              ),
             },
       )
       .filter((row) => row.title)
       .slice(0, 24);
+  }
+
+  private normalizeEstimateMinutes(raw?: unknown): number | null {
+    if (raw == null || raw === '') {
+      return null;
+    }
+    const minutes = Math.round(Number(raw));
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      return null;
+    }
+    return Math.min(24 * 60, minutes);
   }
 
   private parseDeadline(raw?: string | null): string | null {

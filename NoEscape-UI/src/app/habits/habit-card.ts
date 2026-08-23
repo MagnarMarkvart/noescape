@@ -16,7 +16,7 @@ import { HabitView } from './habits.service';
       class="card"
       [class.compact]="compact()"
       [class.tally]="habit().kind === 'tally'"
-      [class.done]="habit().successfulToday"
+      [class.done]="habit().kind === 'check' && habit().successfulToday"
       [class.dragging]="draggable()"
       [attr.draggable]="draggable() ? 'true' : null"
       [attr.data-tone]="habit().kind === 'tally' ? habit().tone : null"

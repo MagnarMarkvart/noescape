@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { CharacterService } from '../character/character.service';
 import { DURATION_PRESETS } from '../dailies/daily.model';
 import { RuneCheck } from '../shared/rune-check';
 import { SkillWeightList } from '../shared/skill-weight-list';
@@ -35,6 +36,7 @@ import {
   ScriptoriumWorkView,
 } from './scriptorium.model';
 import { ScriptoriumService } from './scriptorium.service';
+import { WorkIntervalLog } from '../shared/work-interval-log';
 
 @Component({
   selector: 'app-scriptorium-folio-page',
@@ -48,6 +50,7 @@ import { ScriptoriumService } from './scriptorium.service';
     ForgeShell,
     IconPicker,
     SkillTreePicker,
+    WorkIntervalLog,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './scriptorium-folio-page.html',
@@ -56,8 +59,10 @@ import { ScriptoriumService } from './scriptorium.service';
 export class ScriptoriumFolioPage implements OnInit {
   private readonly api = inject(ScriptoriumService);
   private readonly skillsService = inject(SkillsService);
+  private readonly character = inject(CharacterService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  protected readonly vigiliaLogVisible = this.character.vigiliaTrackScriptorium;
   private readonly location = inject(Location);
   private readonly timed = new TimedToast();
 

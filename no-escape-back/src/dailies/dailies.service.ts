@@ -27,6 +27,8 @@ import {
   type QuestSkillWeight,
 } from '../xp/quest-xp.util';
 import { boostsWealth, parseRewardCents } from '../wealth/money.util';
+import { WorkIntervalsService } from '../work-intervals/work-intervals.service';
+import { scoreDailyTasks, toneFromGrade, type DayGrade, type DayScore } from './day-score.util';
 import { CopyIncompleteDto } from './dto/copy-incomplete.dto';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
 
@@ -72,6 +74,10 @@ type EnrichedTask = {
   }>;
   wealthCents: number;
   wealthAwardedCents: number | null;
+  questId: number | null;
+  questRunId: number | null;
+  questSubtaskId: number | null;
+  questBindKind: string | null;
 };
 
 type BoardSnapshot = {
@@ -108,6 +114,7 @@ export class DailiesService {
     private readonly habitsService: HabitsService,
     private readonly characterService: CharacterService,
     private readonly time: TimeService,
+    private readonly workIntervals: WorkIntervalsService,
   ) {}
 
   async getBoard(date?: string) {
@@ -145,7 +152,7 @@ export class DailiesService {
     }
 
     const activeLogDate = await this.resolveActiveLogDate(today);
-    const isEditable = true;
+    const isEditable = !sealed;
 
     return {
       ...board,
@@ -165,6 +172,9 @@ export class DailiesService {
         isEditable &&
         (board.tiers.find((t) => t.importance === 'REGULAR')?.capacity ?? 0) <
           DAILY_SLOT_MAXIMUMS.REGULAR,
+      verdict: sealed
+        ? this.verdictFromLog(sealed)
+        : this.scoreBoard(board),
     };
   }
 
@@ -173,15 +183,25 @@ export class DailiesService {
       orderBy: { date: 'desc' },
       take: 60,
     });
-    return logs.map((log) => ({
-      id: log.id,
-      date: log.date,
-      sealedAt: log.sealedAt,
-      filledCount: log.filledCount,
-      completedCount: log.completedCount,
-      earnedXp: log.earnedXp,
-      projectedXp: log.projectedXp,
-    }));
+    return logs.map((log) => {
+      const verdict = this.verdictFromLog(log);
+      return {
+        id: log.id,
+        date: log.date,
+        sealedAt: log.sealedAt,
+        filledCount: log.filledCount,
+        completedCount: log.completedCount,
+        earnedXp: log.earnedXp,
+        projectedXp: log.projectedXp,
+        assignedMinutes: verdict.assignedMinutes,
+        trackedCount: verdict.trackedCount,
+        score: verdict.score,
+        grade: verdict.grade,
+        tone: verdict.tone,
+        verdict: verdict.label,
+        summary: verdict.summary,
+      };
+    });
   }
 
   async getLog(date: string) {
@@ -190,6 +210,7 @@ export class DailiesService {
     if (!log) {
       throw new NotFoundException(`No daily log for ${day}`);
     }
+    const verdict = this.verdictFromLog(log);
     return {
       id: log.id,
       date: log.date,
@@ -198,6 +219,13 @@ export class DailiesService {
       completedCount: log.completedCount,
       earnedXp: log.earnedXp,
       projectedXp: log.projectedXp,
+      assignedMinutes: verdict.assignedMinutes,
+      trackedCount: verdict.trackedCount,
+      score: verdict.score,
+      grade: verdict.grade,
+      tone: verdict.tone,
+      verdict: verdict.label,
+      summary: verdict.summary,
       snapshot: this.parseSnapshot(log.snapshotJson),
     };
   }
@@ -205,6 +233,16 @@ export class DailiesService {
   async sealDay(date?: string) {
     const day = this.normalizeDate(date);
     return this.sealDate(day, true);
+  }
+
+  async unsealDay(date?: string) {
+    const day = this.normalizeDate(date);
+    const log = await this.prisma.dailyLog.findUnique({ where: { date: day } });
+    if (!log) {
+      throw new NotFoundException(`No sealed daily log for ${day}`);
+    }
+    await this.prisma.dailyLog.delete({ where: { date: day } });
+    return this.getBoard(day);
   }
 
   async copyIncomplete(dto: CopyIncompleteDto) {
@@ -328,6 +366,12 @@ export class DailiesService {
           filledCount: true,
           completedCount: true,
           incompletesCarried: true,
+          score: true,
+          grade: true,
+          verdict: true,
+          assignedMinutes: true,
+          trackedCount: true,
+          snapshotJson: true,
         },
       }),
       this.prisma.dailyTask.findMany({
@@ -347,6 +391,9 @@ export class DailiesService {
     const days: Array<{
       date: string;
       status: 'sealed' | 'abandoned' | 'open';
+      grade?: DayGrade;
+      score?: number;
+      tone?: DayScore['tone'];
     }> = [];
 
     for (const date of dates) {
@@ -354,7 +401,14 @@ export class DailiesService {
       if (log) {
         const leftover =
           log.completedCount < log.filledCount && !log.incompletesCarried;
-        days.push({ date, status: leftover ? 'abandoned' : 'sealed' });
+        const verdict = this.verdictFromLog(log);
+        days.push({
+          date,
+          status: leftover ? 'abandoned' : 'sealed',
+          grade: verdict.grade,
+          score: verdict.score,
+          tone: verdict.tone,
+        });
         continue;
       }
       if (date < today) {
@@ -437,6 +491,152 @@ export class DailiesService {
     });
 
     return this.enrichTask(task);
+  }
+
+  /**
+   * Add a quest subtask (or the quest's daily-work slice when
+   * questSubtaskId is omitted) to today's board. Copies title, skill
+   * weights, and expected duration from the quest so the daily needs no
+   * further setup, and flags it quest-linked so Horologium can track it as
+   * both a daily and a quest task.
+   */
+  async fromQuest(input: {
+    date?: string;
+    questId: number;
+    questSubtaskId?: number | null;
+    importance?: TaskImportance;
+    slotIndex?: number;
+  }) {
+    const day = this.normalizeDate(input.date);
+    await this.assertMutableDay(day);
+
+    const questId = Math.round(Number(input.questId));
+    if (!Number.isFinite(questId) || questId < 1) {
+      throw new BadRequestException('questId is required');
+    }
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) {
+      throw new NotFoundException(`Quest #${questId} not found`);
+    }
+    const run = await this.prisma.questRun.findFirst({
+      where: { questId, status: 'ACTIVE' },
+    });
+    if (!run) {
+      throw new BadRequestException('Quest is not active');
+    }
+
+    let subtask: {
+      id: number;
+      title: string;
+      estimateMinutes: number | null;
+    } | null = null;
+    if (input.questSubtaskId != null) {
+      const subtaskId = Math.round(Number(input.questSubtaskId));
+      subtask = await this.prisma.questSubtask.findFirst({
+        where: { id: subtaskId, questId },
+        select: { id: true, title: true, estimateMinutes: true },
+      });
+      if (!subtask) {
+        throw new NotFoundException(
+          `Subtask #${subtaskId} not found on this quest`,
+        );
+      }
+    }
+
+    const bindKind = subtask ? 'subtask' : 'daily_work';
+    const existing = await this.prisma.dailyTask.findFirst({
+      where: {
+        date: day,
+        questId,
+        questBindKind: bindKind,
+        questSubtaskId: subtask ? subtask.id : null,
+      },
+    });
+    if (existing) {
+      return this.getBoard(day);
+    }
+
+    const title = (
+      subtask?.title ||
+      quest.dailyWorkTitle ||
+      quest.journeyLabel ||
+      quest.name
+    ).trim();
+    const weights =
+      this.parseJson<QuestSkillWeight[]>(quest.skillWeightsJson) ?? [];
+    const plan = await this.resolveSkillPlan({ skillWeights: weights });
+    const durationMinutes = this.assertDuration(
+      subtask?.estimateMinutes ?? quest.dailyWorkMinutes ?? 45,
+    );
+
+    const target = await this.resolveTargetSlot(
+      day,
+      input.importance,
+      input.slotIndex,
+    );
+
+    await this.prisma.dailyTask.create({
+      data: {
+        date: day,
+        importance: target.importance,
+        slotIndex: target.slotIndex,
+        title,
+        skillId: plan.skillId,
+        skillWeightsJson: JSON.stringify(plan.weights),
+        effortLevel: 5,
+        durationMinutes,
+        wealthCents: boostsWealth(plan.weights) ? quest.wealthCents ?? 0 : 0,
+        questId,
+        questRunId: run.id,
+        questSubtaskId: subtask?.id ?? null,
+        questBindKind: bindKind,
+      },
+    });
+
+    return this.getBoard(day);
+  }
+
+  private async resolveTargetSlot(
+    day: string,
+    importance?: TaskImportance,
+    slotIndex?: number,
+  ): Promise<{ importance: TaskImportance; slotIndex: number }> {
+    if (importance != null && Number.isInteger(slotIndex)) {
+      this.assertImportance(importance);
+      this.assertSlotIndex(importance, slotIndex as number);
+      const existing = await this.prisma.dailyTask.findUnique({
+        where: {
+          date_importance_slotIndex: {
+            date: day,
+            importance,
+            slotIndex: slotIndex as number,
+          },
+        },
+      });
+      if (existing?.title?.trim()) {
+        throw new BadRequestException('That slot is already filled');
+      }
+      return { importance, slotIndex: slotIndex as number };
+    }
+    const regularTasks = await this.prisma.dailyTask.findMany({
+      where: { date: day, importance: 'REGULAR' },
+      select: { slotIndex: true, title: true },
+    });
+    const capacity = this.tierCapacity('REGULAR', regularTasks);
+    const filledIdx = new Set(
+      regularTasks.filter((t) => t.title.trim()).map((t) => t.slotIndex),
+    );
+    for (let i = 0; i < capacity; i += 1) {
+      if (!filledIdx.has(i)) {
+        return { importance: 'REGULAR', slotIndex: i };
+      }
+    }
+    if (capacity >= DAILY_SLOT_MAXIMUMS.REGULAR) {
+      throw new BadRequestException(
+        'No empty Regular slot — free one or raise the cap first',
+      );
+    }
+    return { importance: 'REGULAR', slotIndex: capacity };
   }
 
   async listTemplates() {
@@ -949,6 +1149,13 @@ export class DailiesService {
     };
   }
 
+  /**
+   * Absolute elapsed patch from Horologium's task clock (sessio/track bound
+   * to this daily). Records the delta as an append-only WorkInterval and, when
+   * this daily is quest-linked, projects the same delta onto the subtask's
+   * QuestSubtaskCompletion so both logs agree — daily.elapsedMs itself stays
+   * the running total callers already read.
+   */
   async setElapsed(id: number, elapsedMs: number) {
     const task = await this.prisma.dailyTask.findUnique({ where: { id } });
     if (!task) {
@@ -956,11 +1163,39 @@ export class DailiesService {
     }
     await this.assertMutableDay(task.date);
     const ms = Math.max(0, Math.round(Number(elapsedMs) || 0));
+    const previousMs = Number(task.elapsedMs ?? 0);
+    const delta = ms - previousMs;
     const updated = await this.prisma.dailyTask.update({
       where: { id },
       data: { elapsedMs: BigInt(ms) },
       include: { skill: { select: this.skillSelect() } },
     });
+    if (delta > 0) {
+      const endedAt = new Date();
+      await this.workIntervals.recordFlush('track', delta, endedAt, {
+        dailyTaskId: id,
+        questId: task.questId ?? undefined,
+        questRunId: task.questRunId ?? undefined,
+        questSubtaskId: task.questSubtaskId ?? undefined,
+      });
+      if (task.questSubtaskId && task.questRunId) {
+        await this.prisma.questSubtaskCompletion.upsert({
+          where: {
+            runId_subtaskId: {
+              runId: task.questRunId,
+              subtaskId: task.questSubtaskId,
+            },
+          },
+          create: {
+            runId: task.questRunId,
+            subtaskId: task.questSubtaskId,
+            done: false,
+            elapsedMs: BigInt(delta),
+          },
+          update: { elapsedMs: { increment: BigInt(delta) } },
+        });
+      }
+    }
     return this.enrichTask(updated);
   }
 
@@ -1104,6 +1339,7 @@ export class DailiesService {
 
     const skillTree = await this.skillsService.findGrouped();
     const snapshot: LogSnapshot = { board, skillTree };
+    const verdict = this.scoreBoard(board);
 
     await this.prisma.dailyLog.create({
       data: {
@@ -1113,6 +1349,11 @@ export class DailiesService {
         earnedXp: board.earnedXp,
         projectedXp: board.projectedXp,
         snapshotJson: JSON.stringify(snapshot),
+        score: verdict.score,
+        grade: verdict.grade,
+        assignedMinutes: verdict.assignedMinutes,
+        trackedCount: verdict.trackedCount,
+        verdict: verdict.label,
       },
     });
 
@@ -1180,10 +1421,58 @@ export class DailiesService {
     return JSON.parse(json) as LogSnapshot;
   }
 
+  private scoreBoard(board: BoardSnapshot): DayScore {
+    const tasks = board.tiers
+      .flatMap((tier) => tier.slots)
+      .filter((slot) => slot.isFilled);
+    return scoreDailyTasks(
+      tasks.map((slot) => ({
+        importance: slot.importance,
+        completed: slot.completed,
+        durationMinutes: slot.durationMinutes,
+        elapsedMs: slot.elapsedMs,
+      })),
+    );
+  }
+
+  private verdictFromLog(log: {
+    verdict?: string | null;
+    score?: number | null;
+    grade?: string | null;
+    filledCount: number;
+    completedCount: number;
+    assignedMinutes?: number | null;
+    trackedCount?: number | null;
+    snapshotJson?: string | null;
+  }): DayScore {
+    const live = log.snapshotJson
+      ? this.scoreBoard(this.parseSnapshot(log.snapshotJson).board)
+      : scoreDailyTasks([]);
+    if (!log.verdict) {
+      return live;
+    }
+    const grade: DayGrade =
+      log.grade === 'peak' ||
+      log.grade === 'strong' ||
+      log.grade === 'average' ||
+      log.grade === 'poor'
+        ? log.grade
+        : live.grade;
+    return {
+      ...live,
+      score: Number(log.score) || live.score,
+      grade,
+      tone: toneFromGrade(grade),
+      label: log.verdict,
+      assignedMinutes: Number(log.assignedMinutes) || live.assignedMinutes,
+      trackedCount: Number(log.trackedCount) || live.trackedCount,
+    };
+  }
+
   private async assertMutableDay(day: string) {
     const sealed = await this.prisma.dailyLog.findUnique({ where: { date: day } });
     if (sealed) {
-      await this.prisma.dailyLog.delete({ where: { date: day } });
+      throw new BadRequestException('Day is sealed. Unseal to edit.');
     }
   }
 
@@ -1225,6 +1514,10 @@ export class DailiesService {
       completedAt: Date | null;
       wealthCents?: number | null;
       wealthAwardedCents?: number | null;
+      questId?: number | null;
+      questRunId?: number | null;
+      questSubtaskId?: number | null;
+      questBindKind?: string | null;
     },
     catalog?: Map<string, SkillSnap>,
   ): EnrichedTask {
@@ -1268,6 +1561,10 @@ export class DailiesService {
         task.wealthAwardedCents == null
           ? null
           : parseRewardCents(task.wealthAwardedCents),
+      questId: task.questId ?? null,
+      questRunId: task.questRunId ?? null,
+      questSubtaskId: task.questSubtaskId ?? null,
+      questBindKind: task.questBindKind ?? null,
     };
   }
 
@@ -1301,6 +1598,10 @@ export class DailiesService {
       skillShares: [],
       wealthCents: 0,
       wealthAwardedCents: null,
+      questId: null,
+      questRunId: null,
+      questSubtaskId: null,
+      questBindKind: null,
     };
   }
 

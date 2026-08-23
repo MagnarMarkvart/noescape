@@ -357,6 +357,8 @@ import { XpFeedbackService } from './xp-feedback.service';
       font-family: var(--font-display);
       font-size: clamp(1.8rem, 5vw, 2.8rem);
       letter-spacing: 0.06em;
+      overflow-wrap: anywhere;
+      max-width: 100%;
     }
 
     .levelup-title {
@@ -394,17 +396,20 @@ import { XpFeedbackService } from './xp-feedback.service';
       list-style: none;
       margin: 0.85rem 0 0;
       padding: 0;
-      width: min(22rem, 100%);
+      width: min(22rem, calc(100% - 2rem));
+      max-width: 100%;
+      min-width: 0;
       display: grid;
       gap: 0.4rem;
     }
 
     .grant {
       display: grid;
-      grid-template-columns: auto 1fr;
+      grid-template-columns: auto minmax(0, 1fr);
       gap: 0.55rem;
       align-items: center;
       text-align: left;
+      min-width: 0;
       padding: 0.45rem 0.65rem;
       border: 1px solid rgba(198, 168, 90, 0.42);
       background: rgba(22, 18, 10, 0.62);
@@ -447,6 +452,7 @@ import { XpFeedbackService } from './xp-feedback.service';
       font-size: 0.95rem;
       font-weight: 500;
       color: var(--rs-text);
+      overflow-wrap: anywhere;
     }
 
     .grant em {

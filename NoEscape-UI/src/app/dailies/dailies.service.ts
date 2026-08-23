@@ -8,6 +8,7 @@ import {
   DailyBoard,
   DailyCalendarDay,
   DailyLogDetail,
+  DailyLogSummary,
   DailyTaskSlot,
   DailyTaskTemplate,
   LogQuickTaskPayload,
@@ -141,6 +142,24 @@ export class DailiesService {
       );
   }
 
+  /**
+   * Add a quest subtask (or the quest's daily-work slice when
+   * questSubtaskId is omitted) to today's board. Server copies title,
+   * skill weights, and duration from the quest.
+   */
+  fromQuest(payload: {
+    date?: string;
+    questId: number;
+    questSubtaskId?: number | null;
+  }) {
+    return this.http.post<DailyBoard>(`${this.baseUrl}/from-quest`, payload).pipe(
+      tap((board) => {
+        this.boardCache.set(board.date, board);
+        this.board$.delete(board.date);
+      }),
+    );
+  }
+
   addRegularSlot(date?: string) {
     return this.http
       .post<DailyBoard>(`${this.baseUrl}/regular-slots`, { date })
@@ -213,6 +232,27 @@ export class DailiesService {
     return this.http.get<DailyCalendarDay[]>(
       `${this.baseUrl}/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     );
+  }
+
+  listLogs() {
+    return this.http.get<DailyLogSummary[]>(`${this.baseUrl}/logs`);
+  }
+
+  getLog(date: string) {
+    return this.http.get<DailyLogDetail>(
+      `${this.baseUrl}/logs/${encodeURIComponent(date)}`,
+    );
+  }
+
+  unsealDay(date?: string) {
+    return this.http
+      .post<DailyBoard>(`${this.baseUrl}/unseal`, { date })
+      .pipe(
+        tap((board) => {
+          this.boardCache.set(board.date, board);
+          this.board$.delete(board.date);
+        }),
+      );
   }
 
   private boardKey(date?: string): string {

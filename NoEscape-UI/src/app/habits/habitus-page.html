@@ -74,36 +74,22 @@
           </button>
         </div>
         @if (dueFilter() === 'today') {
-          <label class="toggle">
-            <input
-              type="checkbox"
-              [checked]="showCompleted()"
-              (change)="toggleCompleted()"
-            />
-            Show completed
-          </label>
-        }
-        <label class="toggle">
-          <input
-            type="checkbox"
-            [checked]="dragMode()"
-            [disabled]="demo()"
-            (change)="setDragMode($any($event.target).checked)"
+          <app-rune-check
+            class="board-check"
+            label="Show completed"
+            [compact]="true"
+            [checked]="showCompleted()"
+            (checkedChange)="setShowCompleted($event)"
           />
-          Drag
-        </label>
-        @if (!demo()) {
-          <form class="group-add" (submit)="$event.preventDefault(); addGroup()">
-            <input
-              type="text"
-              maxlength="40"
-              placeholder="New group"
-              [value]="newGroupName()"
-              (input)="onNewGroup($event)"
-            />
-            <button type="submit" [disabled]="!newGroupName().trim()">Add</button>
-          </form>
         }
+        <app-rune-check
+          class="board-check"
+          label="Drag"
+          [compact]="true"
+          [checked]="dragMode()"
+          [disabled]="demo()"
+          (checkedChange)="setDragMode($event)"
+        />
       </div>
 
       @if (skillChips().length) {
@@ -153,18 +139,7 @@
             (dragover)="allowDrop($event)"
             (drop)="onDrop(g.id, $event)"
           >
-            <legend>
-              {{ g.name }}
-              @if (!demo()) {
-                <button
-                  type="button"
-                  class="ghost-mini"
-                  (click)="deleteGroup(g.id)"
-                >
-                  Remove
-                </button>
-              }
-            </legend>
+            <legend>{{ g.name }}</legend>
             @if (g.habits.length === 0) {
               <p class="empty-bin">{{ dragMode() ? 'Drop a card here.' : 'Empty.' }}</p>
             } @else {
@@ -333,13 +308,16 @@
                 @for (day of s.days; track day.date) {
                   <span
                     class="day"
-                    [class.hot]="day.points > 0"
+                    [class.full]="dayTone(day) === 'full'"
+                    [class.mixed]="dayTone(day) === 'mixed'"
+                    [class.miss]="dayTone(day) === 'miss'"
                     [class.today]="day.date === todayIso()"
-                    [title]="day.date + ' · ' + day.points"
+                    [attr.title]="day.date"
+                    [attr.aria-label]="day.date"
                   >
-                    {{ day.date.slice(-2) }}
-                    @if (day.points > 0) {
-                      <em>{{ day.points }}</em>
+                    @for (m of dayIcons(day); track m.id) {
+                      <span class="glyph" aria-hidden="true">{{ m.icon || '◆' }}</span>
+                      <span class="dot" aria-hidden="true"></span>
                     }
                   </span>
                 }
@@ -475,30 +453,7 @@
                       }
                     </div>
 
-                    <div class="cal-nav">
-                      <button type="button" (click)="shiftLedgerMonth(-1)">‹</button>
-                      <span>{{ ledgerMonthLabel() }}</span>
-                      <button type="button" (click)="shiftLedgerMonth(1)">›</button>
-                    </div>
-
                     @if (month(); as m) {
-                      <div class="month-grid heat" role="grid">
-                        @for (wd of weekdays(); track wd) {
-                          <span class="wd">{{ wd }}</span>
-                        }
-                        @for (pad of ledgerLeadPads(); track pad) {
-                          <span class="day pad" aria-hidden="true"></span>
-                        }
-                        @for (day of m.days; track day.date) {
-                          <div
-                            class="day"
-                            [class.done]="day.completed"
-                            [attr.title]="day.date"
-                          >
-                            {{ day.date.slice(-2) }}
-                          </div>
-                        }
-                      </div>
                       <p class="month-count">{{ m.completedCount }} days this month</p>
                     }
                   } @else {

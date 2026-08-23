@@ -616,19 +616,26 @@ export class HabitsService {
     });
     const ids = habits.map((h) => h.id);
     if (ids.length === 0) {
-      const days: Array<{
-        date: string;
-        points: number;
-        completions: number;
-        clicks: number;
-      }> = [];
-      if (grain !== 'all') {
-        let cursor = from;
-        while (cursor <= to) {
-          days.push({ date: cursor, points: 0, completions: 0, clicks: 0 });
-          cursor = this.offsetDate(cursor, 1);
-        }
+    const days: Array<{
+      date: string;
+      points: number;
+      completions: number;
+      clicks: number;
+      marks: Array<{ id: number; icon: string | null; done: boolean }>;
+    }> = [];
+    if (grain !== 'all') {
+      let cursor = from;
+      while (cursor <= to) {
+        days.push({
+          date: cursor,
+          points: 0,
+          completions: 0,
+          clicks: 0,
+          marks: [],
+        });
+        cursor = this.offsetDate(cursor, 1);
       }
+    }
       return {
         from,
         to: grain === 'all' ? today : to,
@@ -716,16 +723,28 @@ export class HabitsService {
       bumpHabit(row.habitId, 'clicks', row.delta);
     }
 
+    const doneByDate = new Map<string, Set<number>>();
+    for (const row of completions) {
+      const set = doneByDate.get(row.date) ?? new Set<number>();
+      set.add(row.habitId);
+      doneByDate.set(row.date, set);
+    }
+
     const days: Array<{
       date: string;
       points: number;
       completions: number;
       clicks: number;
+      marks: Array<{ id: number; icon: string | null; done: boolean }>;
     }> = [];
     let cursor = from;
     while (cursor <= to) {
       const row = dayMap.get(cursor) ?? { points: 0, completions: 0, clicks: 0 };
-      days.push({ date: cursor, ...row });
+      days.push({
+        date: cursor,
+        ...row,
+        marks: this.checkMarksForDay(cursor, today, habits, doneByDate),
+      });
       cursor = this.offsetDate(cursor, 1);
     }
 
@@ -995,8 +1014,8 @@ export class HabitsService {
     const last = view.lastLog ?? null;
     const period = habit.period ?? 'day';
     let dueToday = !successfulToday;
-    if (habit.kind === 'tally' && period !== 'day') {
-      dueToday = !successfulToday;
+    if (habit.kind === 'tally') {
+      dueToday = true;
     } else if (successfulToday) {
       dueToday = false;
     } else if (last) {
@@ -1510,6 +1529,55 @@ export class HabitsService {
       }
     }
     return { currentStreak: current, bestStreak: Math.max(best, current) };
+  }
+
+  private checkMarksForDay(
+    date: string,
+    today: string,
+    habits: Array<{
+      id: number;
+      icon: string | null;
+      kind: string;
+      cadence: string;
+      everyNDays: number;
+      createdAt: Date;
+    }>,
+    doneByDate: Map<string, Set<number>>,
+  ): Array<{ id: number; icon: string | null; done: boolean }> {
+    const done = doneByDate.get(date) ?? new Set<number>();
+    return habits
+      .filter((h) => h.kind !== 'tally' && this.checkAssignedOn(h, date, today))
+      .map((h) => ({
+        id: h.id,
+        icon: h.icon,
+        done: done.has(h.id),
+      }));
+  }
+
+  private checkAssignedOn(
+    habit: { cadence: string; everyNDays: number; createdAt: Date },
+    date: string,
+    today: string,
+  ): boolean {
+    if (date > today) {
+      return false;
+    }
+    const created = this.toIsoDate(habit.createdAt);
+    if (date < created) {
+      return false;
+    }
+    if (habit.cadence !== 'EVERY_N_DAYS') {
+      return true;
+    }
+    const n = Math.max(1, habit.everyNDays || 1);
+    return this.dayDiff(created, date) % n === 0;
+  }
+
+  private toIsoDate(value: Date): string {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   private dayDiff(a: string, b: string): number {

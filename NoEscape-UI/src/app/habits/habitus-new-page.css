@@ -84,6 +84,16 @@
   font-size: 0.82rem;
 }
 
+.group-create {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.group-create input {
+  flex: 1 1 auto;
+}
+
 .hm {
   display: flex;
   flex-wrap: wrap;
