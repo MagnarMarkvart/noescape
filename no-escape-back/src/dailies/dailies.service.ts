@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import {
   CharacterService,
@@ -28,6 +30,8 @@ import {
 } from '../xp/quest-xp.util';
 import { boostsWealth, parseRewardCents } from '../wealth/money.util';
 import { WorkIntervalsService } from '../work-intervals/work-intervals.service';
+import { QuestsService } from '../quests/quests.service';
+import { findActiveScriptoriumDailies } from '../scriptorium/scriptorium-lock.util';
 import { scoreDailyTasks, toneFromGrade, type DayGrade, type DayScore } from './day-score.util';
 import { CopyIncompleteDto } from './dto/copy-incomplete.dto';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
@@ -78,6 +82,7 @@ type EnrichedTask = {
   questRunId: number | null;
   questSubtaskId: number | null;
   questBindKind: string | null;
+  scriptoriumWorkId: number | null;
 };
 
 type BoardSnapshot = {
@@ -115,6 +120,8 @@ export class DailiesService {
     private readonly characterService: CharacterService,
     private readonly time: TimeService,
     private readonly workIntervals: WorkIntervalsService,
+    @Inject(forwardRef(() => QuestsService))
+    private readonly quests: QuestsService,
   ) {}
 
   async getBoard(date?: string) {
@@ -165,7 +172,8 @@ export class DailiesService {
       activeLogDate,
       isEditable,
       readOnly: !isEditable,
-      canCopyIncomplete: copyableCount > 0 && isEditable,
+      canCopyIncomplete:
+        copyableCount > 0 && isEditable && !lastLog?.incompletesCarried,
       incompleteInLastLog,
       isBaseFilled: this.isBaseBoardFilled(board),
       canAddRegular:
@@ -317,6 +325,11 @@ export class DailiesService {
           completedAt: null,
           wealthCents: task.wealthCents ?? 0,
           wealthAwardedCents: null,
+          questId: task.questId ?? null,
+          questRunId: task.questRunId ?? null,
+          questSubtaskId: task.questSubtaskId ?? null,
+          questBindKind: task.questBindKind ?? null,
+          scriptoriumWorkId: task.scriptoriumWorkId ?? null,
         },
         update: {
           title: task.title,
@@ -334,17 +347,20 @@ export class DailiesService {
           completedAt: null,
           wealthCents: task.wealthCents ?? 0,
           wealthAwardedCents: null,
+          questId: task.questId ?? null,
+          questRunId: task.questRunId ?? null,
+          questSubtaskId: task.questSubtaskId ?? null,
+          questBindKind: task.questBindKind ?? null,
+          scriptoriumWorkId: task.scriptoriumWorkId ?? null,
         },
       });
       copied += 1;
     }
 
-    if (copied > 0) {
-      await this.prisma.dailyLog.update({
-        where: { date: sourceLog.date },
-        data: { incompletesCarried: true },
-      });
-    }
+    await this.prisma.dailyLog.update({
+      where: { date: sourceLog.date },
+      data: { incompletesCarried: true },
+    });
 
     return {
       sourceDate: sourceLog.date,
@@ -451,6 +467,11 @@ export class DailiesService {
     if (existing?.completed) {
       throw new BadRequestException('Completed tasks cannot be edited');
     }
+    if (existing?.scriptoriumWorkId) {
+      throw new BadRequestException(
+        'Scriptorium-bound dailies cannot be edited',
+      );
+    }
 
     const questId =
       dto.questId != null && Number(dto.questId) > 0
@@ -520,6 +541,83 @@ export class DailiesService {
     });
 
     return this.enrichTask(task);
+  }
+
+  async reorderSlot(dto: {
+    date?: string;
+    from: { importance: TaskImportance; slotIndex: number };
+    to: { importance: TaskImportance; slotIndex: number };
+  }) {
+    this.assertImportance(dto.from.importance);
+    this.assertImportance(dto.to.importance);
+    this.assertSlotIndex(dto.from.importance, dto.from.slotIndex);
+    this.assertSlotIndex(dto.to.importance, dto.to.slotIndex);
+    const day = this.normalizeDate(dto.date);
+    await this.assertMutableDay(day);
+
+    if (
+      dto.from.importance === dto.to.importance &&
+      dto.from.slotIndex === dto.to.slotIndex
+    ) {
+      return this.getBoard(day);
+    }
+
+    const fromRow = await this.prisma.dailyTask.findUnique({
+      where: {
+        date_importance_slotIndex: {
+          date: day,
+          importance: dto.from.importance,
+          slotIndex: dto.from.slotIndex,
+        },
+      },
+    });
+    if (!fromRow?.title.trim() || !fromRow.skillId) {
+      throw new BadRequestException('No task to move');
+    }
+
+    const toRow = await this.prisma.dailyTask.findUnique({
+      where: {
+        date_importance_slotIndex: {
+          date: day,
+          importance: dto.to.importance,
+          slotIndex: dto.to.slotIndex,
+        },
+      },
+    });
+
+    const tempSlot = 99;
+    await this.prisma.$transaction(async (tx) => {
+      if (toRow) {
+        await tx.dailyTask.update({
+          where: { id: fromRow.id },
+          data: { slotIndex: tempSlot },
+        });
+        await tx.dailyTask.update({
+          where: { id: toRow.id },
+          data: {
+            importance: fromRow.importance,
+            slotIndex: fromRow.slotIndex,
+          },
+        });
+        await tx.dailyTask.update({
+          where: { id: fromRow.id },
+          data: {
+            importance: toRow.importance,
+            slotIndex: toRow.slotIndex,
+          },
+        });
+        return;
+      }
+      await tx.dailyTask.update({
+        where: { id: fromRow.id },
+        data: {
+          importance: dto.to.importance,
+          slotIndex: dto.to.slotIndex,
+        },
+      });
+    });
+
+    return this.getBoard(day);
   }
 
   /**
@@ -623,6 +721,154 @@ export class DailiesService {
     });
 
     return this.getBoard(day);
+  }
+
+  /**
+   * Scriptorium catalogue → today's board. Copies title, skills, effort, and
+   * volume from the folio and locks it until the daily is completed or the
+   * day is sealed without a carry-over.
+   */
+  async fromScriptorium(input: {
+    date?: string;
+    workId: number;
+    importance?: TaskImportance;
+    slotIndex?: number;
+  }) {
+    const day = this.normalizeDate(input.date);
+    await this.assertMutableDay(day);
+
+    const workId = Math.round(Number(input.workId));
+    if (!Number.isFinite(workId) || workId < 1) {
+      throw new BadRequestException('workId is required');
+    }
+    const work = await this.prisma.scriptoriumWork.findUnique({
+      where: { id: workId },
+    });
+    if (!work) {
+      throw new NotFoundException(`Scriptorium work #${workId} not found`);
+    }
+    if (work.status === 'ARCHIVED') {
+      throw new BadRequestException('Shelved folios cannot be assigned');
+    }
+    if (work.questId) {
+      throw new BadRequestException(
+        'This folio is already assigned to a quest',
+      );
+    }
+
+    const binds = await findActiveScriptoriumDailies(this.prisma, [workId]);
+    const bind = binds.get(workId);
+    if (bind) {
+      if (bind.date === day) {
+        return this.getBoard(day);
+      }
+      throw new BadRequestException(
+        'This folio is already assigned to a daily',
+      );
+    }
+
+    const weights = parseSkillWeights(
+      work.skillWeightsJson ? JSON.parse(work.skillWeightsJson) : [],
+    );
+    if (weights.length === 0) {
+      throw new BadRequestException(
+        'Assign skills on the folio before binding it to a daily',
+      );
+    }
+    const plan = await this.resolveSkillPlan({ skillWeights: weights });
+    const durationMinutes = this.assertDuration(work.durationMinutes ?? 45);
+    const target = await this.resolveTargetSlot(
+      day,
+      input.importance,
+      input.slotIndex,
+    );
+
+    await this.prisma.dailyTask.create({
+      data: {
+        date: day,
+        importance: target.importance,
+        slotIndex: target.slotIndex,
+        title: work.title,
+        skillId: plan.skillId,
+        skillWeightsJson: JSON.stringify(plan.weights),
+        effortLevel: work.effort,
+        durationMinutes,
+        scriptoriumWorkId: workId,
+      },
+    });
+
+    return this.getBoard(day);
+  }
+
+  /**
+   * Quest log → today's board. No-op when that day is already sealed.
+   * Creates the bound slot if missing, then marks it complete/open.
+   */
+  async mirrorQuestCompletion(input: {
+    questId: number;
+    date: string;
+    subtaskId: number | null;
+    completed: boolean;
+  }): Promise<void> {
+    const day = this.normalizeDate(input.date);
+    const sealed = await this.prisma.dailyLog.findUnique({ where: { date: day } });
+    if (sealed) {
+      return;
+    }
+    const bindKind = input.subtaskId ? 'subtask' : 'daily_work';
+    let task = await this.prisma.dailyTask.findFirst({
+      where: {
+        date: day,
+        questId: input.questId,
+        questBindKind: bindKind,
+        questSubtaskId: input.subtaskId,
+      },
+    });
+    if (!task && input.completed) {
+      if (input.subtaskId == null) {
+        const quest = await this.prisma.quest.findUnique({
+          where: { id: input.questId },
+          select: { dailyWorkTitle: true },
+        });
+        if (!quest?.dailyWorkTitle) {
+          return;
+        }
+      }
+      try {
+        await this.fromQuest({
+          date: day,
+          questId: input.questId,
+          questSubtaskId: input.subtaskId,
+        });
+        task = await this.prisma.dailyTask.findFirst({
+          where: {
+            date: day,
+            questId: input.questId,
+            questBindKind: bindKind,
+            questSubtaskId: input.subtaskId,
+          },
+        });
+      } catch {
+        return;
+      }
+    }
+    if (!task) {
+      return;
+    }
+    if (input.completed && !task.completed) {
+      if (!task.title.trim() || !task.skillId) {
+        await this.prisma.dailyTask.update({
+          where: { id: task.id },
+          data: { completed: true, completedAt: new Date() },
+        });
+        return;
+      }
+      await this.complete(task.id, { skipQuest: true });
+      return;
+    }
+    if (!input.completed && task.completed) {
+      await this.uncomplete(task.id, { skipQuest: true });
+    }
   }
 
   private async resolveTargetSlot(
@@ -984,7 +1230,7 @@ export class DailiesService {
     return this.getBoard(day);
   }
 
-  async complete(id: number) {
+  async complete(id: number, opts?: { skipQuest?: boolean; elapsedMs?: number }) {
     const task = await this.prisma.dailyTask.findUnique({
       where: { id },
       include: { skill: { select: this.skillSelect() } },
@@ -1004,6 +1250,11 @@ export class DailiesService {
     }
 
     const importance = task.importance as TaskImportance;
+    let elapsed = Number(task.elapsedMs ?? 0);
+    if (elapsed <= 0 && (opts?.elapsedMs ?? 0) > 0) {
+      await this.setElapsed(id, opts!.elapsedMs!, 'manual');
+      elapsed = opts!.elapsedMs!;
+    }
     const xp = calculateDailyTaskXp({
       importance,
       effortLevel: task.effortLevel,
@@ -1013,10 +1264,9 @@ export class DailiesService {
     const catalog = await this.skillCatalog();
     const weights = this.taskWeights(task);
     const shares = splitQuestXp(xp, weights);
-    const tracked = Number(task.elapsedMs ?? 0);
     const note =
-      tracked > 0
-        ? `Daily: ${task.title} · tracked ${formatElapsedShort(tracked)}`
+      elapsed > 0
+        ? `Daily: ${task.title} · tracked ${formatElapsedShort(elapsed)}`
         : `Daily: ${task.title}`;
 
     const awards: Awaited<ReturnType<SkillsService['awardXp']>>[] = [];
@@ -1082,6 +1332,23 @@ export class DailiesService {
       );
     }
 
+    if (!opts?.skipQuest) {
+      await this.quests.applyDailyProgress({
+        questRunId: updated.questRunId,
+        questBindKind: updated.questBindKind,
+        questSubtaskId: updated.questSubtaskId,
+        date: updated.date,
+        completed: true,
+      });
+    }
+
+    if (updated.scriptoriumWorkId) {
+      await this.prisma.scriptoriumWork.updateMany({
+        where: { id: updated.scriptoriumWorkId },
+        data: { status: 'ARCHIVED' },
+      });
+    }
+
     return {
       task: this.enrichTask(updated, catalog),
       award: awards[0] ?? null,
@@ -1089,7 +1356,7 @@ export class DailiesService {
     };
   }
 
-  async uncomplete(id: number) {
+  async uncomplete(id: number, opts?: { skipQuest?: boolean }) {
     const task = await this.prisma.dailyTask.findUnique({
       where: { id },
       include: { skill: { select: this.skillSelect() } },
@@ -1171,6 +1438,23 @@ export class DailiesService {
       }
     }
 
+    if (!opts?.skipQuest) {
+      await this.quests.applyDailyProgress({
+        questRunId: updated.questRunId,
+        questBindKind: updated.questBindKind,
+        questSubtaskId: updated.questSubtaskId,
+        date: updated.date,
+        completed: false,
+      });
+    }
+
+    if (updated.scriptoriumWorkId) {
+      await this.prisma.scriptoriumWork.updateMany({
+        where: { id: updated.scriptoriumWorkId, status: 'ARCHIVED' },
+        data: { status: 'OPEN' },
+      });
+    }
+
     return {
       task: this.enrichTask(updated),
       reversal: reversals[0] ?? null,
@@ -1185,7 +1469,11 @@ export class DailiesService {
    * QuestSubtaskCompletion so both logs agree — daily.elapsedMs itself stays
    * the running total callers already read.
    */
-  async setElapsed(id: number, elapsedMs: number) {
+  async setElapsed(
+    id: number,
+    elapsedMs: number,
+    clockKind: 'track' | 'manual' = 'track',
+  ) {
     const task = await this.prisma.dailyTask.findUnique({ where: { id } });
     if (!task) {
       throw new NotFoundException(`Daily task #${id} not found`);
@@ -1201,7 +1489,7 @@ export class DailiesService {
     });
     if (delta > 0) {
       const endedAt = new Date();
-      await this.workIntervals.recordFlush('track', delta, endedAt, {
+      await this.workIntervals.recordFlush(clockKind, delta, endedAt, {
         dailyTaskId: id,
         questId: task.questId ?? undefined,
         questRunId: task.questRunId ?? undefined,
@@ -1301,6 +1589,11 @@ export class DailiesService {
           completedAt: null,
           wealthCents: task.wealthCents ?? 0,
           wealthAwardedCents: null,
+          questId: task.questId ?? null,
+          questRunId: task.questRunId ?? null,
+          questSubtaskId: task.questSubtaskId ?? null,
+          questBindKind: task.questBindKind ?? null,
+          scriptoriumWorkId: task.scriptoriumWorkId ?? null,
         },
         update: {
           title: task.title,
@@ -1317,6 +1610,11 @@ export class DailiesService {
           completedAt: null,
           wealthCents: task.wealthCents ?? 0,
           wealthAwardedCents: null,
+          questId: task.questId ?? null,
+          questRunId: task.questRunId ?? null,
+          questSubtaskId: task.questSubtaskId ?? null,
+          questBindKind: task.questBindKind ?? null,
+          scriptoriumWorkId: task.scriptoriumWorkId ?? null,
         },
       });
     });
@@ -1547,6 +1845,7 @@ export class DailiesService {
       questRunId?: number | null;
       questSubtaskId?: number | null;
       questBindKind?: string | null;
+      scriptoriumWorkId?: number | null;
     },
     catalog?: Map<string, SkillSnap>,
   ): EnrichedTask {
@@ -1594,6 +1893,7 @@ export class DailiesService {
       questRunId: task.questRunId ?? null,
       questSubtaskId: task.questSubtaskId ?? null,
       questBindKind: task.questBindKind ?? null,
+      scriptoriumWorkId: task.scriptoriumWorkId ?? null,
     };
   }
 
@@ -1631,6 +1931,7 @@ export class DailiesService {
       questRunId: null,
       questSubtaskId: null,
       questBindKind: null,
+      scriptoriumWorkId: null,
     };
   }
 

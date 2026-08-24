@@ -202,3 +202,76 @@ export interface HorologiumWatchRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface VigiliaPickerOption {
+  value: string;
+  label: string;
+}
+
+export interface VigiliaPickerGroup {
+  id: string;
+  label: string;
+  options: VigiliaPickerOption[];
+}
+
+export function vigiliaPickerValue(
+  watch: HorologiumWatchRecord | null,
+): string {
+  if (!watch) {
+    return '';
+  }
+  if (watch.bindKind === 'quest' && watch.questId) {
+    return `q:${watch.questId}`;
+  }
+  if (watch.bindKind === 'quest_daily_work' && watch.questId) {
+    return `qd:${watch.questId}`;
+  }
+  if (watch.bindKind === 'subtask' && watch.questSubtaskId) {
+    return `s:${watch.questSubtaskId}`;
+  }
+  if (watch.bindKind === 'daily' && watch.dailyTaskId) {
+    return `d:${watch.dailyTaskId}`;
+  }
+  return `w:${watch.id}`;
+}
+
+export type VigiliaPickerBind =
+  | { bindKind: 'quest'; questId: number }
+  | { bindKind: 'quest_daily_work'; questId: number }
+  | { bindKind: 'subtask'; questSubtaskId: number }
+  | { bindKind: 'daily'; dailyTaskId: number }
+  | { watchId: number };
+
+export function parseVigiliaPickerValue(
+  raw: string,
+): VigiliaPickerBind | null {
+  const value = raw.trim();
+  if (!value) {
+    return null;
+  }
+  if (/^\d+$/.test(value)) {
+    return { watchId: Number(value) };
+  }
+  const [kind, idRaw] = value.split(':');
+  const id = Number(idRaw);
+  if (!Number.isFinite(id) || id <= 0) {
+    return null;
+  }
+  if (kind === 'q') {
+    return { bindKind: 'quest', questId: id };
+  }
+  if (kind === 'qd') {
+    return { bindKind: 'quest_daily_work', questId: id };
+  }
+  if (kind === 's') {
+    return { bindKind: 'subtask', questSubtaskId: id };
+  }
+  if (kind === 'd') {
+    return { bindKind: 'daily', dailyTaskId: id };
+  }
+  if (kind === 'w') {
+    return { watchId: id };
+  }
+  return null;
+}
+

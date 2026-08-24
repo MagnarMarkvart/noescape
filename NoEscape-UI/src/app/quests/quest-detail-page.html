@@ -32,7 +32,12 @@
           <div class="progress-track">
             <div class="progress-fill" [style.width.%]="q.progressPercent"></div>
           </div>
-          <p class="progress-label">{{ q.progressPercent }}% complete</p>
+          <p class="progress-label">
+            {{ q.progressPercent }}% complete
+            @if (questElapsed(q) > 0) {
+              · {{ elapsedLabel(questElapsed(q)) }} tracked
+            }
+          </p>
         </div>
         @if (error()) {
           <p class="inline-error" role="status">{{ error() }}</p>
@@ -110,12 +115,18 @@
             <p class="open">{{ q.journeyNote }}</p>
           }
           <p class="kind">{{ timeframe() }}</p>
+          @if (journeyElapsed(q) > 0) {
+            <p class="open">{{ elapsedLabel(journeyElapsed(q)) }} tracked</p>
+          }
         </article>
 
         <article class="panel">
           <h2>Destination</h2>
           <p class="timeframe">{{ q.destination || 'Mark the destination when the path is walked.' }}</p>
           <p class="kind">{{ kindLabel(q.kind) }}</p>
+          @if (questElapsed(q) > 0 && (q.run?.destinationDone || q.availability === 'completed')) {
+            <p class="open">{{ elapsedLabel(questElapsed(q)) }} on this quest</p>
+          }
         </article>
       </div>
 
@@ -146,9 +157,11 @@
       <article class="panel subtasks-panel">
         <h2>Subtasks</h2>
         @if (q.subtasks.length) {
-          <ul>
+          <app-drop-group (dropped)="onSubtaskDrop($event)">
+          <ul appDropList dropListId="subtasks" dropMode="insert">
             @for (t of q.subtasks; track t.id) {
-              <li [class.met]="t.completed">
+              <li [class.met]="t.completed" [appDragItem]="$index">
+                <app-drag-grip />
                 <span class="mark">{{ t.completed ? '✓' : '○' }}</span>
                 {{ t.title }}
                 @if (t.gatesJourney) {
@@ -159,8 +172,8 @@
                     {{ dueLabel(t.deadline) }}
                   </span>
                 }
-                @if (t.elapsedMs) {
-                  <span class="detail">{{ elapsedLabel(t.elapsedMs) }} tracked</span>
+                @if (subtaskElapsed(t) > 0) {
+                  <span class="detail">{{ elapsedLabel(subtaskElapsed(t)) }} tracked</span>
                 }
                 @if (t.completed && t.completedAtLabel) {
                   <span class="detail">
@@ -170,6 +183,7 @@
               </li>
             }
           </ul>
+          </app-drop-group>
           <p class="xp-row">All subtasks fill the bar to 90%. Destination is the last 10%.</p>
         } @else {
           <ul>
@@ -187,7 +201,12 @@
             <p class="open">Started {{ q.run!.startedAtLabel }}</p>
           }
           @if (q.run?.completedAtLabel) {
-            <p class="open">Completed {{ q.run!.completedAtLabel }}</p>
+            <p class="open">
+              Completed {{ q.run!.completedAtLabel }}
+              @if (questElapsed(q) > 0) {
+                · {{ elapsedLabel(questElapsed(q)) }} tracked
+              }
+            </p>
           }
           @if (q.missedDays.length) {
             <p class="kind">{{ q.missedDays.length }} missed day{{ q.missedDays.length === 1 ? '' : 's' }}</p>

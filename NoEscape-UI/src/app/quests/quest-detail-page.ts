@@ -26,11 +26,20 @@ import {
 } from './quest.model';
 import { QuestRevealService } from './quest-reveal.service';
 import { QuestsService } from './quests.service';
+import { HorologiumWatchService } from '../horologium/horologium-watch.service';
+import {
+  DragGrip,
+  DragItem,
+  DragSortDrop,
+  DropGroup,
+  DropList,
+  moveIndex,
+} from '../shared/ui/drag-sort';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 
 @Component({
   selector: 'app-quest-detail-page',
-  imports: [RouterLink, KeyValuePipe, RuneLoader],
+  imports: [RouterLink, KeyValuePipe, RuneLoader, DropGroup, DropList, DragItem, DragGrip],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-detail-page.html',
   styleUrl: './quest-detail-page.css',
@@ -44,6 +53,7 @@ export class QuestDetailPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly character = inject(CharacterService);
   private readonly xpFeedback = inject(XpFeedbackService);
+  private readonly watches = inject(HorologiumWatchService);
   private loadSeq = 0;
   private loaderTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -84,6 +94,39 @@ export class QuestDetailPage {
 
   protected elapsedLabel(ms: number | null | undefined): string {
     return formatElapsedShort(ms ?? 0);
+  }
+
+  protected questElapsed(q: QuestView): number {
+    return this.watches.elapsedForQuest(q.id, q.run?.elapsedMs ?? 0);
+  }
+
+  protected journeyElapsed(q: QuestView): number {
+    return this.watches.elapsedForDailyWork(q.id, q.run?.journeyElapsedMs ?? 0);
+  }
+
+  protected subtaskElapsed(t: { id: number; elapsedMs?: number }): number {
+    return this.watches.elapsedForSubtask(t.id, t.elapsedMs ?? 0);
+  }
+
+  protected onSubtaskDrop(event: DragSortDrop): void {
+    const q = this.quest();
+    if (!q) {
+      return;
+    }
+    const ids = moveIndex(
+      q.subtasks.map((s) => s.id),
+      event.fromIndex,
+      event.toIndex,
+    );
+    this.quest.update((cur) =>
+      cur
+        ? { ...cur, subtasks: moveIndex(cur.subtasks, event.fromIndex, event.toIndex) }
+        : cur,
+    );
+    this.questsService.reorderSubtasks(q.id, ids).subscribe({
+      next: (next) => this.quest.set(next),
+      error: () => this.load(q.id),
+    });
   }
 
   protected readonly coverBg = computed(() =>

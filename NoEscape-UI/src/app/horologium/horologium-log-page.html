@@ -10,12 +10,8 @@
   [loading]="loading()"
   [empty]="!loading() && items().length === 0"
   emptyText="No sessions on this day."
-  [detailTitle]="detailTitle()"
-  [detailKicker]="detailKicker()"
-  detailTitleId="horo-detail-title"
   (dateChange)="onDateNav($event)"
   (rangeChange)="loadCalendar($event)"
-  (close)="close()"
 >
   <ul class="session-log">
     @for (row of items(); track (row.kind || 'session') + ':' + row.id) {
@@ -53,108 +49,8 @@
       </li>
     }
   </ul>
-
-  <div scrollBody>
-    @if (selected(); as row) {
-      <div class="timeline" aria-label="Session span">
-        <div>
-          <p class="when-label">Start</p>
-          <p class="when-clock">{{ clock(startIso(row)) }}</p>
-          <p class="when-date">{{ stamp(startIso(row)) }}</p>
-        </div>
-        <span class="timeline-rule" aria-hidden="true"></span>
-        <div>
-          <p class="when-label">End</p>
-          <p class="when-clock">{{ clock(row.completedAt) }}</p>
-          <p class="when-date">{{ stamp(row.completedAt) }}</p>
-        </div>
-      </div>
-
-      <dl class="facts">
-        @if (row.kind === 'consuetudo') {
-          <div>
-            <dt>Practice</dt>
-            <dd>{{ row.routineName || row.taskLabel || 'Consuetudo' }}</dd>
-          </div>
-          <div>
-            <dt>Elapsed</dt>
-            <dd>{{ minutesLabel(row.elapsedMinutes ?? row.durationMinutes) }}</dd>
-          </div>
-          <div>
-            <dt>Planned</dt>
-            <dd>{{ minutesLabel(row.workMinutes) }}</dd>
-          </div>
-          <div>
-            <dt>Steps</dt>
-            <dd>{{ row.iterations }}</dd>
-          </div>
-        } @else {
-        <div>
-          <dt>Work blocks</dt>
-          <dd>{{ row.iterations }}</dd>
-        </div>
-        <div>
-          <dt>Total work</dt>
-          <dd>{{ minutesLabel(row.durationMinutes) }}</dd>
-        </div>
-        <div>
-          <dt>Rest length</dt>
-          <dd>{{ minutesLabel(row.restMinutes) }}</dd>
-        </div>
-        <div>
-          <dt>Rest total</dt>
-          <dd>{{ minutesLabel(restTotal(row)) }}</dd>
-        </div>
-        }
-      </dl>
-
-      @if (row.kind === 'consuetudo') {
-        <section class="bind-row">
-          <p class="kicker">Walk log</p>
-          <a class="bind-name walk-link" routerLink="/consuetudo/log">Open walk log →</a>
-        </section>
-      }
-
-      @if (row.watchName) {
-        <section class="bind-row">
-          <p class="kicker">Vigilia</p>
-          <p class="bind-name">{{ row.watchName }}</p>
-        </section>
-      }
-
-      @if (row.kind !== 'consuetudo' && row.taskLabel) {
-        <section class="bind-row">
-          <p class="kicker">Bound daily</p>
-          <p class="bind-name">{{ row.taskLabel }}</p>
-        </section>
-      }
-
-      @if (row.kind !== 'consuetudo') {
-      <section class="xp-block" aria-label="XP by skill">
-        <p class="kicker">XP by skill</p>
-        @if (skillXp(row).length === 0) {
-          <p class="muted">No skill XP on this entry.</p>
-        } @else {
-          <ul class="xp-list">
-            @for (skill of skillXp(row); track skill.slug) {
-              <li [class.loss]="skill.xp < 0">
-                <span class="xp-skill">
-                  <span aria-hidden="true">{{ skill.icon || '•' }}</span>
-                  {{ skill.name }}
-                </span>
-                <span class="xp-amt">
-                  {{ skill.xp >= 0 ? '+' : '−' }}{{ (skill.xp < 0 ? -skill.xp : skill.xp) | number }}
-                </span>
-              </li>
-            }
-          </ul>
-        }
-      </section>
-      }
-
-      @if (row.kind !== 'consuetudo' && row.note) {
-        <p class="detail-note">{{ row.note }}</p>
-      }
-    }
-  </div>
 </app-history-log>
+
+@if (selected(); as row) {
+  <app-horologium-session-sheet [session]="row" (closed)="close()" />
+}

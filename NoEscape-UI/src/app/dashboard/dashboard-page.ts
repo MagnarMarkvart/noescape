@@ -33,13 +33,14 @@ import {
   ScriptoriumDueView,
   SCRIPTORIUM_TIERS,
 } from '../scriptorium/scriptorium.model';
+import { ElapsedComplete } from '../shared/ui/elapsed-complete';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 
 type LiveKind = 'sessio' | 'track' | 'consuetudo' | 'vigilia';
 
 @Component({
   selector: 'app-dashboard-page',
-  imports: [DecimalPipe, RouterLink, QuickTaskPanel, UiIconBtn, HabitCard],
+  imports: [DecimalPipe, RouterLink, QuickTaskPanel, UiIconBtn, HabitCard, ElapsedComplete],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard-page.html',
   styleUrl: './dashboard-page.css',
@@ -68,6 +69,8 @@ export class DashboardPage implements OnInit {
   protected readonly toast = this.timed.value;
   protected readonly busyHabitId = signal<number | null>(null);
   protected readonly busyDailyId = signal<number | null>(null);
+  protected readonly pendingDailyId = signal<number | null>(null);
+  protected readonly pendingMinutes = signal<number | null>(null);
   protected readonly busyQuestKey = signal<string | null>(null);
 
   protected readonly remainingLabel = this.timer.remainingLabel;
@@ -340,10 +343,53 @@ export class DashboardPage implements OnInit {
     if (!slot.id || slot.completed || this.busyDailyId() || this.dailiesSealed()) {
       return;
     }
+    if (this.isDailyTracked(slot)) {
+      this.submitDaily(slot);
+      return;
+    }
+    this.pendingDailyId.set(slot.id);
+    this.pendingMinutes.set(null);
+  }
+
+  protected confirmDailyElapsed(): void {
+    const id = this.pendingDailyId();
+    const slot = this.todayDailies().find((row) => row.id === id);
+    if (!slot) {
+      return;
+    }
+    this.submitDaily(slot, this.pendingMinutes());
+  }
+
+  protected cancelDailyElapsed(): void {
+    this.pendingDailyId.set(null);
+    this.pendingMinutes.set(null);
+  }
+
+  protected isDailyTracked(slot: DailyTaskSlot): boolean {
+    if ((slot.elapsedMs ?? 0) > 0) {
+      return true;
+    }
+    if (!slot.id) {
+      return false;
+    }
+    if (this.watches.elapsedForDaily(slot.id) > 0) {
+      return true;
+    }
+    const bound = this.timer.boundDaily();
+    return Boolean(this.timer.running() && bound?.dailyTaskId === slot.id);
+  }
+
+  private submitDaily(slot: DailyTaskSlot, minutes?: number | null): void {
+    if (!slot.id || slot.completed || this.busyDailyId() || this.dailiesSealed()) {
+      return;
+    }
     this.busyDailyId.set(slot.id);
-    this.dailiesService.complete(slot.id).subscribe({
+    const elapsedMs =
+      minutes != null && minutes > 0 ? minutes * 60_000 : undefined;
+    this.dailiesService.complete(slot.id, elapsedMs).subscribe({
       next: (result) => {
         this.busyDailyId.set(null);
+        this.cancelDailyElapsed();
         this.skillsService.invalidateTree();
         for (const award of result.awards ?? (result.award ? [result.award] : [])) {
           this.xpFeedback.publishAward(award);

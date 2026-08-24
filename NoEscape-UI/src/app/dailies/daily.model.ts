@@ -48,6 +48,7 @@ export interface DailyTaskSlot {
   questSubtaskId?: number | null;
   /** subtask | daily_work */
   questBindKind?: string | null;
+  scriptoriumWorkId?: number | null;
 }
 
 export interface DailyTier {
@@ -80,6 +81,7 @@ export interface DailyBoard {
   activeLogDate?: string;
   isEditable: boolean;
   readOnly: boolean;
+  /** False after Carry Over has been pressed once against the previous sealed day. */
   canCopyIncomplete: boolean;
   incompleteInLastLog: number;
   isBaseFilled: boolean;

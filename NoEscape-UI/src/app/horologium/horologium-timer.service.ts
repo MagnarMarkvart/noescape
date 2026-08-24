@@ -305,13 +305,11 @@ export class HorologiumTimerService {
   applySnapshot(snapshot: ClockSnapshot | null, kind?: ClockKind): void {
     if (!snapshot) {
       const current = this.activeKind();
-      if (!kind || kind === current || kind === 'sessio' || kind === 'track') {
-        if (kind && current && kind !== current) {
-          return;
-        }
-        if (current || this.phase() === 'complete') {
-          this.resetLocal();
-        }
+      if (kind && current && kind !== current) {
+        return;
+      }
+      if (this.running() || this.phase() !== 'idle') {
+        this.resetLocal();
       }
       return;
     }

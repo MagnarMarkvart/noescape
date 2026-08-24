@@ -83,6 +83,14 @@
                   <span class="done-flag">Done</span>
                 } @else if (dailiesSealed()) {
                   <span class="done-flag">Sealed</span>
+                } @else if (pendingDailyId() === slot.id) {
+                  <app-elapsed-complete
+                    [minutes]="pendingMinutes()"
+                    [busy]="busyDailyId() === slot.id"
+                    (minutesChange)="pendingMinutes.set($event)"
+                    (confirm)="confirmDailyElapsed()"
+                    (cancel)="cancelDailyElapsed()"
+                  />
                 } @else {
                   <button
                     type="button"

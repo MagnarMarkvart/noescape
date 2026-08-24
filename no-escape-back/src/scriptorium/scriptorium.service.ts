@@ -4,12 +4,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SkillsService } from '../skills/skills.service';
 import { TimeService } from '../time/time.service';
 import { addDaysIso } from '../time/tallinn';
+import { calculateDailyTaskXp } from '../xp/daily-xp.util';
 import {
   parseSkillWeights,
   validateSkillWeights,
+  splitQuestXp,
 } from '../xp/quest-xp.util';
+import {
+  findActiveScriptoriumDailies,
+  type ScriptoriumDailyBind,
+} from './scriptorium-lock.util';
 
 export const SCRIPTORIUM_TIERS = [
   'IMMINENS',
@@ -67,6 +74,10 @@ export type ScriptoriumWorkView = {
   status: string;
   questId: number | null;
   questName: string | null;
+  assignedKind: 'quest' | 'daily' | null;
+  assignedDailyDate: string | null;
+  assignedDailyTaskId: number | null;
+  locked: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -104,6 +115,7 @@ export class ScriptoriumService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly time: TimeService,
+    private readonly skillsService: SkillsService,
   ) {}
 
   async list(status = 'OPEN') {
@@ -116,7 +128,11 @@ export class ScriptoriumService {
       orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }],
     });
     const skills = await this.skillMap();
-    return rows.map((row) => this.view(row, skills));
+    const binds = await findActiveScriptoriumDailies(
+      this.prisma,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row) => this.view(row, skills, binds.get(row.id) ?? null));
   }
 
   async dueSoon(days = DEFAULT_DUE_WINDOW_DAYS) {
@@ -137,13 +153,15 @@ export class ScriptoriumService {
       orderBy: [{ dueDate: 'asc' }, { effort: 'desc' }],
     });
     const skills = await this.skillMap();
-    return rows.map((row) => this.dueView(row, skills, today));
+    const binds = await findActiveScriptoriumDailies(
+      this.prisma,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row) => this.dueView(row, skills, today, binds.get(row.id) ?? null));
   }
 
   async getOne(id: number) {
-    const row = await this.load(id);
-    const skills = await this.skillMap();
-    return this.view(row, skills);
+    return this.present(await this.load(id));
   }
 
   async create(input: ScriptoriumUpsertInput) {
@@ -180,12 +198,30 @@ export class ScriptoriumService {
         quest: { select: { id: true, name: true } },
       },
     });
-    const skills = await this.skillMap();
-    return this.view(row, skills);
+    return this.present(row);
   }
 
   async update(id: number, input: ScriptoriumUpsertInput) {
-    await this.load(id);
+    const existing = await this.load(id);
+    await this.assertUnlocked(existing);
+    if (existing.status === 'ARCHIVED') {
+      const restoring =
+        input.status === 'OPEN' &&
+        input.title === undefined &&
+        input.notes === undefined &&
+        input.icon === undefined &&
+        input.dueDate === undefined &&
+        input.tier === undefined &&
+        input.durationMinutes === undefined &&
+        input.effort === undefined &&
+        input.skillWeights === undefined &&
+        input.sortOrder === undefined;
+      if (!restoring) {
+        throw new BadRequestException(
+          'Shelved folios cannot be edited. Restore it first.',
+        );
+      }
+    }
     const data: Record<string, unknown> = {};
     if (typeof input.title === 'string') {
       const title = input.title.trim();
@@ -230,8 +266,7 @@ export class ScriptoriumService {
         quest: { select: { id: true, name: true } },
       },
     });
-    const skills = await this.skillMap();
-    return this.view(row, skills);
+    return this.present(row);
   }
 
   async remove(id: number) {
@@ -240,8 +275,77 @@ export class ScriptoriumService {
     return { deleted: true, id };
   }
 
+  async complete(id: number) {
+    const work = await this.load(id);
+    await this.assertUnlocked(work);
+    if (work.status === 'ARCHIVED') {
+      throw new BadRequestException('This folio is already shelved');
+    }
+    const weights = this.parseWeights(
+      work.skillWeightsJson ? JSON.parse(work.skillWeightsJson) : [],
+    );
+    if (weights.length === 0) {
+      throw new BadRequestException('Assign skills on the folio before completing');
+    }
+    const durationMinutes = work.durationMinutes ?? 45;
+    const xp = calculateDailyTaskXp({
+      effortLevel: work.effort,
+      durationMinutes,
+    });
+    if (xp <= 0) {
+      throw new BadRequestException('Set a volume before completing this folio');
+    }
+
+    const catalog = await this.prisma.skill.findMany({
+      select: { id: true, slug: true },
+    });
+    const bySlug = new Map(catalog.map((row) => [row.slug, row]));
+    const shares = splitQuestXp(xp, weights);
+    const note = `Scriptorium: ${work.title}`;
+    const awards: Awaited<ReturnType<SkillsService['awardXp']>>[] = [];
+    try {
+      for (const share of shares) {
+        if (share.xp <= 0) {
+          continue;
+        }
+        const skill = bySlug.get(share.slug);
+        if (!skill) {
+          throw new BadRequestException(`Unknown skill '${share.slug}'`);
+        }
+        awards.push(
+          await this.skillsService.awardXp(skill.id, {
+            xpGained: share.xp,
+            duration: durationMinutes,
+            note,
+          }),
+        );
+      }
+    } catch (err) {
+      for (const awarded of [...awards].reverse()) {
+        await this.skillsService.reverseXp(
+          awarded.skill.id,
+          awarded.activity.xpGained,
+          awarded.activity.id,
+        );
+      }
+      throw err;
+    }
+
+    await this.prisma.scriptoriumWork.update({
+      where: { id },
+      data: { status: 'ARCHIVED' },
+    });
+    return {
+      work: await this.getOne(id),
+      award: awards[0] ?? null,
+      awards,
+      xp,
+    };
+  }
+
   async addSubtask(workId: number, title: string) {
     const work = await this.load(workId);
+    await this.assertUnlocked(work);
     const trimmed = title.trim().slice(0, 160);
     if (!trimmed) {
       throw new BadRequestException('Subtask title is required');
@@ -254,11 +358,36 @@ export class ScriptoriumService {
     return this.getOne(workId);
   }
 
+  async reorderSubtasks(workId: number, ids: number[]) {
+    const work = await this.load(workId);
+    await this.assertUnlocked(work);
+    const existing = new Set(work.subtasks.map((s) => s.id));
+    if (
+      !Array.isArray(ids) ||
+      ids.length !== existing.size ||
+      ids.some((id) => !existing.has(id)) ||
+      new Set(ids).size !== ids.length
+    ) {
+      throw new BadRequestException('ids must list every subtask once');
+    }
+    await this.prisma.$transaction(
+      ids.map((id, i) =>
+        this.prisma.scriptoriumSubtask.update({
+          where: { id },
+          data: { sortOrder: i },
+        }),
+      ),
+    );
+    return this.getOne(workId);
+  }
+
   async updateSubtask(
     workId: number,
     subtaskId: number,
     input: { title?: string; done?: boolean },
   ) {
+    const work = await this.load(workId);
+    await this.assertUnlocked(work);
     const existing = await this.prisma.scriptoriumSubtask.findFirst({
       where: { id: subtaskId, workId },
     });
@@ -284,6 +413,8 @@ export class ScriptoriumService {
   }
 
   async removeSubtask(workId: number, subtaskId: number) {
+    const work = await this.load(workId);
+    await this.assertUnlocked(work);
     const existing = await this.prisma.scriptoriumSubtask.findFirst({
       where: { id: subtaskId, workId },
     });
@@ -295,7 +426,8 @@ export class ScriptoriumService {
   }
 
   async linkQuest(workId: number, questId: number) {
-    await this.load(workId);
+    const work = await this.load(workId);
+    await this.assertUnlocked(work);
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },
       select: { id: true },
@@ -322,6 +454,26 @@ export class ScriptoriumService {
       throw new NotFoundException(`Scriptorium work #${id} not found`);
     }
     return row;
+  }
+
+  private async present(row: WorkRow): Promise<ScriptoriumWorkView> {
+    const skills = await this.skillMap();
+    const binds = await findActiveScriptoriumDailies(this.prisma, [row.id]);
+    return this.view(row, skills, binds.get(row.id) ?? null);
+  }
+
+  private async assertUnlocked(work: { id: number; questId: number | null }) {
+    if (work.questId) {
+      throw new BadRequestException(
+        'This folio is assigned to a quest and cannot be edited',
+      );
+    }
+    const binds = await findActiveScriptoriumDailies(this.prisma, [work.id]);
+    if (binds.has(work.id)) {
+      throw new BadRequestException(
+        'This folio is assigned to a daily and cannot be edited',
+      );
+    }
   }
 
   private async skillMap(): Promise<Map<string, SkillMeta>> {
@@ -427,7 +579,11 @@ export class ScriptoriumService {
     return weights;
   }
 
-  private view(row: WorkRow, skills: Map<string, SkillMeta>): ScriptoriumWorkView {
+  private view(
+    row: WorkRow,
+    skills: Map<string, SkillMeta>,
+    bind: ScriptoriumDailyBind | null = null,
+  ): ScriptoriumWorkView {
     const skillWeights = parseSkillWeights(
       row.skillWeightsJson ? JSON.parse(row.skillWeightsJson) : [],
     );
@@ -441,6 +597,11 @@ export class ScriptoriumService {
       };
     });
     const subtaskDone = row.subtasks.filter((s) => s.done).length;
+    const assignedKind: ScriptoriumWorkView['assignedKind'] = row.questId
+      ? 'quest'
+      : bind
+        ? 'daily'
+        : null;
     return {
       id: row.id,
       title: row.title,
@@ -457,6 +618,10 @@ export class ScriptoriumService {
       status: row.status,
       questId: row.questId,
       questName: row.quest?.name ?? null,
+      assignedKind,
+      assignedDailyDate: bind?.date ?? null,
+      assignedDailyTaskId: bind?.id ?? null,
+      locked: assignedKind != null,
       sortOrder: row.sortOrder,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -470,6 +635,7 @@ export class ScriptoriumService {
     row: WorkRow,
     skills: Map<string, SkillMeta>,
     today: string,
+    bind: ScriptoriumDailyBind | null = null,
   ): ScriptoriumDueView {
     const dueDate = row.dueDate ?? today;
     const dueInDays = this.diffDays(today, dueDate);
@@ -481,7 +647,7 @@ export class ScriptoriumService {
     } else if (dueInDays <= 3) {
       urgency = 'soon';
     }
-    return { ...this.view(row, skills), dueInDays, urgency };
+    return { ...this.view(row, skills, bind), dueInDays, urgency };
   }
 
   private diffDays(fromIso: string, toIso: string): number {

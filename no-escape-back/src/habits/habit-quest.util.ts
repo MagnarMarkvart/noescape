@@ -56,7 +56,7 @@ export function evaluateHabitQuest(
 ): { progress: number; completed: boolean; needsReset: boolean } {
   const need = Math.max(1, Math.round(requiredCount) || 1);
   const ordered = [...events].sort((a, b) => a.date.localeCompare(b.date));
-  const current = afterLastReset(ordered);
+  const current = afterLastReset(ordered).filter((e) => e.kind !== 'complete');
 
   if (rule === 'STREAK') {
     let streak = 0;

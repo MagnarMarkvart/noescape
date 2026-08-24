@@ -103,10 +103,16 @@ export class QuestsService {
       );
   }
 
-  toggleSubtask(runId: number, subtaskId: number, completed: boolean) {
+  toggleSubtask(
+    runId: number,
+    subtaskId: number,
+    completed: boolean,
+    elapsedMs?: number,
+  ) {
     return this.http
       .post<QuestView>(`${this.baseUrl}/runs/${runId}/subtasks/${subtaskId}`, {
         completed,
+        ...(elapsedMs != null && elapsedMs > 0 ? { elapsedMs } : {}),
       })
       .pipe(
         tap((q) => this.fullCache.set(q.id, q)),
@@ -137,5 +143,11 @@ export class QuestsService {
         tap((res) => this.fullCache.set(res.quest.id, res.quest)),
         tap(() => void this.refreshActive().subscribe()),
       );
+  }
+
+  reorderSubtasks(id: number, ids: number[]) {
+    return this.http
+      .patch<QuestView>(`${this.baseUrl}/${id}/subtasks/order`, { ids })
+      .pipe(tap((q) => this.fullCache.set(q.id, q)));
   }
 }

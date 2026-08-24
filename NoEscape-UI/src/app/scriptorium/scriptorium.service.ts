@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { API_BASE_URL } from '../core/api.config';
+import { LogActivityResponse } from '../skills/skill.model';
 import {
   ScriptoriumDueView,
   ScriptoriumUpsertPayload,
@@ -36,6 +37,15 @@ export class ScriptoriumService {
     return this.http.patch<ScriptoriumWorkView>(`${this.baseUrl}/${id}`, body);
   }
 
+  complete(id: number) {
+    return this.http.post<{
+      work: ScriptoriumWorkView;
+      award: LogActivityResponse | null;
+      awards: LogActivityResponse[];
+      xp: number;
+    }>(`${this.baseUrl}/${id}/complete`, {});
+  }
+
   remove(id: number) {
     return this.http.delete<{ deleted: boolean; id: number }>(
       `${this.baseUrl}/${id}`,
@@ -63,6 +73,13 @@ export class ScriptoriumService {
   removeSubtask(id: number, subId: number) {
     return this.http.delete<ScriptoriumWorkView>(
       `${this.baseUrl}/${id}/subtasks/${subId}`,
+    );
+  }
+
+  reorderSubtasks(id: number, ids: number[]) {
+    return this.http.patch<ScriptoriumWorkView>(
+      `${this.baseUrl}/${id}/subtasks/order`,
+      { ids },
     );
   }
 }

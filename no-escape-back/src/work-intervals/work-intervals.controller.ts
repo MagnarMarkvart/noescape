@@ -10,6 +10,7 @@ export class WorkIntervalsController {
     @Query('dailyTaskId') dailyTaskId?: string,
     @Query('questSubtaskId') questSubtaskId?: string,
     @Query('questId') questId?: string,
+    @Query('questRunId') questRunId?: string,
     @Query('scriptoriumWorkId') scriptoriumWorkId?: string,
     @Query('watchId') watchId?: string,
   ) {
@@ -21,6 +22,7 @@ export class WorkIntervalsController {
       dailyTaskId: parse(dailyTaskId),
       questSubtaskId: parse(questSubtaskId),
       questId: parse(questId),
+      questRunId: parse(questRunId),
       scriptoriumWorkId: parse(scriptoriumWorkId),
       watchId: parse(watchId),
     });

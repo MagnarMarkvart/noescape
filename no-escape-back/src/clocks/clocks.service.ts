@@ -223,7 +223,8 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
     if (row.status !== 'paused') {
       return this.publish(row);
     }
-    const remaining = Math.max(1, row.remainingMs);
+    const remaining =
+      kind === 'consuetudo' ? row.remainingMs : Math.max(1, row.remainingMs);
     const now = new Date();
     let payloadJson = row.payloadJson;
     if (kind === 'sessio' || kind === 'track') {
@@ -829,11 +830,13 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     try {
-      if (running) {
-        await this.watches.startRunning(payload.watchId);
-      } else {
-        await this.watches.pauseRunning(payload.watchId);
-      }
+      const watch = running
+        ? await this.watches.startRunning(payload.watchId)
+        : await this.watches.pauseRunning(payload.watchId);
+      this.events.emit(this.owner(), {
+        snapshot: this.vigiliaSnapshot(watch),
+        kind: 'vigilia',
+      });
     } catch {
       /* watch may have been archived */
     }

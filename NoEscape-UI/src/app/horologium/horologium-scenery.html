@@ -232,28 +232,35 @@
         } @else if (setupKind === 'vigilia') {
         <label class="task">
           Vigilia
-          <select (change)="selectWatch($any($event.target).value)">
-            <option value="" [selected]="selectedWatchId() == null">None</option>
-            @for (w of projectWatches(); track w.id) {
-              <option [value]="w.id" [selected]="w.id === selectedWatchId()">
-                {{ w.name }} · {{ watchElapsed(w.id) }}
-              </option>
+          <select
+            [value]="vigiliaSelectValue"
+            (change)="selectWatch($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (g of vigiliaGroups; track g.id) {
+              <optgroup [attr.label]="g.label">
+                @for (o of g.options; track o.value) {
+                  <option [value]="o.value">{{ o.label }}</option>
+                }
+              </optgroup>
             }
           </select>
         </label>
-        <form class="create" (submit)="$event.preventDefault(); createWatch()">
-          <input
-            type="text"
-            maxlength="80"
-            [value]="watchDraftName()"
-            (input)="setWatchDraftName($any($event.target).value)"
-            placeholder="New project"
-          />
-          <button type="submit" class="exit slim" [disabled]="!watchDraftName().trim()">
-            Create
-          </button>
-        </form>
-        @if (scriptoriumWorks.length) {
+        @if (vigiliaCustomAllowed) {
+          <form class="create" (submit)="$event.preventDefault(); createWatch()">
+            <input
+              type="text"
+              maxlength="80"
+              [value]="watchDraftName()"
+              (input)="setWatchDraftName($any($event.target).value)"
+              placeholder="New project"
+            />
+            <button type="submit" class="exit slim" [disabled]="!watchDraftName().trim()">
+              Create
+            </button>
+          </form>
+        }
+        @if (vigiliaTrackScriptorium && scriptoriumWorks.length) {
           <label class="task">
             From Scriptorium
             <select (change)="bindScriptoriumWork($any($event.target).value)">
@@ -375,6 +382,15 @@
 
   @if (notesOpen()) {
     <aside class="notes-dock">
+      <div class="notes-head">
+        <p>Notes</p>
+        <app-ui-icon-btn
+          icon="close"
+          label="Close notes"
+          [round]="true"
+          (clicked)="toggleSceneryNotes()"
+        />
+      </div>
       <textarea
         class="live-notes"
         [value]="notes()"

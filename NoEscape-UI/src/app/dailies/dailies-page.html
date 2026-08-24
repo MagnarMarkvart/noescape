@@ -100,9 +100,14 @@
         </header>
 
         <div class="tiers setup-tiers">
+          <app-drop-group (dropped)="onDailyDrop($event)">
           @for (tier of current.tiers; track tier.importance) {
             <section
               class="tier"
+              appDropList
+              [dropListId]="tier.importance"
+              dropMode="swap"
+              [disabled]="!canMutate()"
               [class.most-important]="tier.importance === 'MOST_IMPORTANT'"
               [class.important]="tier.importance === 'IMPORTANT'"
               [class.regular]="tier.importance === 'REGULAR'"
@@ -114,7 +119,16 @@
 
               <ul class="slot-list">
                 @for (slot of tier.slots; track slot.slotIndex) {
-                  <li class="slot" [class.editing]="isEditing(slot)" [class.filled]="slot.isFilled">
+                  <li
+                    class="slot"
+                    [appDragItem]="slot.slotIndex"
+                    [dragDisabled]="!canMutate() || !slot.isFilled || isEditing(slot)"
+                    [class.editing]="isEditing(slot)"
+                    [class.filled]="slot.isFilled"
+                  >
+                    @if (canMutate() && slot.isFilled && !isEditing(slot)) {
+                      <app-drag-grip />
+                    }
                     @if (isEditing(slot)) {
                       <form class="slot-form" (submit)="$event.preventDefault(); saveSlot()">
                         <fieldset class="picker-block">
@@ -244,7 +258,7 @@
                         type="button"
                         class="filled-chip"
                         (click)="startEdit(slot)"
-                        [disabled]="slot.completed || !canMutate()"
+                        [disabled]="slot.completed || !canMutate() || !!slot.scriptoriumWorkId"
                       >
                         <span aria-hidden="true">{{ slot.skill?.icon }}</span>
                         <span class="filled-chip-text">
@@ -264,6 +278,7 @@
               }
             </section>
           }
+          </app-drop-group>
         </div>
       </section>
     } @else {
@@ -278,10 +293,15 @@
           </div>
         } @else {
           <div class="board-tiers">
+            <app-drop-group (dropped)="onDailyDrop($event)">
             @for (tier of current.tiers; track tier.importance) {
-              @if (tier.filled > 0) {
+              @if (tier.filled > 0 || canMutate()) {
                 <section
                   class="tier board-tier"
+                  appDropList
+                  [dropListId]="tier.importance"
+                  dropMode="swap"
+                  [disabled]="!canMutate()"
                   [class.most-important]="tier.importance === 'MOST_IMPORTANT'"
                   [class.important]="tier.importance === 'IMPORTANT'"
                   [class.regular]="tier.importance === 'REGULAR'"
@@ -290,11 +310,22 @@
                     <h3>{{ tier.label }}</h3>
                     <span class="tier-meta">{{ tier.completed }}/{{ tier.filled }}</span>
                   </div>
+                  @if (tier.filled === 0) {
+                    <p class="drop-hint">Drop a task here</p>
+                  }
 
                   <ul class="slot-list">
                     @for (slot of tier.slots; track slot.slotIndex) {
                       @if (slot.isFilled) {
-                        <li class="slot" [class.completed]="slot.completed">
+                        <li
+                          class="slot"
+                          [class.completed]="slot.completed"
+                          [appDragItem]="slot.slotIndex"
+                          [dragDisabled]="!canMutate()"
+                        >
+                          @if (canMutate()) {
+                            <app-drag-grip />
+                          }
                           <article class="quest-card">
                             <div class="quest-top">
                               <div class="quest-title-wrap">
@@ -306,6 +337,15 @@
                                     title="Linked to quest"
                                   >
                                     ⚔ {{ slot.questBindKind === 'subtask' ? 'Quest subtask' : 'Quest daily work' }}
+                                  </a>
+                                }
+                                @if (slot.scriptoriumWorkId) {
+                                  <a
+                                    class="quest-link-chip"
+                                    [routerLink]="['/scriptorium', slot.scriptoriumWorkId]"
+                                    title="Linked to Scriptorium"
+                                  >
+                                    📜 Scriptorium
                                   </a>
                                 }
                                 <p class="skill-chip">
@@ -351,15 +391,27 @@
                             <div class="quest-actions">
                               @if (canMutate()) {
                                 @if (!slot.completed) {
-                                  <button
-                                    type="button"
-                                    class="complete-btn"
-                                    [disabled]="completingId() === slot.id"
-                                    (click)="completeSlot(slot)"
-                                  >
-                                    {{ completingId() === slot.id ? '…' : 'Complete' }}
-                                  </button>
-                                  <button type="button" class="ghost" (click)="startEdit(slot)">Edit</button>
+                                  @if (pendingElapsedId() === slot.id) {
+                                    <app-elapsed-complete
+                                      [minutes]="pendingMinutes()"
+                                      [busy]="completingId() === slot.id"
+                                      (minutesChange)="pendingMinutes.set($event)"
+                                      (confirm)="confirmElapsedComplete()"
+                                      (cancel)="cancelElapsedComplete()"
+                                    />
+                                  } @else {
+                                    <button
+                                      type="button"
+                                      class="complete-btn"
+                                      [disabled]="completingId() === slot.id"
+                                      (click)="completeSlot(slot)"
+                                    >
+                                      {{ completingId() === slot.id ? '…' : 'Complete' }}
+                                    </button>
+                                    @if (!slot.scriptoriumWorkId) {
+                                      <button type="button" class="ghost" (click)="startEdit(slot)">Edit</button>
+                                    }
+                                  }
                                 } @else {
                                   <span class="done-stamp">Done</span>
                                   <button
@@ -376,7 +428,7 @@
                               }
                             </div>
 
-                            @if (canMutate() && !slot.completed) {
+                            @if (canMutate() && !slot.completed && !slot.scriptoriumWorkId) {
                               <button
                                 type="button"
                                 class="icon-clear"
@@ -395,6 +447,7 @@
                 </section>
               }
             }
+            </app-drop-group>
           </div>
         }
       </section>

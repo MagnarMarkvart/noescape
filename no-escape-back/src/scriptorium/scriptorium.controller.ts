@@ -46,6 +46,11 @@ export class ScriptoriumController {
     return this.scriptorium.update(id, body ?? {});
   }
 
+  @Post(':id/complete')
+  complete(@Param('id', ParseIntPipe) id: number) {
+    return this.scriptorium.complete(id);
+  }
+
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.scriptorium.remove(id);
@@ -57,6 +62,14 @@ export class ScriptoriumController {
     @Body() body: { title?: string },
   ) {
     return this.scriptorium.addSubtask(id, body?.title ?? '');
+  }
+
+  @Patch(':id/subtasks/order')
+  reorderSubtasks(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { ids?: number[] },
+  ) {
+    return this.scriptorium.reorderSubtasks(id, body?.ids ?? []);
   }
 
   @Patch(':id/subtasks/:subId')

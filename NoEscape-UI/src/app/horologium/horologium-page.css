@@ -435,9 +435,28 @@ button.task-line:focus-visible {
 }
 
 .session-log li {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.session-card {
+  display: block;
+  width: 100%;
+  text-align: left;
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--rs-border);
   background: rgba(20, 16, 10, 0.45);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.session-card:hover,
+.session-card:focus-visible,
+.session-card[aria-pressed='true'] {
+  border-color: var(--rs-border-bright);
+  outline: none;
 }
 
 .log-top {
@@ -545,7 +564,26 @@ button.task-line:focus-visible {
 
 .notes-dock {
   display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
   min-width: 0;
+}
+
+.notes-head {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.notes-head p {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
 }
 
 .dial-panel.notes-open {
@@ -1063,6 +1101,7 @@ button.ghost {
   left: calc(50% + 12.25rem);
   transform: translateY(-50%);
   display: flex;
+  flex-direction: column;
   width: min(18rem, calc(50% - 13.25rem));
   height: min(24rem, 62dvh);
   max-height: calc(100% - 1.5rem);
@@ -1071,7 +1110,7 @@ button.ghost {
 .horologium-shell.focus .live-notes {
   flex: 1 1 auto;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 0;
 }
 
@@ -1137,15 +1176,31 @@ button.ghost {
 }
 
 /* Notes stay out of flow so the clock never shifts. Side panel when there
-   is room to the right of the 22rem board; otherwise a bottom overlay. */
+   is room to the right of the 22rem board; otherwise a bottom sheet with
+   its own close so the overlay cannot trap the toggle. */
 @media (max-width: 959px) {
+  .horologium-shell.focus.notes-open .notes-toggle {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
   .horologium-shell.focus .notes-dock {
     left: 50%;
     top: auto;
-    bottom: 0.7rem;
+    bottom: max(0.7rem, env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
+    z-index: 8;
     width: min(22rem, calc(100% - 1.5rem));
-    height: 7.5rem;
+    height: min(38dvh, 14rem);
+    max-height: calc(100% - 5.5rem);
+    padding: 0.45rem 0.5rem 0.55rem;
+    border: 1px solid var(--rs-border);
+    border-radius: 0.45rem;
+    background: rgba(14, 11, 7, 0.94);
+  }
+
+  .horologium-shell.focus .notes-head {
+    display: flex;
   }
 
   .horologium-shell.focus .dial-panel.notes-open .focus-props {

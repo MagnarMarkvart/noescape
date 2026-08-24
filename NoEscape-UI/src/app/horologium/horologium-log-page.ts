@@ -7,19 +7,16 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { CharacterService } from '../character/character.service';
 import { CalendarMarks } from '../shared/rune-calendar';
 import { HistoryLog } from '../shared/ui/history-log';
 import { HorologiumApiService } from './horologium-api.service';
-import {
-  HorologiumSessionRecord,
-  HorologiumSkillXp,
-} from './horologium.model';
+import { HorologiumSessionRecord } from './horologium.model';
+import { HorologiumSessionSheet } from './horologium-session-sheet';
 
 @Component({
   selector: 'app-horologium-log-page',
-  imports: [DecimalPipe, HistoryLog, RouterLink],
+  imports: [DecimalPipe, HistoryLog, HorologiumSessionSheet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './horologium-log-page.html',
   styleUrl: './horologium-log-page.css',
@@ -39,14 +36,6 @@ export class HorologiumLogPage implements OnInit {
   protected readonly lede = computed(() => {
     const n = this.total();
     return `${n} session${n === 1 ? '' : 's'} on ${this.formatDate(this.selectedDate())}`;
-  });
-  protected readonly detailTitle = computed(() => {
-    const row = this.selected();
-    return row ? this.formatDate(row.date) : null;
-  });
-  protected readonly detailKicker = computed(() => {
-    const row = this.selected();
-    return row ? this.outcomeLabel(row) : '';
   });
 
   ngOnInit(): void {
@@ -94,84 +83,6 @@ export class HorologiumLogPage implements OnInit {
 
   protected clock(iso: string): string {
     return this.character.formatTime(iso);
-  }
-
-  protected stamp(iso: string): string {
-    return this.character.formatDateTime(iso);
-  }
-
-  protected minutesLabel(mins: number): string {
-    const n = Math.max(0, Math.round(mins) || 0);
-    if (n < 1) {
-      return 'under 1m';
-    }
-    const h = Math.floor(n / 60);
-    const m = n % 60;
-    if (h > 0 && m > 0) {
-      return `${h}h ${m}m`;
-    }
-    if (h > 0) {
-      return `${h}h`;
-    }
-    return `${m}m`;
-  }
-
-  protected restTotal(row: HorologiumSessionRecord): number {
-    if (row.restTotalMinutes != null) {
-      return row.restTotalMinutes;
-    }
-    return row.restMinutes * Math.max(0, row.iterations - 1);
-  }
-
-  protected skillXp(row: HorologiumSessionRecord): HorologiumSkillXp[] {
-    if (row.skillXp?.length) {
-      return row.skillXp;
-    }
-    const out: HorologiumSkillXp[] = [];
-    if (row.focusXpAwarded) {
-      out.push({
-        slug: 'focus',
-        name: 'Focus',
-        icon: row.skill?.slug === 'focus' ? row.skill.icon : '🎯',
-        xp: row.focusXpAwarded,
-      });
-    }
-    if (row.disciplineXpAwarded) {
-      out.push({
-        slug: 'discipline',
-        name: 'Discipline',
-        icon: row.skill?.slug === 'discipline' ? row.skill.icon : '⚖️',
-        xp: row.disciplineXpAwarded,
-      });
-    }
-    if (!out.length && row.skill) {
-      out.push({
-        slug: row.skill.slug,
-        name: row.skill.name,
-        icon: row.skill.icon,
-        xp: row.xpAwarded,
-      });
-    }
-    return out;
-  }
-
-  protected outcomeLabel(row: HorologiumSessionRecord): string {
-    switch (row.outcome) {
-      case 'block':
-        return row.iterations > 1 ? 'Work block' : 'Track block';
-      case 'goal':
-        return 'Sessio complete';
-      case 'abandon':
-        return 'Stopped early';
-      case 'task':
-        return 'Task settled';
-      case 'task_early':
-        return 'Ended after task';
-      case 'consuetudo':
-        return 'Consuetudo';
-      default:
-        return row.endedEarly ? 'Ended early' : 'Session';
-    }
   }
 
   private loadDay(date: string): void {

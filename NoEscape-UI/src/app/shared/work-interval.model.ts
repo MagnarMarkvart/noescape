@@ -1,9 +1,10 @@
-export type WorkIntervalClockKind = 'sessio' | 'track' | 'vigilia';
+export type WorkIntervalClockKind = 'sessio' | 'track' | 'vigilia' | 'manual';
 
 export interface WorkIntervalTarget {
   dailyTaskId?: number | null;
   questSubtaskId?: number | null;
   questId?: number | null;
+  questRunId?: number | null;
   scriptoriumWorkId?: number | null;
   watchId?: number | null;
 }
@@ -30,6 +31,8 @@ export function clockKindLabel(kind: WorkIntervalClockKind): string {
       return 'Track';
     case 'vigilia':
       return 'Vigilia';
+    case 'manual':
+      return 'Logged';
     default:
       return kind;
   }

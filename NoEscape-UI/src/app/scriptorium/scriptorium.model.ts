@@ -30,6 +30,10 @@ export interface ScriptoriumWorkView {
   status: string;
   questId: number | null;
   questName: string | null;
+  assignedKind?: 'quest' | 'daily' | null;
+  assignedDailyDate?: string | null;
+  assignedDailyTaskId?: number | null;
+  locked?: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -110,6 +114,10 @@ export function durationLabel(minutes: number | null | undefined): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
+export function workLocked(work: ScriptoriumWorkView): boolean {
+  return Boolean(work.locked || work.assignedKind || work.questId);
 }
 
 export function emptyWorkDraft(): ScriptoriumUpsertPayload & {

@@ -80,6 +80,7 @@ export const HABIT_ICON_GROUPS: HabitIconGroup[] = [
     label: 'Craft',
     icons: [
       { glyph: '💻', label: 'Code' },
+      { glyph: '🐛', label: 'Bug' },
       { glyph: '🛠️', label: 'Build' },
       { glyph: '🎨', label: 'Art' },
       { glyph: '📷', label: 'Photo' },

@@ -295,13 +295,33 @@ button.task-line:focus-visible {
   width: min(20rem, calc((100vw - 26rem) / 2 - 2rem));
   height: min(24rem, 62dvh);
   display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.notes-head {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.notes-head p {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
 }
 
 .live-notes {
   display: block;
   box-sizing: border-box;
+  flex: 1 1 auto;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 0;
   resize: none;
   overflow: auto;
@@ -316,13 +336,28 @@ button.task-line:focus-visible {
 }
 
 @media (max-width: 959px) {
+  .scenery.notes-open .notes-toggle {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
   .notes-dock {
     left: 50%;
     top: auto;
-    bottom: 0;
+    bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
+    z-index: 8;
     width: min(26rem, calc(100vw - 2rem));
-    height: 7.25rem;
+    height: min(36dvh, 13rem);
+    max-height: calc(100dvh - 11rem);
+    padding: 0.45rem 0.5rem 0.55rem;
+    border: 1px solid rgba(198, 168, 90, 0.55);
+    border-radius: 0.45rem;
+    background: rgba(10, 8, 4, 0.9);
+  }
+
+  .notes-head {
+    display: flex;
   }
 }
 

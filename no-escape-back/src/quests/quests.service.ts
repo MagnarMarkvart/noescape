@@ -2,8 +2,10 @@ import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import {
   CharacterService,
@@ -14,6 +16,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SkillsService } from '../skills/skills.service';
 import { TimeService } from '../time/time.service';
 import { WorkIntervalsService } from '../work-intervals/work-intervals.service';
+import { DailiesService } from '../dailies/dailies.service';
+import { findActiveScriptoriumDailies } from '../scriptorium/scriptorium-lock.util';
 import {
   QUEST_WEIGHT_TOTAL,
   QuestSkillShare,
@@ -24,6 +28,11 @@ import {
 import { boostsWealth, parseRewardCents } from '../wealth/money.util';
 import { addDaysIso, eachDateInclusive } from '../time/tallinn';
 import { formatElapsedShort } from '../time/zone';
+import {
+  evaluateHabitQuest,
+  parseHabitQuestRule,
+  parseHabitQuestTarget,
+} from '../habits/habit-quest.util';
 
 type SkillReq = { slug: string; level: number };
 type XpPlan = {
@@ -81,6 +90,13 @@ export const QUEST_ORDO_DIEI_SLUG = 'ordo-diei';
 export const ORDO_DIEI_FORGE_TITLE = 'Forge a Consuetudo';
 export const ORDO_DIEI_WALK_TITLE = 'Walk the Consuetudo';
 
+type QuestLogOpts = {
+  fromHabitus?: boolean;
+  fromDaily?: boolean;
+  skipDaily?: boolean;
+  elapsedMs?: number;
+};
+
 @Injectable()
 export class QuestsService {
   constructor(
@@ -89,6 +105,8 @@ export class QuestsService {
     private readonly characterService: CharacterService,
     private readonly time: TimeService,
     private readonly workIntervals: WorkIntervalsService,
+    @Inject(forwardRef(() => DailiesService))
+    private readonly dailies: DailiesService,
   ) {}
 
   async list(filter: string = 'all') {
@@ -126,7 +144,17 @@ export class QuestsService {
     const runs = await this.prisma.questRun.findMany({
       where: { status: 'ACTIVE' },
       include: {
-        quest: { include: { subtasks: { orderBy: { sortOrder: 'asc' } } } },
+        quest: {
+          include: {
+            subtasks: { orderBy: { sortOrder: 'asc' } },
+            habitLinks: {
+              include: {
+                habit: { select: { id: true, name: true, icon: true } },
+                events: { orderBy: [{ date: 'asc' }, { id: 'asc' }] },
+              },
+            },
+          },
+        },
         journeyLogs: { orderBy: { date: 'desc' }, take: 14 },
         subtaskCompletions: true,
       },
@@ -134,6 +162,14 @@ export class QuestsService {
     });
     const today = this.localToday();
     return runs.map((run) => {
+      const presented = this.presentHabitLinks(run.quest.habitLinks, today);
+      const doneIds = new Set(
+        run.subtaskCompletions.filter((c) => c.done).map((c) => c.subtaskId),
+      );
+      const subtaskDone = run.quest.subtasks.filter((s) => {
+        const habit = presented.bySubtask.get(s.id);
+        return habit ? habit.completed : doneIds.has(s.id);
+      }).length;
       const progress = this.computeProgress(
         run.quest.kind,
         run.quest.durationDays,
@@ -141,21 +177,26 @@ export class QuestsService {
         run.streakCount,
         run.destinationDone,
         run.quest.subtasks.length,
-        run.subtaskCompletions.filter((c) => c.done).length,
+        subtaskDone,
       );
       const gates = run.quest.subtasks.filter((s) => s.gatesJourney);
-      const doneIds = new Set(
-        run.subtaskCompletions.filter((c) => c.done).map((c) => c.subtaskId),
-      );
       const journeyUnlocked =
-        gates.length === 0 || gates.every((g) => doneIds.has(g.id));
+        gates.length === 0 ||
+        gates.every((g) => {
+          const habit = presented.bySubtask.get(g.id);
+          return habit ? habit.completed : doneIds.has(g.id);
+        });
+      const journeyDates = presented.journey
+        ? presented.journey.successDates
+        : run.journeyLogs.map((l) => l.date);
       const journeyDueToday =
         journeyUnlocked &&
+        !presented.journey?.completed &&
         this.journeyDueOnDate(
           run.quest.kind,
           run.quest.commitmentLevel,
           today,
-          run.journeyLogs.map((l) => l.date),
+          journeyDates,
           run.lastLogDate,
         );
       return {
@@ -195,12 +236,14 @@ export class QuestsService {
     const completedSlugs = await this.completedQuestSlugs();
     const features = await this.featureMap();
     const unlocksBySlug = this.unlocksIndex(allQuests);
-    return this.toQuestView(
-      quest,
-      skillLevels,
-      completedSlugs,
-      features,
-      unlocksBySlug,
+    return this.withLiveVigilia(
+      this.toQuestView(
+        quest,
+        skillLevels,
+        completedSlugs,
+        features,
+        unlocksBySlug,
+      ),
     );
   }
 
@@ -230,6 +273,31 @@ export class QuestsService {
       [rules, stakes, howToWin, destination].filter(Boolean).join('\n\n') ||
       input.summary?.trim() ||
       name;
+
+    const workId = Number(input.scriptoriumWorkId);
+    if (Number.isFinite(workId) && workId > 0) {
+      const work = await this.prisma.scriptoriumWork.findUnique({
+        where: { id: workId },
+        select: { id: true, status: true, questId: true },
+      });
+      if (!work) {
+        throw new NotFoundException(`Scriptorium work #${workId} not found`);
+      }
+      if (work.status === 'ARCHIVED') {
+        throw new BadRequestException('Shelved folios cannot be assigned');
+      }
+      if (work.questId) {
+        throw new BadRequestException(
+          'This folio is already assigned to a quest',
+        );
+      }
+      const binds = await findActiveScriptoriumDailies(this.prisma, [workId]);
+      if (binds.has(workId)) {
+        throw new BadRequestException(
+          'This folio is already assigned to a daily',
+        );
+      }
+    }
 
     const created = await this.prisma.quest.create({
       data: {
@@ -302,7 +370,6 @@ export class QuestsService {
       });
     }
 
-    const workId = Number(input.scriptoriumWorkId);
     if (Number.isFinite(workId) && workId > 0) {
       await this.prisma.scriptoriumWork.updateMany({
         where: { id: workId },
@@ -543,7 +610,11 @@ export class QuestsService {
 
   async logDay(
     runId: number,
-    input: { result: 'CLEAN' | 'BROKEN'; date?: string; note?: string },
+    input: {
+      result: 'CLEAN' | 'BROKEN';
+      date?: string;
+      note?: string;
+    } & QuestLogOpts,
   ) {
     const run = await this.prisma.questRun.findUnique({
       where: { id: runId },
@@ -558,12 +629,30 @@ export class QuestsService {
     if (run.quest.kind !== 'STREAK_LOG') {
       throw new BadRequestException('This quest does not use daily streak logs');
     }
+    if (!input.fromHabitus && !input.fromDaily) {
+      if (await this.habitusJourneyLink(run.questId)) {
+        throw new BadRequestException(
+          'This journey is tracked from Habitus logs and cannot be marked here',
+        );
+      }
+    }
 
     const date = input.date?.trim() || this.localToday();
     const existingLog = await this.prisma.questDayLog.findUnique({
       where: { runId_date: { runId, date } },
     });
     if (existingLog) {
+      if (input.fromHabitus || input.fromDaily) {
+        return {
+          streakCount: run.streakCount,
+          bestStreak: run.bestStreak,
+          xpAwarded: existingLog.xpAwarded,
+          completed: false,
+          awards: [],
+          unlocked: [] as string[],
+          quest: await this.getOne(run.questId),
+        };
+      }
       throw new BadRequestException('Already logged for this date');
     }
 
@@ -633,6 +722,15 @@ export class QuestsService {
       unlocked = result.unlocked;
     }
 
+    if (!input.skipDaily && input.result === 'CLEAN') {
+      await this.mirrorLinkedDaily({
+        questId: run.questId,
+        date,
+        subtaskId: null,
+        completed: true,
+      });
+    }
+
     return {
       streakCount: streak,
       bestStreak,
@@ -646,9 +744,16 @@ export class QuestsService {
 
   async logJourney(
     runId: number,
-    input: { date?: string; note?: string; done?: boolean },
+    input: { date?: string; note?: string; done?: boolean } & QuestLogOpts,
   ) {
     const run = await this.requireActiveRun(runId);
+    if (!input.fromHabitus && !input.fromDaily) {
+      if (await this.habitusJourneyLink(run.questId)) {
+        throw new BadRequestException(
+          'This journey is tracked from Habitus logs and cannot be marked here',
+        );
+      }
+    }
     const gates = await this.prisma.questSubtask.findMany({
       where: { questId: run.questId, gatesJourney: true },
     });
@@ -675,6 +780,14 @@ export class QuestsService {
       if (existing) {
         await this.prisma.questJourneyLog.delete({ where: { id: existing.id } });
       }
+      if (!input.skipDaily) {
+        await this.mirrorLinkedDaily({
+          questId: run.questId,
+          date,
+          subtaskId: null,
+          completed: false,
+        });
+      }
       return {
         logged: false,
         date,
@@ -683,6 +796,13 @@ export class QuestsService {
     }
 
     if (existing) {
+      if (input.fromHabitus || input.fromDaily) {
+        return {
+          logged: true,
+          date,
+          quest: await this.getOne(run.questId),
+        };
+      }
       throw new BadRequestException('Already logged journey for this date');
     }
 
@@ -694,6 +814,15 @@ export class QuestsService {
       },
     });
 
+    if (!input.skipDaily) {
+      await this.mirrorLinkedDaily({
+        questId: run.questId,
+        date,
+        subtaskId: null,
+        completed: true,
+      });
+    }
+
     return {
       logged: true,
       date,
@@ -701,36 +830,124 @@ export class QuestsService {
     };
   }
 
-  /** Habitus auto-progress: journey day or subtask on the active run. */
+  /**
+   * Project a Habitus day onto the linked quest log.
+   * Journey / STREAK_LOG: one check-in per successful habit day.
+   * Subtask: marked done only when the habit rule is fully met.
+   */
   async applyHabitusProgress(input: {
     questId: number;
     target: 'JOURNEY' | 'SUBTASK';
     subtaskId?: number | null;
     date: string;
     note?: string;
+    success?: boolean;
+    completed?: boolean;
   }): Promise<void> {
     const run = await this.prisma.questRun.findFirst({
       where: { questId: input.questId, status: 'ACTIVE' },
+      include: { quest: { select: { kind: true } } },
     });
     if (!run) {
       return;
     }
-    if (input.target === 'SUBTASK' && input.subtaskId) {
-      try {
-        await this.toggleSubtask(run.id, input.subtaskId, true);
-      } catch {
-        /* already done or gated */
-      }
-      return;
-    }
+    const opts: QuestLogOpts = { fromHabitus: true, skipDaily: true };
     try {
+      if (input.target === 'SUBTASK' && input.subtaskId) {
+        await this.toggleSubtask(
+          run.id,
+          input.subtaskId,
+          input.completed !== false,
+          opts,
+        );
+        return;
+      }
+      if (run.quest.kind === 'STREAK_LOG') {
+        if (input.success) {
+          await this.logDay(run.id, {
+            result: 'CLEAN',
+            date: input.date,
+            note: input.note,
+            ...opts,
+          });
+        }
+        return;
+      }
       await this.logJourney(run.id, {
         date: input.date,
         note: input.note,
-        done: true,
+        done: input.success !== false,
+        ...opts,
       });
     } catch {
-      /* already logged today */
+      /* already in that state */
+    }
+  }
+
+  /** Board daily with a quest bind: completing it writes the matching quest log. */
+  async applyDailyProgress(input: {
+    questRunId: number | null;
+    questBindKind: string | null;
+    questSubtaskId: number | null;
+    date: string;
+    completed: boolean;
+  }): Promise<void> {
+    if (!input.questRunId || !input.questBindKind) {
+      return;
+    }
+    const opts: QuestLogOpts = { fromDaily: true, skipDaily: true };
+    try {
+      if (input.questBindKind === 'subtask' && input.questSubtaskId) {
+        await this.toggleSubtask(
+          input.questRunId,
+          input.questSubtaskId,
+          input.completed,
+          opts,
+        );
+        return;
+      }
+      if (input.questBindKind !== 'daily_work') {
+        return;
+      }
+      const run = await this.prisma.questRun.findUnique({
+        where: { id: input.questRunId },
+        include: { quest: { select: { kind: true } } },
+      });
+      if (!run || run.status !== 'ACTIVE') {
+        return;
+      }
+      if (run.quest.kind === 'STREAK_LOG') {
+        if (input.completed) {
+          await this.logDay(run.id, {
+            result: 'CLEAN',
+            date: input.date,
+            note: 'Daily',
+            ...opts,
+          });
+        }
+        return;
+      }
+      await this.logJourney(run.id, {
+        date: input.date,
+        note: 'Daily',
+        done: input.completed,
+        ...opts,
+      });
+    } catch {
+      /* already in that state */
+    }
+  }
+
+  private async mirrorLinkedDaily(input: {
+    questId: number;
+    date: string;
+    subtaskId: number | null;
+    completed: boolean;
+  }): Promise<void> {
+    try {
+      await this.dailies.mirrorQuestCompletion(input);
+    } catch {
+      /* sealed, full board, or missing skill — quest log still stands */
     }
   }
 
@@ -749,6 +966,11 @@ export class QuestsService {
     label: string;
   }> {
     const run = await this.requireActiveRun(runId);
+    if (await this.habitusJourneyLink(run.questId)) {
+      throw new BadRequestException(
+        'This journey is tracked from Habitus logs and cannot be marked here',
+      );
+    }
     const today = this.localToday();
     const gates = await this.prisma.questSubtask.findMany({
       where: { questId: run.questId, gatesJourney: true },
@@ -812,7 +1034,40 @@ export class QuestsService {
     };
   }
 
-  async toggleSubtask(runId: number, subtaskId: number, completed: boolean) {
+  async reorderSubtasks(questId: number, ids: number[]) {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      include: { subtasks: { select: { id: true } } },
+    });
+    if (!quest) {
+      throw new NotFoundException(`Quest #${questId} not found`);
+    }
+    const existing = new Set(quest.subtasks.map((s) => s.id));
+    if (
+      !Array.isArray(ids) ||
+      ids.length !== existing.size ||
+      ids.some((id) => !existing.has(id)) ||
+      new Set(ids).size !== ids.length
+    ) {
+      throw new BadRequestException('ids must list every subtask once');
+    }
+    await this.prisma.$transaction(
+      ids.map((id, i) =>
+        this.prisma.questSubtask.update({
+          where: { id },
+          data: { sortOrder: i },
+        }),
+      ),
+    );
+    return this.getOne(questId);
+  }
+
+  async toggleSubtask(
+    runId: number,
+    subtaskId: number,
+    completed: boolean,
+    opts?: QuestLogOpts,
+  ) {
     const run = await this.requireActiveRun(runId);
     const subtask = await this.prisma.questSubtask.findFirst({
       where: { id: subtaskId, questId: run.questId },
@@ -820,10 +1075,36 @@ export class QuestsService {
     if (!subtask) {
       throw new NotFoundException(`Subtask #${subtaskId} not found`);
     }
+    if (!opts?.fromHabitus && !opts?.fromDaily) {
+      const locked = await this.prisma.habitQuestLink.findFirst({
+        where: {
+          questId: run.questId,
+          target: 'SUBTASK',
+          subtaskId,
+        },
+        select: { id: true },
+      });
+      if (locked) {
+        throw new BadRequestException(
+          'This subtask is tracked from Habitus logs and cannot be marked here',
+        );
+      }
+    }
 
-    const existing = await this.prisma.questSubtaskCompletion.findUnique({
+    let existing = await this.prisma.questSubtaskCompletion.findUnique({
       where: { runId_subtaskId: { runId, subtaskId } },
     });
+
+    if (
+      completed &&
+      Number(existing?.elapsedMs ?? 0) <= 0 &&
+      (opts?.elapsedMs ?? 0) > 0
+    ) {
+      await this.addSubtaskElapsed(runId, subtaskId, opts!.elapsedMs!, 'manual');
+      existing = await this.prisma.questSubtaskCompletion.findUnique({
+        where: { runId_subtaskId: { runId, subtaskId } },
+      });
+    }
 
     if (completed) {
       if (!existing) {
@@ -849,6 +1130,15 @@ export class QuestsService {
       }
     }
 
+    if (!opts?.skipDaily) {
+      await this.mirrorLinkedDaily({
+        questId: run.questId,
+        date: this.localToday(),
+        subtaskId,
+        completed,
+      });
+    }
+
     return this.getOne(run.questId);
   }
 
@@ -858,7 +1148,12 @@ export class QuestsService {
    * today's board already carries this subtask as a daily, projects the
    * same delta onto that DailyTask.elapsedMs so both logs agree.
    */
-  async addSubtaskElapsed(runId: number, subtaskId: number, elapsedMs: number) {
+  async addSubtaskElapsed(
+    runId: number,
+    subtaskId: number,
+    elapsedMs: number,
+    clockKind: 'track' | 'manual' = 'track',
+  ) {
     const run = await this.requireActiveRun(runId);
     const subtask = await this.prisma.questSubtask.findFirst({
       where: { id: subtaskId, questId: run.questId },
@@ -883,7 +1178,7 @@ export class QuestsService {
       update: { elapsedMs: BigInt(ms) },
     });
     if (delta > 0) {
-      await this.workIntervals.recordFlush('track', delta, new Date(), {
+      await this.workIntervals.recordFlush(clockKind, delta, new Date(), {
         questId: run.questId,
         questRunId: runId,
         questSubtaskId: subtaskId,
@@ -923,6 +1218,8 @@ export class QuestsService {
         'Finish every subtask before completing the destination',
       );
     }
+
+    await this.flushQuestVigiliaWatches(run.questId, run.id);
 
     await this.prisma.questRun.update({
       where: { id: runId },
@@ -1095,10 +1392,249 @@ export class QuestsService {
     return { awards, unlocked };
   }
 
+  private async habitusJourneyLink(questId: number) {
+    return this.prisma.habitQuestLink.findFirst({
+      where: { questId, target: 'JOURNEY' },
+      select: { id: true },
+    });
+  }
+
+  private presentHabitLinks(
+    links: Array<{
+      habitId: number;
+      target: string;
+      subtaskId: number | null;
+      rule: string;
+      requiredCount: number;
+      windowDays: number | null;
+      habit?: { id: number; name: string; icon: string | null } | null;
+      events?: Array<{
+        id: number;
+        date: string;
+        success: boolean;
+        kind: string;
+        note: string | null;
+        createdAt: Date;
+      }>;
+    }>,
+    today: string,
+  ) {
+    const presented = links.map((link) => this.presentHabitLink(link, today));
+    const journey =
+      presented.find((row) => row.target === 'JOURNEY') ?? null;
+    const bySubtask = new Map(
+      presented
+        .filter((row) => row.target === 'SUBTASK' && row.subtaskId)
+        .map((row) => [row.subtaskId as number, row]),
+    );
+    return { journey, bySubtask };
+  }
+
+  private presentHabitLink(
+    link: {
+      habitId: number;
+      target: string;
+      subtaskId: number | null;
+      rule: string;
+      requiredCount: number;
+      windowDays: number | null;
+      habit?: { id: number; name: string; icon: string | null } | null;
+      events?: Array<{
+        id: number;
+        date: string;
+        success: boolean;
+        kind: string;
+        note: string | null;
+        createdAt: Date;
+      }>;
+    },
+    today: string,
+  ) {
+    const events = link.events ?? [];
+    const rule = parseHabitQuestRule(link.rule);
+    const snapshot = evaluateHabitQuest(
+      events,
+      rule,
+      link.requiredCount,
+      link.windowDays,
+      today,
+    );
+    const successEvents = events.filter(
+      (e) => e.success && e.kind !== 'complete',
+    );
+    const seen = new Set<string>();
+    const successDates: string[] = [];
+    for (const e of successEvents) {
+      if (!seen.has(e.date)) {
+        seen.add(e.date);
+        successDates.push(e.date);
+      }
+    }
+    return {
+      habitId: link.habitId,
+      habitName: link.habit?.name ?? 'Habitus',
+      habitIcon: link.habit?.icon ?? null,
+      target: parseHabitQuestTarget(link.target),
+      subtaskId: link.subtaskId,
+      rule,
+      requiredCount: link.requiredCount,
+      windowDays: link.windowDays,
+      progress: snapshot.progress,
+      completed: snapshot.completed,
+      successEvents,
+      successDates,
+    };
+  }
+
+  private toHabitLinkView(
+    link: ReturnType<QuestsService['presentHabitLink']>,
+  ) {
+    return {
+      habitId: link.habitId,
+      habitName: link.habitName,
+      habitIcon: link.habitIcon,
+      target: link.target,
+      subtaskId: link.subtaskId,
+      rule: link.rule,
+      requiredCount: link.requiredCount,
+      windowDays: link.windowDays,
+      progress: link.progress,
+      completed: link.completed,
+    };
+  }
+
+  /**
+   * Pause any running Vigilia watches for this quest so the last open slice
+   * is committed before the run is marked complete.
+   */
+  private async flushQuestVigiliaWatches(questId: number, runId: number) {
+    const watches = await this.prisma.horologiumWatch.findMany({
+      where: { questId, questRunId: runId, status: 'ACTIVE' },
+    });
+    const now = new Date();
+    for (const watch of watches) {
+      if (!watch.running || !watch.lastStartedAt) {
+        continue;
+      }
+      const delta = Math.max(0, now.getTime() - watch.lastStartedAt.getTime());
+      const elapsed = Number(watch.elapsedMs) + delta;
+      if (delta > 0) {
+        await this.workIntervals.recordFlush('vigilia', delta, now, {
+          watchId: watch.id,
+          questRunId: watch.questRunId ?? undefined,
+          questSubtaskId: watch.questSubtaskId ?? undefined,
+          questId:
+            watch.bindKind === 'quest_daily_work'
+              ? watch.questId ?? undefined
+              : undefined,
+        });
+        if (watch.bindKind === 'quest') {
+          await this.prisma.questRun.update({
+            where: { id: runId },
+            data: { elapsedMs: { increment: BigInt(delta) } },
+          });
+        } else if (watch.bindKind === 'quest_daily_work') {
+          await this.prisma.questRun.update({
+            where: { id: runId },
+            data: { journeyElapsedMs: { increment: BigInt(delta) } },
+          });
+        } else if (watch.bindKind === 'subtask' && watch.questSubtaskId) {
+          await this.prisma.questSubtaskCompletion.upsert({
+            where: {
+              runId_subtaskId: {
+                runId,
+                subtaskId: watch.questSubtaskId,
+              },
+            },
+            create: {
+              runId,
+              subtaskId: watch.questSubtaskId,
+              done: false,
+              elapsedMs: BigInt(delta),
+            },
+            update: { elapsedMs: { increment: BigInt(delta) } },
+          });
+        }
+      }
+      await this.prisma.horologiumWatch.update({
+        where: { id: watch.id },
+        data: {
+          running: false,
+          lastStartedAt: null,
+          elapsedMs: BigInt(elapsed),
+        },
+      });
+    }
+  }
+
+  private liveWatchMs(row: {
+    elapsedMs: bigint | number;
+    running: boolean;
+    lastStartedAt: Date | null;
+  }): number {
+    let ms = Number(row.elapsedMs ?? 0);
+    if (row.running && row.lastStartedAt) {
+      ms += Math.max(0, Date.now() - row.lastStartedAt.getTime());
+    }
+    return ms;
+  }
+
+  private async withLiveVigilia<
+    T extends {
+      id: number;
+      subtasks: Array<{ id: number; elapsedMs?: number }>;
+      run: {
+        elapsedMs?: number;
+        journeyElapsedMs?: number;
+      } | null;
+    },
+  >(view: T): Promise<T> {
+    const watches = await this.prisma.horologiumWatch.findMany({
+      where: { questId: view.id },
+    });
+    if (watches.length === 0) {
+      return view;
+    }
+    let questMs = view.run?.elapsedMs ?? 0;
+    let journeyMs = view.run?.journeyElapsedMs ?? 0;
+    const subtaskMs = new Map<number, number>();
+    for (const watch of watches) {
+      const live = this.liveWatchMs(watch);
+      if (watch.bindKind === 'quest') {
+        questMs = Math.max(questMs, live);
+      } else if (watch.bindKind === 'quest_daily_work') {
+        journeyMs = Math.max(journeyMs, live);
+      } else if (watch.bindKind === 'subtask' && watch.questSubtaskId) {
+        const prev = subtaskMs.get(watch.questSubtaskId) ?? 0;
+        subtaskMs.set(watch.questSubtaskId, Math.max(prev, live));
+      }
+    }
+    const subtasks = view.subtasks.map((s) => {
+      const live = subtaskMs.get(s.id);
+      if (live == null) {
+        return s;
+      }
+      return { ...s, elapsedMs: Math.max(s.elapsedMs ?? 0, live) };
+    });
+    return {
+      ...view,
+      subtasks,
+      run: view.run
+        ? { ...view.run, elapsedMs: questMs, journeyElapsedMs: journeyMs }
+        : view.run,
+    };
+  }
+
   private questInclude(withLogs: boolean) {
     const logTake = withLogs ? 30 : 14;
     return {
       subtasks: { orderBy: { sortOrder: 'asc' as const } },
+      habitLinks: {
+        include: {
+          habit: { select: { id: true, name: true, icon: true } },
+          events: { orderBy: [{ date: 'asc' as const }, { id: 'asc' as const }] },
+        },
+      },
       runs: {
         orderBy: { startedAt: 'desc' as const },
         take: 1,
@@ -1147,6 +1683,23 @@ export class QuestsService {
       createdAt: Date;
       dailyWorkMinutes?: number | null;
       dailyWorkTitle?: string | null;
+      habitLinks?: Array<{
+        habitId: number;
+        target: string;
+        subtaskId: number | null;
+        rule: string;
+        requiredCount: number;
+        windowDays: number | null;
+        habit?: { id: number; name: string; icon: string | null } | null;
+        events?: Array<{
+          id: number;
+          date: string;
+          success: boolean;
+          kind: string;
+          note: string | null;
+          createdAt: Date;
+        }>;
+      }>;
       subtasks?: Array<{
         id: number;
         title: string;
@@ -1164,6 +1717,8 @@ export class QuestsService {
         completedAt: Date | null;
         lastLogDate: string | null;
         destinationDone?: boolean;
+        elapsedMs?: bigint | number;
+        journeyElapsedMs?: bigint | number;
         logs?: Array<{
           id: number;
           date: string;
@@ -1240,6 +1795,8 @@ export class QuestsService {
       availability = 'locked';
     }
 
+    const today = this.localToday();
+    const habitLinks = this.presentHabitLinks(quest.habitLinks ?? [], today);
     const completions = latestRun?.subtaskCompletions ?? [];
     const doneRows = completions.filter((c) => c.done !== false);
     const completionOrder = new Map(
@@ -1258,7 +1815,10 @@ export class QuestsService {
       completions.map((c) => [c.subtaskId, Number(c.elapsedMs ?? 0)]),
     );
     const subtasks = (quest.subtasks ?? []).map((s) => {
-      const at = completionAt.get(s.id);
+      const habitLink = habitLinks.bySubtask.get(s.id) ?? null;
+      const habitDone = habitLink?.completed === true;
+      const completed = habitLink ? habitDone : doneSubtaskIds.has(s.id);
+      const at = completed ? completionAt.get(s.id) : undefined;
       const stamp = at ? this.time.stamp(at) : null;
       const elapsedMs = elapsedById.get(s.id) ?? 0;
       return {
@@ -1267,13 +1827,16 @@ export class QuestsService {
         sortOrder: s.sortOrder,
         gatesJourney: Boolean(s.gatesJourney),
         deadline: s.deadline ?? null,
-        completed: doneSubtaskIds.has(s.id),
+        completed,
         completedAt: stamp?.iso ?? null,
         completedAtLabel: stamp?.label ?? null,
         completedDate: stamp?.date ?? null,
-        completionOrder: completionOrder.get(s.id) ?? null,
+        completionOrder: completed
+          ? (completionOrder.get(s.id) ?? null)
+          : null,
         elapsedMs,
         estimateMinutes: s.estimateMinutes ?? null,
+        habitLink: habitLink ? this.toHabitLinkView(habitLink) : null,
       };
     });
     const gateSubtasks = subtasks.filter((s) => s.gatesJourney);
@@ -1298,8 +1861,17 @@ export class QuestsService {
       availability === 'active' &&
       !destinationDone &&
       subtasks.every((s) => s.completed);
-    const journeyLogs = latestRun?.journeyLogs ?? [];
-    const today = this.localToday();
+    const storedJourneyLogs = latestRun?.journeyLogs ?? [];
+    const journeyHabit = habitLinks.journey;
+    const habitusJourneyLogs = journeyHabit
+      ? journeyHabit.successEvents.map((e) => ({
+          id: e.id,
+          date: e.date,
+          note: e.note,
+          createdAt: e.createdAt,
+        }))
+      : storedJourneyLogs;
+    const journeyLogs = habitusJourneyLogs;
     const commitmentLevel = quest.commitmentLevel ?? 7;
     const activityDates =
       quest.kind === 'STREAK_LOG'
@@ -1325,9 +1897,11 @@ export class QuestsService {
           )
         : [];
     const canLogJourney =
-      availability === 'active' && journeyUnlocked;
+      availability === 'active' && journeyUnlocked && !journeyHabit;
     const journeyDueToday =
-      canLogJourney &&
+      availability === 'active' &&
+      journeyUnlocked &&
+      !journeyHabit?.completed &&
       this.journeyDueOnDate(
         quest.kind,
         commitmentLevel,
@@ -1364,6 +1938,9 @@ export class QuestsService {
       deadline: quest.deadline ?? null,
       dailyWorkMinutes: quest.dailyWorkMinutes ?? null,
       dailyWorkTitle: quest.dailyWorkTitle ?? null,
+      journeyHabitLink: journeyHabit
+        ? this.toHabitLinkView(journeyHabit)
+        : null,
       coverImage: quest.coverImage,
       coverUrl: this.coverUrl(quest.coverImage),
       skillSlug: quest.skillSlug,
@@ -1392,6 +1969,7 @@ export class QuestsService {
         startedAt: latestRun?.startedAt ?? null,
         completedAt: latestRun?.completedAt ?? null,
         destinationDone,
+        elapsedMs: Number(latestRun?.elapsedMs ?? 0),
         subtasks,
         journeyLogs,
         missedDays,
@@ -1412,6 +1990,8 @@ export class QuestsService {
               : null,
             lastLogDate: latestRun.lastLogDate,
             destinationDone,
+            elapsedMs: Number(latestRun.elapsedMs ?? 0),
+            journeyElapsedMs: Number(latestRun.journeyElapsedMs ?? 0),
             logs: latestRun.logs ?? [],
             journeyLogs: journeyLogs.map((l) => {
               const stamp = this.time.stamp(l.createdAt);
@@ -1603,6 +2183,7 @@ export class QuestsService {
     startedAt: Date | null;
     completedAt: Date | null;
     destinationDone: boolean;
+    elapsedMs?: number;
     subtasks: Array<{
       title: string;
       completed: boolean;
@@ -1703,7 +2284,10 @@ export class QuestsService {
         at: stamp.iso,
         atLabel: stamp.label,
         date: stamp.date,
-        title: 'Destination completed',
+        title:
+          input.elapsedMs && input.elapsedMs > 0
+            ? `Destination completed · ${this.formatElapsedShort(input.elapsedMs)}`
+            : 'Destination completed',
         order: null,
       });
     }

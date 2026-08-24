@@ -4,12 +4,35 @@ import { ClockEvent } from './clock.types';
 
 export type ClockSsePayload = { type?: string; data: unknown };
 
+function jsonSafe(event: ClockEvent): ClockEvent {
+  try {
+    return JSON.parse(
+      JSON.stringify(event, (_key, value) =>
+        typeof value === 'bigint' ? Number(value) : value,
+      ),
+    ) as ClockEvent;
+  } catch {
+    try {
+      return JSON.parse(
+        JSON.stringify({
+          snapshot: event.snapshot ?? null,
+          kind: event.kind,
+          toast: event.toast ?? null,
+          jingle: event.jingle ?? null,
+        }),
+      ) as ClockEvent;
+    } catch {
+      return { snapshot: null, kind: event.kind };
+    }
+  }
+}
+
 @Injectable()
 export class ClockEventsService {
   private readonly rooms = new Map<string, Subject<ClockEvent>>();
 
   emit(ownerId: string, event: ClockEvent): void {
-    this.room(ownerId).next(event);
+    this.room(ownerId).next(jsonSafe(event));
   }
 
   stream(ownerId: string): Observable<ClockSsePayload> {

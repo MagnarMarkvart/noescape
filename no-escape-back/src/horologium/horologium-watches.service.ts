@@ -342,7 +342,7 @@ export class HorologiumWatchesService {
         questRunId: existing.questRunId ?? undefined,
         questSubtaskId: existing.questSubtaskId ?? undefined,
         questId:
-          existing.bindKind === 'quest' || existing.bindKind === 'quest_daily_work'
+          existing.bindKind === 'quest_daily_work'
             ? existing.questId ?? undefined
             : undefined,
         scriptoriumWorkId: existing.scriptoriumWorkId ?? undefined,
@@ -405,6 +405,20 @@ export class HorologiumWatchesService {
     delta: number,
   ): Promise<void> {
     if (delta <= 0) {
+      return;
+    }
+    if (watch.bindKind === 'quest' && watch.questRunId) {
+      await this.prisma.questRun.update({
+        where: { id: watch.questRunId },
+        data: { elapsedMs: { increment: BigInt(delta) } },
+      });
+      return;
+    }
+    if (watch.bindKind === 'quest_daily_work' && watch.questRunId) {
+      await this.prisma.questRun.update({
+        where: { id: watch.questRunId },
+        data: { journeyElapsedMs: { increment: BigInt(delta) } },
+      });
       return;
     }
     if (watch.bindKind === 'daily' && watch.dailyTaskId) {

@@ -27,6 +27,16 @@ import {
   removeSkillWeight,
 } from '../shared/skill-weights';
 import { centsToInput, parseMoneyToCents } from '../shared/money';
+import { DurationField } from '../shared/ui/duration-field';
+import { ForgeLine } from '../shared/ui/forge-line';
+import {
+  DragGrip,
+  DragItem,
+  DragSortDrop,
+  DropGroup,
+  DropList,
+  moveIndex,
+} from '../shared/ui/drag-sort';
 import { API_BASE_URL } from '../core/api.config';
 import {
   QUEST_WEIGHT_TOTAL,
@@ -36,13 +46,15 @@ import {
 } from './quest.model';
 import { QuestsService } from './quests.service';
 import { ScriptoriumService } from '../scriptorium/scriptorium.service';
-import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
+import { ScriptoriumWorkView, workLocked } from '../scriptorium/scriptorium.model';
 import {
   HabitQuestRule,
-  HabitQuestTarget,
   HabitsService,
   HabitView,
 } from '../habits/habits.service';
+import { QuestHabitBind } from './quest-habit-bind';
+
+type JourneyBind = 'none' | 'daily' | 'habitus';
 
 interface ForgeSubtask {
   id?: number;
@@ -50,6 +62,10 @@ interface ForgeSubtask {
   gatesJourney: boolean;
   deadline: string | null;
   estimateMinutes: number | null;
+  habitId: number | null;
+  habitRule: HabitQuestRule;
+  habitRequiredCount: number;
+  habitWindowDays: number;
 }
 
 @Component({
@@ -63,6 +79,13 @@ interface ForgeSubtask {
     SkillTreePicker,
     NumberField,
     DateField,
+    DurationField,
+    QuestHabitBind,
+    ForgeLine,
+    DropGroup,
+    DropList,
+    DragItem,
+    DragGrip,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-forge-page.html',
@@ -84,13 +107,12 @@ export class QuestForgePage implements OnInit {
   protected readonly editId = signal<number | null>(null);
   protected readonly scriptoriumWorkId = signal<number | null>(null);
   protected readonly habits = signal<HabitView[]>([]);
+  protected readonly journeyBind = signal<JourneyBind>('none');
   protected readonly linkedHabitId = signal<number | null>(null);
-  protected readonly previousLinkedHabitId = signal<number | null>(null);
-  protected readonly habitTarget = signal<HabitQuestTarget>('JOURNEY');
-  protected readonly habitSubtaskId = signal<number | null>(null);
   protected readonly habitRule = signal<HabitQuestRule>('COUNT');
   protected readonly habitRequiredCount = signal(1);
   protected readonly habitWindowDays = signal(7);
+  protected readonly journeyDurationPresets = [30, 60, 120, 180, 240, 360, 480];
   protected readonly catalog = signal<QuestView[]>([]);
   protected readonly skillTree = signal<SkillTree | null>(null);
   protected readonly selectedCategory = signal<string | null>(null);
@@ -220,7 +242,10 @@ export class QuestForgePage implements OnInit {
     this.habitsService.list().subscribe({
       next: (rows) => {
         this.habits.set(rows);
-        this.syncLinkedHabit(this.editId());
+        const id = this.editId();
+        if (id) {
+          this.syncLinkedHabit(id);
+        }
       },
     });
     const rawId = this.route.snapshot.paramMap.get('id');
@@ -282,6 +307,10 @@ export class QuestForgePage implements OnInit {
         gatesJourney: this.gateDraft(),
         deadline: this.subtaskDeadlineDraft().trim() || null,
         estimateMinutes: this.subtaskEstimateDraft(),
+        habitId: null,
+        habitRule: 'COUNT',
+        habitRequiredCount: 1,
+        habitWindowDays: 7,
       },
     ]);
     this.subtaskDraft.set('');
@@ -290,36 +319,51 @@ export class QuestForgePage implements OnInit {
     this.subtaskEstimateDraft.set(null);
   }
 
+  protected onSubtaskDrop(event: DragSortDrop): void {
+    this.subtasks.update((rows) =>
+      moveIndex(rows, event.fromIndex, event.toIndex),
+    );
+  }
+
   protected removeSubtask(index: number): void {
     this.subtasks.update((rows) => rows.filter((_, i) => i !== index));
   }
 
-  protected setSubtaskDeadline(index: number, iso: string): void {
-    const deadline = iso.trim() || null;
+  protected setSubtaskDeadline(index: number, iso: string | null): void {
+    const deadline = iso?.trim() || null;
     this.subtasks.update((rows) =>
       rows.map((row, i) => (i === index ? { ...row, deadline } : row)),
     );
   }
 
-  protected setSubtaskDeadlineDraft(iso: string): void {
-    this.subtaskDeadlineDraft.set(iso);
+  protected setSubtaskDeadlineDraft(iso: string | null): void {
+    this.subtaskDeadlineDraft.set(iso?.trim() || '');
   }
 
-  protected setSubtaskEstimateDraft(minutes: number): void {
-    this.subtaskEstimateDraft.set(minutes > 0 ? Math.round(minutes) : null);
+  protected setSubtaskEstimateDraft(minutes: number | null): void {
+    this.subtaskEstimateDraft.set(
+      minutes != null && minutes > 0 ? Math.round(minutes) : null,
+    );
   }
 
-  protected setSubtaskEstimate(index: number, minutes: number): void {
-    const estimateMinutes = minutes > 0 ? Math.round(minutes) : null;
+  protected setSubtaskEstimate(index: number, minutes: number | null): void {
+    const estimateMinutes =
+      minutes != null && minutes > 0 ? Math.round(minutes) : null;
     this.subtasks.update((rows) =>
       rows.map((row, i) => (i === index ? { ...row, estimateMinutes } : row)),
     );
   }
 
-  protected setDailyWorkMinutes(minutes: number): void {
+  protected setSubtaskTitle(index: number, title: string): void {
+    this.subtasks.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, title } : row)),
+    );
+  }
+
+  protected setDailyWorkMinutes(minutes: number | null): void {
     this.createModel.update((m) => ({
       ...m,
-      dailyWorkMinutes: minutes > 0 ? Math.round(minutes) : null,
+      dailyWorkMinutes: minutes != null && minutes > 0 ? Math.round(minutes) : null,
     }));
   }
 
@@ -332,11 +376,9 @@ export class QuestForgePage implements OnInit {
     this.createModel.update((m) => ({ ...m, deadline: iso }));
   }
 
-  protected toggleGate(index: number): void {
+  protected setSubtaskGate(index: number, gatesJourney: boolean): void {
     this.subtasks.update((rows) =>
-      rows.map((row, i) =>
-        i === index ? { ...row, gatesJourney: !row.gatesJourney } : row,
-      ),
+      rows.map((row, i) => (i === index ? { ...row, gatesJourney } : row)),
     );
   }
 
@@ -364,8 +406,8 @@ export class QuestForgePage implements OnInit {
     this.skillReqLevel.set(Math.min(99, Math.max(1, level)));
   }
 
-  protected setSubtaskDraft(event: Event): void {
-    this.subtaskDraft.set((event.target as HTMLInputElement).value);
+  protected setSubtaskDraftText(value: string): void {
+    this.subtaskDraft.set(value);
   }
 
   protected setTotalXp(n: number): void {
@@ -395,22 +437,18 @@ export class QuestForgePage implements OnInit {
     this.skillWeights.set(removeSkillWeight(this.skillWeights(), slug));
   }
 
-  protected setLinkedHabit(raw: string): void {
-    const id = Number(raw);
-    this.linkedHabitId.set(Number.isFinite(id) && id > 0 ? id : null);
-    this.habitSubtaskId.set(null);
-  }
-
-  protected setHabitTarget(target: HabitQuestTarget): void {
-    this.habitTarget.set(target);
-    if (target === 'JOURNEY') {
-      this.habitSubtaskId.set(null);
+  protected setJourneyBind(bind: JourneyBind): void {
+    this.journeyBind.set(bind);
+    if (bind !== 'habitus') {
+      this.linkedHabitId.set(null);
     }
   }
 
-  protected setHabitSubtask(raw: string): void {
-    const id = Number(raw);
-    this.habitSubtaskId.set(Number.isFinite(id) && id > 0 ? id : null);
+  protected setLinkedHabit(id: number | null): void {
+    this.linkedHabitId.set(id);
+    if (id) {
+      this.journeyBind.set('habitus');
+    }
   }
 
   protected setHabitRule(rule: HabitQuestRule): void {
@@ -425,47 +463,163 @@ export class QuestForgePage implements OnInit {
     this.habitWindowDays.set(Math.max(1, Math.round(n) || 7));
   }
 
-  protected readonly linkedHabitSubtasks = computed(
-    () => this.subtasks(),
-  );
+  protected setSubtaskHabit(index: number, id: number | null): void {
+    this.subtasks.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, habitId: id } : row)),
+    );
+  }
 
-  private syncLinkedHabit(questId: number | null): void {
+  protected setSubtaskHabitRule(index: number, rule: HabitQuestRule): void {
+    this.subtasks.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, habitRule: rule } : row)),
+    );
+  }
+
+  protected setSubtaskHabitRequiredCount(index: number, n: number): void {
+    const habitRequiredCount = Math.max(1, Math.round(n) || 1);
+    this.subtasks.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, habitRequiredCount } : row)),
+    );
+  }
+
+  protected setSubtaskHabitWindowDays(index: number, n: number): void {
+    const habitWindowDays = Math.max(1, Math.round(n) || 7);
+    this.subtasks.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, habitWindowDays } : row)),
+    );
+  }
+
+  protected journeyTakenIds(): number[] {
+    return this.subtasks()
+      .map((s) => s.habitId)
+      .filter((id): id is number => id != null);
+  }
+
+  protected subtaskTakenIds(index: number): number[] {
+    const journeyId =
+      this.journeyBind() === 'habitus' ? this.linkedHabitId() : null;
+    return [
+      ...(journeyId ? [journeyId] : []),
+      ...this.subtasks()
+        .filter((_, i) => i !== index)
+        .map((s) => s.habitId)
+        .filter((id): id is number => id != null),
+    ];
+  }
+
+  private syncLinkedHabit(quest: QuestView | number | null): void {
+    const questId = typeof quest === 'number' ? quest : quest?.id ?? null;
     if (!questId) {
       return;
     }
-    const found = this.habits().find((h) => h.questLink?.questId === questId);
-    this.previousLinkedHabitId.set(found?.id ?? null);
-    this.linkedHabitId.set(found?.id ?? null);
-    if (found?.questLink) {
-      this.habitTarget.set(found.questLink.target);
-      this.habitSubtaskId.set(found.questLink.subtaskId);
-      this.habitRule.set(found.questLink.rule);
-      this.habitRequiredCount.set(found.questLink.requiredCount);
-      this.habitWindowDays.set(found.questLink.windowDays ?? 7);
+    const view = typeof quest === 'object' && quest ? quest : null;
+    const journeyLink = view?.journeyHabitLink ?? null;
+    const bySubtask = new Map(
+      (view?.subtasks ?? [])
+        .filter((s) => s.habitLink)
+        .map((s) => [s.id, s.habitLink!]),
+    );
+    if (!view) {
+      const found = this.habits().find((h) => h.questLink?.questId === questId);
+      if (found?.questLink?.target === 'JOURNEY') {
+        this.journeyBind.set('habitus');
+        this.linkedHabitId.set(found.id);
+        this.habitRule.set(found.questLink.rule);
+        this.habitRequiredCount.set(found.questLink.requiredCount);
+        this.habitWindowDays.set(found.questLink.windowDays ?? 7);
+      }
+      return;
     }
-  }
-
-  private saveHabitLink(questId: number, done: () => void): void {
-    const nextId = this.linkedHabitId();
-    const prevId = this.previousLinkedHabitId();
-    const ops = [];
-    if (prevId && prevId !== nextId) {
-      ops.push(this.habitsService.upsertQuestLink(prevId, null));
+    if (journeyLink) {
+      this.journeyBind.set('habitus');
+      this.linkedHabitId.set(journeyLink.habitId);
+      this.habitRule.set(journeyLink.rule);
+      this.habitRequiredCount.set(journeyLink.requiredCount);
+      this.habitWindowDays.set(journeyLink.windowDays ?? 7);
+    } else if (view.dailyWorkTitle) {
+      this.journeyBind.set('daily');
+      this.linkedHabitId.set(null);
+    } else {
+      this.journeyBind.set('none');
+      this.linkedHabitId.set(null);
     }
-    if (nextId) {
-      ops.push(
-        this.habitsService.upsertQuestLink(nextId, {
-          questId,
-          target: this.habitTarget(),
-          subtaskId:
-            this.habitTarget() === 'SUBTASK' ? this.habitSubtaskId() : null,
-          rule: this.habitRule(),
-          requiredCount: this.habitRequiredCount(),
-          windowDays:
-            this.habitRule() === 'WINDOW' ? this.habitWindowDays() : null,
+    if (bySubtask.size) {
+      this.subtasks.update((rows) =>
+        rows.map((row) => {
+          const link = row.id ? bySubtask.get(row.id) : undefined;
+          if (!link) {
+            return row;
+          }
+          return {
+            ...row,
+            habitId: link.habitId,
+            habitRule: link.rule,
+            habitRequiredCount: link.requiredCount,
+            habitWindowDays: link.windowDays ?? 7,
+          };
         }),
       );
     }
+  }
+
+  private saveHabitLink(quest: QuestView, done: () => void): void {
+    const desired: Array<{
+      habitId: number;
+      target: 'JOURNEY' | 'SUBTASK';
+      subtaskId: number | null;
+      rule: HabitQuestRule;
+      requiredCount: number;
+      windowDays: number | null;
+    }> = [];
+    const journeyHabitId =
+      this.journeyBind() === 'habitus' ? this.linkedHabitId() : null;
+    if (journeyHabitId) {
+      desired.push({
+        habitId: journeyHabitId,
+        target: 'JOURNEY',
+        subtaskId: null,
+        rule: this.habitRule(),
+        requiredCount: this.habitRequiredCount(),
+        windowDays:
+          this.habitRule() === 'WINDOW' ? this.habitWindowDays() : null,
+      });
+    }
+    this.subtasks().forEach((row, index) => {
+      if (!row.habitId) {
+        return;
+      }
+      const subtaskId = row.id ?? quest.subtasks[index]?.id ?? null;
+      if (!subtaskId) {
+        return;
+      }
+      desired.push({
+        habitId: row.habitId,
+        target: 'SUBTASK',
+        subtaskId,
+        rule: row.habitRule,
+        requiredCount: row.habitRequiredCount,
+        windowDays: row.habitRule === 'WINDOW' ? row.habitWindowDays : null,
+      });
+    });
+    const existing = this.habits().filter(
+      (h) => h.questLink?.questId === quest.id,
+    );
+    const desiredIds = new Set(desired.map((d) => d.habitId));
+    const ops = [
+      ...existing
+        .filter((h) => !desiredIds.has(h.id))
+        .map((h) => this.habitsService.upsertQuestLink(h.id, null)),
+      ...desired.map((d) =>
+        this.habitsService.upsertQuestLink(d.habitId, {
+          questId: quest.id,
+          target: d.target,
+          subtaskId: d.subtaskId,
+          rule: d.rule,
+          requiredCount: d.requiredCount,
+          windowDays: d.windowDays,
+        }),
+      ),
+    ];
     if (!ops.length) {
       done();
       return;
@@ -475,7 +629,7 @@ export class QuestForgePage implements OnInit {
       error: (err: { error?: { message?: string } }) => {
         this.saving.set(false);
         this.timed.set(err.error?.message ?? 'Quest saved, but habit link failed');
-        void this.router.navigate(['/quests', questId]);
+        void this.router.navigate(['/quests', quest.id]);
       },
     });
   }
@@ -524,6 +678,10 @@ export class QuestForgePage implements OnInit {
         );
         return;
       }
+      if (this.journeyBind() === 'habitus' && !this.linkedHabitId()) {
+        this.timed.set('Pick a habit for the Habitus bind, or choose None / Daily');
+        return;
+      }
       this.saving.set(true);
       const payload = {
         name: m.name.trim(),
@@ -556,7 +714,10 @@ export class QuestForgePage implements OnInit {
           : 0,
         scriptoriumWorkId: this.scriptoriumWorkId() ?? undefined,
         dailyWorkMinutes: m.dailyWorkMinutes,
-        dailyWorkTitle: m.dailyWorkTitle.trim() || null,
+        dailyWorkTitle:
+          this.journeyBind() === 'daily'
+            ? m.dailyWorkTitle.trim() || m.journeyLabel.trim() || m.name
+            : null,
       };
       const id = this.editId();
       const req =
@@ -565,7 +726,7 @@ export class QuestForgePage implements OnInit {
           : this.questsService.create(payload);
       req.subscribe({
         next: (q) => {
-          this.saveHabitLink(q.id, () => {
+          this.saveHabitLink(q, () => {
             this.saving.set(false);
             void this.router.navigate(['/quests', q.id]);
           });
@@ -617,6 +778,10 @@ export class QuestForgePage implements OnInit {
         gatesJourney: Boolean(s.gatesJourney),
         deadline: s.deadline ?? null,
         estimateMinutes: s.estimateMinutes ?? null,
+        habitId: s.habitLink?.habitId ?? null,
+        habitRule: s.habitLink?.rule ?? 'COUNT',
+        habitRequiredCount: s.habitLink?.requiredCount ?? 1,
+        habitWindowDays: s.habitLink?.windowDays ?? 7,
       })),
     );
     this.skillReqs.set(
@@ -635,7 +800,7 @@ export class QuestForgePage implements OnInit {
     const existing = resolveQuestCoverUrl(q.coverUrl, API_BASE_URL);
     this.coverPreview.set(existing);
     this.coverDataUrl.set(null);
-    this.syncLinkedHabit(q.id);
+    this.syncLinkedHabit(q);
   }
 
   private loadScriptorium(id: number): void {
@@ -653,6 +818,11 @@ export class QuestForgePage implements OnInit {
   }
 
   private applyScriptorium(work: ScriptoriumWorkView): void {
+    if (workLocked(work) || work.status === 'ARCHIVED') {
+      this.scriptoriumWorkId.set(null);
+      this.timed.set('This folio is already assigned or shelved.');
+      return;
+    }
     this.createModel.update((m) => ({
       ...m,
       name: work.title,
@@ -665,6 +835,10 @@ export class QuestForgePage implements OnInit {
         gatesJourney: false,
         deadline: null,
         estimateMinutes: null,
+        habitId: null,
+        habitRule: 'COUNT',
+        habitRequiredCount: 1,
+        habitWindowDays: 7,
       })),
     );
     this.skillWeights.set(work.skillWeights.map((w) => ({ ...w })));

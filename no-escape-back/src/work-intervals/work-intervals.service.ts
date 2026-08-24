@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-export type WorkIntervalClockKind = 'sessio' | 'track' | 'vigilia';
+export type WorkIntervalClockKind = 'sessio' | 'track' | 'vigilia' | 'manual';
 
 export type WorkIntervalTargetInput = {
   watchId?: number | null;
@@ -37,6 +37,7 @@ export class WorkIntervalsService {
       targets.dailyTaskId != null ||
       targets.questSubtaskId != null ||
       targets.questId != null ||
+      targets.questRunId != null ||
       targets.scriptoriumWorkId != null ||
       targets.watchId != null;
     if (!hasTarget) {
@@ -75,6 +76,18 @@ export class WorkIntervalsService {
     if (target.scriptoriumWorkId != null)
       where.scriptoriumWorkId = target.scriptoriumWorkId;
     if (target.watchId != null) where.watchId = target.watchId;
+    if (
+      target.questRunId != null &&
+      target.questId == null &&
+      target.questSubtaskId == null &&
+      target.dailyTaskId == null &&
+      target.watchId == null
+    ) {
+      // Whole-quest Vigilia flushes: run-scoped, no daily-work questId, no subtask.
+      where.questRunId = target.questRunId;
+      where.questId = null;
+      where.questSubtaskId = null;
+    }
     if (Object.keys(where).length === 0) {
       return [];
     }

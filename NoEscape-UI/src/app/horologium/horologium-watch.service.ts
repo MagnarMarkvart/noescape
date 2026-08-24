@@ -5,6 +5,8 @@ import {
   Injectable,
   signal,
 } from '@angular/core';
+import { Observable, of, tap } from 'rxjs';
+import { CharacterService } from '../character/character.service';
 import { ClockApiService } from '../clocks/clock-api.service';
 import { ClockSnapshot } from '../clocks/clock.model';
 import { clockNow } from '../clocks/clock-now';
@@ -13,6 +15,8 @@ import { HorologiumTimerService } from './horologium-timer.service';
 import {
   formatElapsedMs,
   HorologiumWatchRecord,
+  VigiliaBindKind,
+  VigiliaPickerBind,
 } from './horologium.model';
 
 const WATCH_ID_KEY = 'noescape.horologium.watchId';
@@ -52,6 +56,7 @@ export class HorologiumWatchService {
   private readonly clockApi = inject(ClockApiService);
   private readonly api = inject(HorologiumApiService);
   private readonly timer = inject(HorologiumTimerService);
+  private readonly character = inject(CharacterService);
 
   readonly watches = signal<HorologiumWatchRecord[]>([]);
   readonly selectedId = signal<number | null>(loadWatchId());
@@ -63,9 +68,8 @@ export class HorologiumWatchService {
   readonly widgetVisible = signal(loadWidgetVisible());
   /**
    * Extra Vigilias riding alongside the primary selected watch — e.g. a
-   * whole-quest watch plus its daily-work slice under the same sessio. They
-   * cascade with the main timer's work/rest phase exactly like the primary,
-   * but never run "solo" without a sessio and are never widgeted.
+   * whole-quest watch plus a subtask under the same Vigilia/sessio. They
+   * follow the primary: sessio work phase, or solo Vigilia play/pause.
    */
   readonly extraIds = signal<Set<number>>(new Set());
 
@@ -123,12 +127,58 @@ export class HorologiumWatchService {
     return 'Counts while this watch is running.';
   });
 
+  readonly allowedKinds = computed(() => {
+    const allowed = new Set<VigiliaBindKind>();
+    if (this.character.vigiliaTrackQuests()) {
+      allowed.add('quest');
+      allowed.add('quest_daily_work');
+      allowed.add('subtask');
+    }
+    if (this.character.vigiliaTrackDailies()) {
+      allowed.add('daily');
+    }
+    if (this.character.vigiliaTrackScriptorium()) {
+      allowed.add('scriptorium');
+    }
+    if (this.character.vigiliaTrackCustom()) {
+      allowed.add('custom');
+    }
+    return allowed;
+  });
+
+  /** Active watches the current Vigilia settings allow the picker to show. */
+  readonly visibleWatches = computed(() => {
+    const allowed = this.allowedKinds();
+    const trackScriptorium = this.character.vigiliaTrackScriptorium();
+    return this.watches().filter((w) => {
+      const kind = w.bindKind ?? 'custom';
+      if (w.scriptoriumWorkId && !trackScriptorium) {
+        return false;
+      }
+      if (kind === 'scriptorium') {
+        return trackScriptorium;
+      }
+      if (kind === 'custom') {
+        // Settings copy: existing custom Vigilias stay until archived.
+        return true;
+      }
+      return allowed.has(kind);
+    });
+  });
+
   /** Watches attachable as extra Vigilias: active, not the primary pick, not already closed. */
-  readonly attachableWatches = computed(() =>
-    this.watches().filter(
-      (w) => w.id !== this.selectedId() && w.status === 'ACTIVE' && !w.completedAt,
-    ),
-  );
+  readonly attachableWatches = computed(() => {
+    const selected = this.selected();
+    return this.visibleWatches().filter((w) => {
+      if (w.id === this.selectedId() || w.status !== 'ACTIVE' || w.completedAt) {
+        return false;
+      }
+      if (selected?.questId && w.questId && w.questId !== selected.questId) {
+        return false;
+      }
+      return true;
+    });
+  });
 
   readonly extraWatches = computed(() => {
     const ids = this.extraIds();
@@ -151,14 +201,24 @@ export class HorologiumWatchService {
       this.timer.linkedWatchName.set(this.selected()?.name ?? null);
     });
     effect(() => {
-      const wantExtras = this.timer.phase() === 'work' && this.timer.running();
+      const wantExtras = this.desiredRunning();
       const ids = Array.from(this.extraIds());
       const watches = this.watches();
       queueMicrotask(() => this.reconcileExtras(wantExtras, ids, watches));
     });
     effect(() => {
-      if (this.timer.phase() === 'idle' && this.extraIds().size > 0) {
-        queueMicrotask(() => this.extraIds.set(new Set()));
+      if (this.watches().some((w) => w.running)) {
+        this.startClock();
+      }
+    });
+    effect(() => {
+      const sel = this.selected();
+      if (!sel) {
+        return;
+      }
+      const visible = this.visibleWatches();
+      if (!visible.some((w) => w.id === sel.id)) {
+        queueMicrotask(() => this.select(null));
       }
     });
   }
@@ -167,13 +227,13 @@ export class HorologiumWatchService {
     return this.extraIds().has(id);
   }
 
-  /** Attach an extra Vigilia to ride alongside the current sessio. Starts it right away if the main timer is mid-work. */
+  /** Attach an extra Vigilia to ride alongside the primary. Starts it if the primary is already running. */
   attachExtra(id: number): void {
     if (id === this.selectedId() || this.extraIds().has(id)) {
       return;
     }
     this.extraIds.update((set) => new Set(set).add(id));
-    if (this.timer.phase() === 'work' && this.timer.running()) {
+    if (this.desiredRunning()) {
       this.startExtra(id);
     }
   }
@@ -359,12 +419,135 @@ export class HorologiumWatchService {
     });
   }
 
+  bindTarget(bind: VigiliaPickerBind): void {
+    if ('watchId' in bind) {
+      this.select(bind.watchId);
+      return;
+    }
+    this.ensureWatch(bind).subscribe((row) => {
+      this.select(row.id);
+      if (
+        (row.bindKind === 'subtask' || row.bindKind === 'quest_daily_work') &&
+        row.questId
+      ) {
+        this.ensureWatch({ bindKind: 'quest', questId: row.questId }).subscribe(
+          (parent) => {
+            this.replaceExtras(
+              parent.id === row.id ? [] : [parent.id],
+            );
+          },
+        );
+        return;
+      }
+      this.replaceExtras([]);
+    });
+  }
+
+  attachBind(bind: VigiliaPickerBind): void {
+    if ('watchId' in bind) {
+      this.attachExtra(bind.watchId);
+      return;
+    }
+    this.ensureWatch(bind).subscribe((row) => {
+      if (row.id !== this.selectedId()) {
+        this.attachExtra(row.id);
+      }
+    });
+  }
+
+  elapsedForQuest(questId: number, fallback = 0): number {
+    this.clock();
+    const watch = this.watches().find(
+      (w) =>
+        w.bindKind === 'quest' &&
+        w.questId === questId &&
+        w.status === 'ACTIVE',
+    );
+    return watch ? this.elapsedOf(watch) : fallback;
+  }
+
+  elapsedForDaily(dailyTaskId: number, fallback = 0): number {
+    this.clock();
+    const watch = this.watches().find(
+      (w) =>
+        w.bindKind === 'daily' &&
+        w.dailyTaskId === dailyTaskId &&
+        w.status === 'ACTIVE',
+    );
+    return watch ? this.elapsedOf(watch) : fallback;
+  }
+
+  elapsedForDailyWork(questId: number, fallback = 0): number {
+    this.clock();
+    const watch = this.watches().find(
+      (w) =>
+        w.bindKind === 'quest_daily_work' &&
+        w.questId === questId &&
+        w.status === 'ACTIVE',
+    );
+    return watch ? this.elapsedOf(watch) : fallback;
+  }
+
+  elapsedForSubtask(subtaskId: number, fallback = 0): number {
+    this.clock();
+    const watch = this.watches().find(
+      (w) =>
+        w.bindKind === 'subtask' &&
+        w.questSubtaskId === subtaskId &&
+        w.status === 'ACTIVE',
+    );
+    return watch ? this.elapsedOf(watch) : fallback;
+  }
+
+  private ensureWatch(
+    bind: Exclude<VigiliaPickerBind, { watchId: number }>,
+  ): Observable<HorologiumWatchRecord> {
+    const existing = this.watches().find((w) => {
+      if (w.status !== 'ACTIVE') {
+        return false;
+      }
+      if (bind.bindKind === 'subtask') {
+        return w.bindKind === 'subtask' && w.questSubtaskId === bind.questSubtaskId;
+      }
+      if (bind.bindKind === 'daily') {
+        return w.bindKind === 'daily' && w.dailyTaskId === bind.dailyTaskId;
+      }
+      return w.bindKind === bind.bindKind && w.questId === bind.questId;
+    });
+    if (existing) {
+      return of(existing);
+    }
+    return this.api
+      .createWatch('', undefined, bind)
+      .pipe(
+        tap((row) => {
+          this.watches.update((list) =>
+            list.some((w) => w.id === row.id) ? list : [row, ...list],
+          );
+        }),
+      );
+  }
+
+  private replaceExtras(ids: number[]): void {
+    for (const id of Array.from(this.extraIds())) {
+      if (!ids.includes(id)) {
+        this.detachExtra(id);
+      }
+    }
+    for (const id of ids) {
+      this.attachExtra(id);
+    }
+  }
+
   select(id: number | null): void {
     if (id === this.selectedId()) {
       return;
     }
     this.pauseLocal(true);
     this.soloRunning.set(false);
+    if (id == null) {
+      this.replaceExtras([]);
+    }
     this.selectedId.set(id);
     saveWatchId(id);
     this.hydrateLocal(this.selected());

@@ -45,7 +45,13 @@
         @if (q.kind !== 'STREAK_LOG') {
           · {{ q.week.logged }}/{{ q.week.expected }} this week
         }
+        @if (questElapsed(q) > 0) {
+          · {{ elapsedLabel(questElapsed(q)) }} tracked
+        }
       </p>
+      @if (q.run) {
+        <app-work-interval-log [target]="{ questRunId: q.run.id }" />
+      }
     </div>
 
     <div class="run-grid">
@@ -68,6 +74,12 @@
           <p class="label">Journey</p>
           <p class="streak-num journey-label">{{ q.journeyLabel || 'Show up' }}</p>
           <p class="best">{{ q.commitmentLevel === 7 ? 'Every day' : q.commitmentLevel + '× / week' }}</p>
+          @if (q.dailyWorkMinutes) {
+            <p class="last">~{{ formatQuestMinutes(q.dailyWorkMinutes) }} expected</p>
+          }
+          @if (journeyElapsed(q) > 0) {
+            <p class="last">{{ elapsedLabel(journeyElapsed(q)) }} tracked</p>
+          }
           <p class="last">
             @if (!q.journeyUnlocked) {
               Locked until gate subtasks are done
@@ -80,7 +92,24 @@
         </div>
       }
 
-      @if (q.kind === 'STREAK_LOG' && q.run?.status === 'ACTIVE') {
+      @if (q.kind === 'STREAK_LOG' && q.journeyHabitLink && q.run?.status === 'ACTIVE') {
+        <div class="log-panel">
+          <h2>Today’s log</h2>
+          <p class="hint">Tracked from Habitus logs. This check-in cannot be marked here.</p>
+          <div
+            class="journey-check habitus"
+            [class.done]="q.journeyHabitLink.completed || loggedToday()"
+          >
+            <span class="mark" aria-hidden="true">{{ q.journeyHabitLink.completed || loggedToday() ? '✓' : '○' }}</span>
+            <span>{{ q.journeyLabel || 'Clean day' }}</span>
+            <span class="meta">
+              {{ q.journeyHabitLink.habitIcon || '◆' }} {{ q.journeyHabitLink.habitName }}
+              · {{ habitQuestProgressLabel(q.journeyHabitLink) }}
+            </span>
+          </div>
+          <a class="habitus-link" [routerLink]="['/habitus', q.journeyHabitLink.habitId]">Open in Habitus</a>
+        </div>
+      } @else if (q.kind === 'STREAK_LOG' && q.run?.status === 'ACTIVE') {
         <div class="log-panel">
           <h2>Today’s log</h2>
           <p class="hint">One short is OK. Scrolling = fail. Missed day = broken.</p>
@@ -111,29 +140,46 @@
               Finish the gate subtask{{ lockedGates().length === 1 ? '' : 's' }}
               first:
               {{ lockedGates().map((t) => t.title).join(', ') || 'gate' }}.
+            } @else if (q.journeyHabitLink; as link) {
+              Tracked from Habitus logs. This check-in cannot be marked here.
             } @else {
               {{ q.journeyNote || 'Mark that you did the journey work today.' }}
             }
           </p>
-          <button
-            type="button"
-            class="journey-check"
-            [class.done]="loggedToday()"
-            [disabled]="logging() || !q.canLogJourney"
-            (click)="logJourney(!loggedToday())"
-          >
-            <span class="mark" aria-hidden="true">{{ loggedToday() ? '✓' : '○' }}</span>
-            <span>{{ q.journeyLabel || 'Today’s journey' }}</span>
-            <span class="meta">
-              @if (!q.canLogJourney) {
-                Locked
-              } @else if (loggedToday()) {
-                Done today
-              } @else {
-                Mark today done
-              }
-            </span>
-          </button>
+          @if (q.journeyHabitLink; as link) {
+            <div
+              class="journey-check habitus"
+              [class.done]="link.completed || loggedToday()"
+            >
+              <span class="mark" aria-hidden="true">{{ link.completed || loggedToday() ? '✓' : '○' }}</span>
+              <span>{{ q.journeyLabel || 'Today’s journey' }}</span>
+              <span class="meta">
+                {{ link.habitIcon || '◆' }} {{ link.habitName }}
+                · {{ habitQuestProgressLabel(link) }}
+              </span>
+            </div>
+            <a class="habitus-link" [routerLink]="['/habitus', link.habitId]">Open in Habitus</a>
+          } @else {
+            <button
+              type="button"
+              class="journey-check"
+              [class.done]="loggedToday()"
+              [disabled]="logging() || !q.canLogJourney"
+              (click)="logJourney(!loggedToday())"
+            >
+              <span class="mark" aria-hidden="true">{{ loggedToday() ? '✓' : '○' }}</span>
+              <span>{{ q.journeyLabel || 'Today’s journey' }}</span>
+              <span class="meta">
+                @if (!q.canLogJourney) {
+                  Locked
+                } @else if (loggedToday()) {
+                  Done today
+                } @else {
+                  Mark today done
+                }
+              </span>
+            </button>
+          }
         </div>
       }
 
@@ -141,28 +187,39 @@
         <div class="log-panel subtasks">
           <h2>Subtasks</h2>
           <p class="hint">Checking these fills the green bar to 90%.</p>
-          <ul class="subtask-checks">
+          <app-drop-group (dropped)="onSubtaskDrop($event)">
+          <ul
+            class="subtask-checks"
+            appDropList
+            dropListId="subtasks"
+            dropMode="insert"
+          >
             @for (t of q.subtasks; track t.id) {
-              <li>
+              <li [appDragItem]="$index">
+                <app-drag-grip />
                 <app-rune-check
-                  [checked]="t.completed"
-                  [disabled]="logging() || q.run?.status !== 'ACTIVE'"
-                  (checkedChange)="toggleSubtask(t.id, $event)"
+                  [checked]="t.completed || pendingSubtaskId() === t.id"
+                  [disabled]="logging() || q.run?.status !== 'ACTIVE' || !!t.habitLink"
+                  (checkedChange)="onSubtaskCheck(t, $event)"
                 >
                   {{ t.title }}
                   @if (t.gatesJourney) {
                     <em class="gate-flag">Gate</em>
                   }
+                  @if (t.habitLink; as link) {
+                    <em class="gate-flag">Habitus</em>
+                    <span class="sub-meta">{{ habitQuestProgressLabel(link) }}</span>
+                  }
                   @if (t.estimateMinutes) {
-                    <span class="sub-meta">~{{ t.estimateMinutes }}m expected</span>
+                    <span class="sub-meta">~{{ formatQuestMinutes(t.estimateMinutes) }} expected</span>
                   }
                   @if (t.deadline) {
                     <span class="sub-meta due" [attr.data-tone]="dueTone(t.deadline)">
                       {{ dueLabel(t.deadline) }}
                     </span>
                   }
-                  @if (t.elapsedMs) {
-                    <span class="sub-meta">{{ elapsedLabel(t.elapsedMs) }} tracked</span>
+                  @if (subtaskElapsed(t) > 0) {
+                    <span class="sub-meta">{{ elapsedLabel(subtaskElapsed(t)) }} tracked</span>
                   }
                   @if (t.completed && t.completedAtLabel) {
                     <span class="sub-meta">
@@ -170,7 +227,17 @@
                     </span>
                   }
                 </app-rune-check>
-                @if (!t.completed && q.run?.status === 'ACTIVE') {
+                @if (pendingSubtaskId() === t.id) {
+                  <app-elapsed-complete
+                    confirmLabel="Mark done"
+                    [minutes]="pendingMinutes()"
+                    [busy]="logging()"
+                    (minutesChange)="pendingMinutes.set($event)"
+                    (confirm)="confirmSubtaskElapsed()"
+                    (cancel)="cancelSubtaskElapsed()"
+                  />
+                }
+                @if (!t.completed && !t.habitLink && q.run?.status === 'ACTIVE' && pendingSubtaskId() !== t.id) {
                   <button
                     type="button"
                     class="ghost-btn add-today"
@@ -180,22 +247,29 @@
                     {{ addingToToday() === t.id ? '…' : 'Add to today' }}
                   </button>
                 }
-                @if (t.elapsedMs) {
+                @if (t.habitLink; as link) {
+                  <a class="habitus-link" [routerLink]="['/habitus', link.habitId]">Habitus</a>
+                }
+                @if (subtaskElapsed(t) > 0) {
                   <app-work-interval-log [target]="{ questSubtaskId: t.id }" />
                 }
               </li>
             }
           </ul>
+          </app-drop-group>
         </div>
       }
 
-      @if (q.dailyWorkMinutes || q.dailyWorkTitle) {
+      @if (q.dailyWorkTitle && !q.journeyHabitLink) {
         <div class="log-panel subtasks">
           <h2>Daily work</h2>
           <p class="hint">
             {{ q.dailyWorkTitle || q.journeyLabel || q.name }}
             @if (q.dailyWorkMinutes) {
-              · ~{{ q.dailyWorkMinutes }}m expected
+              · ~{{ formatQuestMinutes(q.dailyWorkMinutes) }} expected
+            }
+            @if (journeyElapsed(q) > 0) {
+              · {{ elapsedLabel(journeyElapsed(q)) }} tracked
             }
           </p>
           @if (q.run?.status === 'ACTIVE') {
@@ -217,7 +291,12 @@
           <h2>Destination</h2>
           <p class="hint">{{ q.destination || 'Mark the destination when the work is truly done.' }}</p>
           @if (q.run?.destinationDone || q.availability === 'completed') {
-            <p class="open-tag">Destination reached.</p>
+            <p class="open-tag">
+              Destination reached
+              @if (questElapsed(q) > 0) {
+                · {{ elapsedLabel(questElapsed(q)) }} tracked
+              }
+            </p>
           } @else {
             <button
               type="button"

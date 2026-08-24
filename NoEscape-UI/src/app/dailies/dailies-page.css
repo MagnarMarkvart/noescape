@@ -410,6 +410,26 @@ button.ghost.icon {
 
 .slot {
   border: 1px solid transparent;
+  display: flex;
+  gap: 0.35rem;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.slot > .quest-card,
+.slot > .filled-chip,
+.slot > .empty-slot,
+.slot > .slot-form {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.drop-hint {
+  margin: 0 0 0.5rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px dashed var(--rs-border);
+  color: var(--rs-muted);
+  font-size: 0.82rem;
 }
 
 .empty-slot {

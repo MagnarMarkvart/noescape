@@ -150,34 +150,22 @@
 
 .chip-list li,
 .subtask-list li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.5rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  align-items: start;
+  padding: 0.45rem 0.5rem 0.55rem;
   border: 1px solid rgba(138, 115, 64, 0.45);
   color: var(--rs-text);
 }
 
-.subtask-list li span {
-  flex: 1 1 auto;
+.drag-body {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
 }
 
-.forge-form .gate-toggle {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--rs-muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.chip-list button,
-.subtask-list button {
+.chip-list button {
   border: 0;
   background: transparent;
   color: var(--rs-muted);

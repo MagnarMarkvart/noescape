@@ -16,15 +16,26 @@ import { formatElapsedShort } from '../shared/time';
 import { TimedToast } from '../shared/timed-toast';
 import { LogActivityResponse } from '../skills/skill.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
-import { QuestView, chronicleKindLabel, deadlineLabel, deadlineTone, questCoverBg, weekdayLabel } from './quest.model';
+import { QuestView, QuestSubtaskView, chronicleKindLabel, deadlineLabel, deadlineTone, formatQuestMinutes, habitQuestProgressLabel, questCoverBg, weekdayLabel } from './quest.model';
 import { QuestRevealService } from './quest-reveal.service';
 import { QuestsService } from './quests.service';
 import { DailiesService } from '../dailies/dailies.service';
+import { HorologiumTimerService } from '../horologium/horologium-timer.service';
+import { HorologiumWatchService } from '../horologium/horologium-watch.service';
+import { ElapsedComplete } from '../shared/ui/elapsed-complete';
 import { WorkIntervalLog } from '../shared/work-interval-log';
+import {
+  DragGrip,
+  DragItem,
+  DragSortDrop,
+  DropGroup,
+  DropList,
+  moveIndex,
+} from '../shared/ui/drag-sort';
 
 @Component({
   selector: 'app-quest-run-page',
-  imports: [RouterLink, RuneCheck, RuneLoader, WorkIntervalLog],
+  imports: [RouterLink, RuneCheck, RuneLoader, WorkIntervalLog, ElapsedComplete, DropGroup, DropList, DragItem, DragGrip],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quest-run-page.html',
   styleUrl: './quest-run-page.css',
@@ -41,8 +52,12 @@ export class QuestRunPage {
   private readonly character = inject(CharacterService);
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly dailiesService = inject(DailiesService);
+  private readonly watches = inject(HorologiumWatchService);
+  private readonly timer = inject(HorologiumTimerService);
   private readonly timed = new TimedToast();
   protected readonly addingToToday = signal<number | 'daily_work' | null>(null);
+  protected readonly pendingSubtaskId = signal<number | null>(null);
+  protected readonly pendingMinutes = signal<number | null>(null);
 
   protected readonly quest = signal<QuestView | null>(null);
   protected readonly loading = signal(true);
@@ -52,6 +67,8 @@ export class QuestRunPage {
   protected readonly logging = signal(false);
   protected readonly weekdayLabel = weekdayLabel;
   protected readonly chronicleKindLabel = chronicleKindLabel;
+  protected readonly formatQuestMinutes = formatQuestMinutes;
+  protected readonly habitQuestProgressLabel = habitQuestProgressLabel;
 
   protected dueLabel(iso: string | null | undefined): string {
     if (!iso) {
@@ -75,6 +92,9 @@ export class QuestRunPage {
     const today = this.todayIso();
     if (!q?.run) {
       return false;
+    }
+    if (q.journeyHabitLink?.completed) {
+      return true;
     }
     if (q.kind === 'STREAK_LOG') {
       return q.run.lastLogDate === today;
@@ -104,10 +124,46 @@ export class QuestRunPage {
     return formatElapsedShort(ms);
   }
 
+  protected questElapsed(q: QuestView): number {
+    return this.watches.elapsedForQuest(q.id, q.run?.elapsedMs ?? 0);
+  }
+
+  protected journeyElapsed(q: QuestView): number {
+    return this.watches.elapsedForDailyWork(q.id, q.run?.journeyElapsedMs ?? 0);
+  }
+
+  protected subtaskElapsed(t: { id: number; elapsedMs?: number }): number {
+    return this.watches.elapsedForSubtask(t.id, t.elapsedMs ?? 0);
+  }
+
+  protected onSubtaskDrop(event: DragSortDrop): void {
+    const q = this.quest();
+    if (!q) {
+      return;
+    }
+    const ids = moveIndex(
+      q.subtasks.map((s) => s.id),
+      event.fromIndex,
+      event.toIndex,
+    );
+    this.quest.update((cur) =>
+      cur
+        ? { ...cur, subtasks: moveIndex(cur.subtasks, event.fromIndex, event.toIndex) }
+        : cur,
+    );
+    this.questsService.reorderSubtasks(q.id, ids).subscribe({
+      next: (next) => this.quest.set(next),
+      error: (err: { error?: { message?: string } }) => {
+        this.timed.set(err.error?.message ?? 'Could not reorder subtasks');
+        this.load(q.id);
+      },
+    });
+  }
+
   protected log(result: 'CLEAN' | 'BROKEN'): void {
     const q = this.quest();
     const run = q?.run;
-    if (!run || run.status !== 'ACTIVE' || this.logging()) {
+    if (!run || run.status !== 'ACTIVE' || this.logging() || q.journeyHabitLink) {
       return;
     }
     this.logging.set(true);
@@ -148,7 +204,7 @@ export class QuestRunPage {
   protected logJourney(done = true): void {
     const q = this.quest();
     const run = q?.run;
-    if (!run || run.status !== 'ACTIVE' || this.logging()) {
+    if (!run || run.status !== 'ACTIVE' || this.logging() || q.journeyHabitLink) {
       return;
     }
     this.logging.set(true);
@@ -169,29 +225,81 @@ export class QuestRunPage {
     });
   }
 
-  protected toggleSubtask(subtaskId: number, completed: boolean): void {
+  protected onSubtaskCheck(subtask: QuestSubtaskView, completed: boolean): void {
+    if (this.pendingSubtaskId() === subtask.id && !completed) {
+      this.cancelSubtaskElapsed();
+      return;
+    }
+    if (completed && !subtask.completed && !this.isSubtaskTracked(subtask)) {
+      this.pendingSubtaskId.set(subtask.id);
+      this.pendingMinutes.set(null);
+      return;
+    }
+    this.submitSubtask(subtask.id, completed);
+  }
+
+  protected confirmSubtaskElapsed(): void {
+    const id = this.pendingSubtaskId();
+    if (id == null) {
+      return;
+    }
+    this.submitSubtask(id, true, this.pendingMinutes());
+  }
+
+  protected cancelSubtaskElapsed(): void {
+    this.pendingSubtaskId.set(null);
+    this.pendingMinutes.set(null);
+  }
+
+  protected isSubtaskTracked(subtask: QuestSubtaskView): boolean {
+    if (this.subtaskElapsed(subtask) > 0) {
+      return true;
+    }
+    const bound = this.timer.boundDaily();
+    return Boolean(this.timer.running() && bound?.subtaskId === subtask.id);
+  }
+
+  private submitSubtask(
+    subtaskId: number,
+    completed: boolean,
+    minutes?: number | null,
+  ): void {
     const q = this.quest();
     const run = q?.run;
-    if (!run || run.status !== 'ACTIVE' || this.logging()) {
+    const locked = q?.subtasks.find((s) => s.id === subtaskId)?.habitLink;
+    if (!run || run.status !== 'ACTIVE' || this.logging() || locked) {
       return;
     }
     this.logging.set(true);
-    this.questsService.toggleSubtask(run.id, subtaskId, completed).subscribe({
-      next: (quest) => {
-        this.quest.set(quest);
-        this.logging.set(false);
-      },
-      error: (err: { error?: { message?: string } }) => {
-        this.logging.set(false);
-        this.timed.set(err.error?.message ?? 'Could not update subtask');
-      },
-    });
+    const elapsedMs =
+      completed && minutes != null && minutes > 0
+        ? minutes * 60_000
+        : undefined;
+    this.questsService
+      .toggleSubtask(run.id, subtaskId, completed, elapsedMs)
+      .subscribe({
+        next: (quest) => {
+          this.quest.set(quest);
+          this.logging.set(false);
+          this.cancelSubtaskElapsed();
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.logging.set(false);
+          this.timed.set(err.error?.message ?? 'Could not update subtask');
+        },
+      });
   }
 
   /** Copy a subtask (or the daily-work slice when subtaskId is null) onto today's board. */
   protected addToToday(subtaskId: number | null): void {
     const q = this.quest();
     if (!q || this.addingToToday() != null) {
+      return;
+    }
+    if (subtaskId == null && (q.journeyHabitLink || !q.dailyWorkTitle)) {
+      return;
+    }
+    if (subtaskId != null && q.subtasks.find((s) => s.id === subtaskId)?.habitLink) {
       return;
     }
     const key = subtaskId ?? 'daily_work';
@@ -224,13 +332,18 @@ export class QuestRunPage {
         this.xpFeedback.publishQuest({
           kind: 'completed',
           name: q.name,
-          subtitle: 'Destination reached',
+          subtitle: this.questElapsed(res.quest) > 0
+            ? `Destination reached · ${this.elapsedLabel(this.questElapsed(res.quest))}`
+            : 'Destination reached',
         });
         for (const award of (res.awards ?? []) as LogActivityResponse[]) {
           this.xpFeedback.publishAward(award);
         }
+        const tracked = this.questElapsed(res.quest);
         this.timed.set(
-          `Quest complete! ${res.unlocked?.join(', ') || 'Destination reached.'}`,
+          tracked > 0
+            ? `Quest complete · ${this.elapsedLabel(tracked)} tracked`
+            : `Quest complete! ${res.unlocked?.join(', ') || 'Destination reached.'}`,
         );
         void this.character.getProfile().subscribe();
       },
@@ -251,6 +364,7 @@ export class QuestRunPage {
   private load(id: number): void {
     const seq = ++this.loadSeq;
     this.logging.set(false);
+    this.cancelSubtaskElapsed();
     this.armLoader(seq);
     this.reveal.open(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: ({ quest }) => {

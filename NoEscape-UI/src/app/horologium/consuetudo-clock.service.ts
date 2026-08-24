@@ -1,6 +1,6 @@
 import { computed, inject, Injectable, NgZone, signal } from '@angular/core';
 import { ClockApiService } from '../clocks/clock-api.service';
-import { ClockEvent, ClockSnapshot } from '../clocks/clock.model';
+import { ClockEvent, ClockSnapshot, ClockStatus } from '../clocks/clock.model';
 import { clockNow, clockSkewMs } from '../clocks/clock-now';
 import { formatClockMs } from '../consuetudo/consuetudo-xp';
 import { RoutineCompletePayload, RoutineView } from '../consuetudo/routines.service';
@@ -12,10 +12,12 @@ export class ConsuetudoClockService {
   private readonly notesStore = inject(HorologiumNotesService);
   private readonly ngZone = inject(NgZone);
   private tickHandle: number | null = null;
-  private endAtMs: number | null = null;
+  private readonly endAtMs = signal<number | null>(null);
+  private readonly pausedRemaining = signal(0);
 
   readonly routine = signal<RoutineView | null>(null);
   readonly index = signal(0);
+  readonly status = signal<ClockStatus>('idle');
   readonly running = signal(false);
   readonly finished = signal(false);
   readonly awarding = signal(false);
@@ -38,16 +40,15 @@ export class ConsuetudoClockService {
   readonly remainingMs = computed(() => {
     this.now();
     clockSkewMs();
-    if (this.finished()) {
+    if (this.finished() || this.status() === 'complete') {
       return 0;
     }
-    if (this.endAtMs != null && this.running()) {
-      return this.endAtMs - clockNow();
+    const endAt = this.endAtMs();
+    if (endAt != null && this.running()) {
+      return endAt - clockNow();
     }
-    return this.pausedRemaining;
+    return this.pausedRemaining();
   });
-
-  private pausedRemaining = 0;
 
   readonly overtime = computed(() => {
     const remaining = this.remainingMs();
@@ -77,10 +78,7 @@ export class ConsuetudoClockService {
   });
 
   readonly inProgress = computed(
-    () =>
-      this.routine() != null &&
-      !this.finished() &&
-      (this.running() || this.logs().length > 0 || this.endAtMs != null || this.pausedRemaining > 0),
+    () => this.status() === 'running' || this.status() === 'paused',
   );
 
   readonly stepCount = computed(() => this.routine()?.steps.length ?? 0);
@@ -99,11 +97,12 @@ export class ConsuetudoClockService {
     }
     this.routine.set(routine);
     this.index.set(0);
+    this.status.set('idle');
     this.running.set(false);
     this.finished.set(false);
     this.logs.set([]);
-    this.endAtMs = null;
-    this.pausedRemaining = 0;
+    this.endAtMs.set(null);
+    this.pausedRemaining.set(0);
     this.stopTicker();
   }
 
@@ -127,6 +126,13 @@ export class ConsuetudoClockService {
     if (!this.running()) {
       return;
     }
+    const remaining = this.remainingMs();
+    this.status.set('paused');
+    this.running.set(false);
+    this.pausedRemaining.set(remaining);
+    this.endAtMs.set(null);
+    this.stopTicker();
+    this.now.set(clockNow());
     this.clockApi.pause('consuetudo').subscribe({
       next: (event) => this.applyEvent(event),
     });
@@ -209,17 +215,22 @@ export class ConsuetudoClockService {
       this.logs.set(payload.logs);
     }
     this.finished.set(snapshot.status === 'complete' || snapshot.phase === 'complete');
+    this.status.set(snapshot.status);
     this.running.set(snapshot.status === 'running');
-    this.pausedRemaining = snapshot.remainingMs;
+    const incomingRemaining = snapshot.remainingMs;
+    const keepOvertime =
+      snapshot.status === 'paused' &&
+      incomingRemaining >= 0 &&
+      this.pausedRemaining() < 0;
+    this.pausedRemaining.set(
+      keepOvertime ? this.pausedRemaining() : incomingRemaining,
+    );
     if (snapshot.status === 'running' && snapshot.endsAt) {
-      this.endAtMs = Date.parse(snapshot.endsAt);
+      this.endAtMs.set(Date.parse(snapshot.endsAt));
       this.startTicker();
     } else {
-      this.endAtMs = snapshot.status === 'paused' ? null : this.endAtMs;
-      if (snapshot.status !== 'running') {
-        this.endAtMs = null;
-        this.stopTicker();
-      }
+      this.endAtMs.set(null);
+      this.stopTicker();
     }
     this.now.set(clockNow());
   }
@@ -227,12 +238,13 @@ export class ConsuetudoClockService {
   private resetLocal(): void {
     this.stopTicker();
     this.index.set(0);
+    this.status.set('idle');
     this.running.set(false);
     this.finished.set(false);
     this.awarding.set(false);
     this.logs.set([]);
-    this.endAtMs = null;
-    this.pausedRemaining = 0;
+    this.endAtMs.set(null);
+    this.pausedRemaining.set(0);
     this.now.set(clockNow());
   }
 
@@ -241,7 +253,7 @@ export class ConsuetudoClockService {
     this.ngZone.runOutsideAngular(() => {
       const loop = () => {
         this.now.set(clockNow());
-        if (this.running() && this.endAtMs != null) {
+        if (this.running() && this.endAtMs() != null) {
           this.tickHandle = requestAnimationFrame(loop);
         } else {
           this.tickHandle = null;

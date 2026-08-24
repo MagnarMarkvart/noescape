@@ -183,25 +183,45 @@ select {
 .card {
   width: 100%;
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.65rem;
+  gap: 0.45rem;
   text-align: left;
   padding: 0.55rem 0.6rem;
   border: 1px solid rgba(138, 115, 64, 0.45);
   background: rgba(18, 14, 8, 0.38);
   color: inherit;
-  text-decoration: none;
   box-sizing: border-box;
 }
 
+.card-main {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.65rem;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+
 .card:hover,
-.card:focus-visible {
+.card:focus-within {
   border-color: var(--rs-border-bright);
   outline: none;
 }
 
 .card.archived {
-  opacity: 0.62;
+  opacity: 0.72;
+}
+
+.assigned-stamp {
+  color: var(--rs-accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  justify-content: flex-end;
 }
 
 .card-icon {

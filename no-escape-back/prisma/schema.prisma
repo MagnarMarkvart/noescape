@@ -101,6 +101,9 @@ model DailyTask {
   questSubtaskId  Int?
   /// subtask | daily_work
   questBindKind   String?
+  /// Scriptorium folio this daily was assigned from.
+  scriptoriumWorkId Int?
+  scriptoriumWork   ScriptoriumWork? @relation(fields: [scriptoriumWorkId], references: [id], onDelete: SetNull)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -109,6 +112,7 @@ model DailyTask {
   @@index([habitId])
   @@index([questId])
   @@index([questSubtaskId])
+  @@index([scriptoriumWorkId])
 }
 
 /// Reusable daily presets — fill title, skill, effort, duration, optional habit.
@@ -455,6 +459,10 @@ model QuestRun {
   completedAt      DateTime?
   lastLogDate      String?
   destinationDone  Boolean                  @default(false)
+  /// Whole-quest Vigilia total (independent of subtask / daily-work slices).
+  elapsedMs        BigInt                   @default(0)
+  /// Daily-work / journey slice Vigilia total.
+  journeyElapsedMs BigInt                   @default(0)
   logs             QuestDayLog[]
   journeyLogs      QuestJourneyLog[]
   subtaskCompletions QuestSubtaskCompletion[]
@@ -715,6 +723,7 @@ model ScriptoriumWork {
   updatedAt        DateTime @updatedAt
   subtasks         ScriptoriumSubtask[]
   watches          HorologiumWatch[]
+  dailyTasks       DailyTask[]
 
   @@index([status])
   @@index([tier])

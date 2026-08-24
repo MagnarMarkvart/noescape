@@ -1,4 +1,3 @@
-import { Location } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -26,17 +25,28 @@ import { EffortField } from '../shared/ui/effort-field';
 import { ForgeShell } from '../shared/ui/forge-shell';
 import { IconPicker } from '../shared/ui/icon-picker';
 import { SkillTreePicker } from '../shared/ui/skill-tree-picker';
+import { UiConfirm } from '../shared/ui/ui-confirm';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
+import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import {
   DEFAULT_SCRIPTORIUM_ICON,
   emptyWorkDraft,
   SCRIPTORIUM_TIERS,
   ScriptoriumTier,
   ScriptoriumWorkView,
+  workLocked,
 } from './scriptorium.model';
 import { ScriptoriumService } from './scriptorium.service';
 import { WorkIntervalLog } from '../shared/work-interval-log';
+import {
+  DragGrip,
+  DragItem,
+  DragSortDrop,
+  DropGroup,
+  DropList,
+  moveIndex,
+} from '../shared/ui/drag-sort';
 
 @Component({
   selector: 'app-scriptorium-folio-page',
@@ -51,6 +61,11 @@ import { WorkIntervalLog } from '../shared/work-interval-log';
     IconPicker,
     SkillTreePicker,
     WorkIntervalLog,
+    DropGroup,
+    DropList,
+    DragItem,
+    DragGrip,
+    UiConfirm,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './scriptorium-folio-page.html',
@@ -62,8 +77,8 @@ export class ScriptoriumFolioPage implements OnInit {
   private readonly character = inject(CharacterService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly xpFeedback = inject(XpFeedbackService);
   protected readonly vigiliaLogVisible = this.character.vigiliaTrackScriptorium;
-  private readonly location = inject(Location);
   private readonly timed = new TimedToast();
 
   protected readonly toast = this.timed.value;
@@ -76,6 +91,7 @@ export class ScriptoriumFolioPage implements OnInit {
   protected readonly skillTree = signal<SkillTree | null>(null);
   protected readonly selectedCategory = signal<string | null>(null);
   protected readonly busyKey = signal<string | null>(null);
+  protected readonly pendingConfirm = signal<'erase' | 'complete' | null>(null);
 
   protected readonly tiers = SCRIPTORIUM_TIERS;
   protected readonly durationPresets = DURATION_PRESETS;
@@ -83,6 +99,25 @@ export class ScriptoriumFolioPage implements OnInit {
   protected readonly heading = computed(() =>
     this.editId() ? 'Edit folio' : 'New folio',
   );
+  protected readonly locked = computed(() => {
+    const current = this.work();
+    return current ? workLocked(current) : false;
+  });
+  protected readonly assignedStamp = computed(() => {
+    const current = this.work();
+    if (!current) {
+      return '';
+    }
+    if (current.assignedKind === 'quest' || current.questId) {
+      return current.questName
+        ? `Assigned to quest “${current.questName}”.`
+        : 'Assigned to a quest.';
+    }
+    if (current.assignedKind === 'daily') {
+      return 'Assigned to a daily. Complete that daily to shelf this folio.';
+    }
+    return '';
+  });
 
   protected readonly categories = computed(
     () => this.skillTree()?.categories ?? [],
@@ -191,6 +226,10 @@ export class ScriptoriumFolioPage implements OnInit {
   }
 
   protected save(): void {
+    if (this.locked()) {
+      this.timed.set('Assigned folios cannot be edited.');
+      return;
+    }
     const d = this.draft();
     const title = d.title.trim();
     if (!title) {
@@ -226,11 +265,12 @@ export class ScriptoriumFolioPage implements OnInit {
     req.subscribe({
       next: (row) => {
         this.saving.set(false);
-        this.applyWork(row);
         if (wasNew) {
-          this.location.replaceState(`/scriptorium/${row.id}`);
+          void this.router.navigate(['/scriptorium']);
+          return;
         }
-        this.timed.set(wasNew ? 'Inscribed.' : 'Work updated.');
+        this.applyWork(row);
+        this.timed.set('Work updated.');
       },
       error: (err: { error?: { message?: string } }) => {
         this.saving.set(false);
@@ -272,6 +312,40 @@ export class ScriptoriumFolioPage implements OnInit {
     this.pendingSubtasks.update((rows) => rows.filter((_, i) => i !== index));
   }
 
+  protected onSubtaskDrop(event: DragSortDrop): void {
+    if (event.fromList !== event.toList) {
+      return;
+    }
+    if (event.fromList === 'pending') {
+      this.pendingSubtasks.update((rows) =>
+        moveIndex(rows, event.fromIndex, event.toIndex),
+      );
+      return;
+    }
+    const current = this.work();
+    const id = this.editId();
+    if (!current || id == null) {
+      return;
+    }
+    const ids = moveIndex(
+      current.subtasks.map((s) => s.id),
+      event.fromIndex,
+      event.toIndex,
+    );
+    this.work.update((row) =>
+      row
+        ? {
+            ...row,
+            subtasks: moveIndex(row.subtasks, event.fromIndex, event.toIndex),
+          }
+        : row,
+    );
+    this.api.reorderSubtasks(id, ids).subscribe({
+      next: (row) => this.applyWork(row),
+      error: () => this.timed.set('Could not reorder subtasks.'),
+    });
+  }
+
   protected toggleSubtask(subId: number, done: boolean): void {
     const id = this.editId();
     if (id == null) {
@@ -306,6 +380,10 @@ export class ScriptoriumFolioPage implements OnInit {
     if (!work) {
       return;
     }
+    if (this.locked() && work.status !== 'ARCHIVED') {
+      this.timed.set('Assigned folios cannot be shelved.');
+      return;
+    }
     const next = work.status === 'ARCHIVED' ? 'OPEN' : 'ARCHIVED';
     this.api.update(work.id, { status: next }).subscribe({
       next: (row) => {
@@ -316,28 +394,53 @@ export class ScriptoriumFolioPage implements OnInit {
   }
 
   protected destroy(): void {
+    if (!this.work()) {
+      return;
+    }
+    this.pendingConfirm.set('erase');
+  }
+
+  protected askComplete(): void {
     const work = this.work();
-    if (!work) {
+    if (!work || this.locked() || work.status === 'ARCHIVED') {
       return;
     }
-    const ok = window.confirm(`Erase “${work.title}” from the Scriptorium?`);
-    if (!ok) {
+    this.pendingConfirm.set('complete');
+  }
+
+  protected cancelConfirm(): void {
+    this.pendingConfirm.set(null);
+  }
+
+  protected runConfirm(): void {
+    const kind = this.pendingConfirm();
+    const work = this.work();
+    if (!kind || !work) {
       return;
     }
-    this.api.remove(work.id).subscribe({
-      next: () => {
-        this.timed.set('Erased.');
-        void this.router.navigate(['/scriptorium']);
-      },
-    });
+    if (kind === 'complete') {
+      this.completeWork(work);
+      return;
+    }
+    this.eraseWork(work);
   }
 
   protected forgeQuest(): void {
     const work = this.work();
-    if (!work) {
+    if (!work || this.locked()) {
       return;
     }
     void this.router.navigate(['/quests/forge'], {
+      queryParams: { scriptorium: work.id },
+    });
+  }
+
+  protected assignDaily(): void {
+    const work = this.work();
+    if (!work || this.locked()) {
+      return;
+    }
+    void this.router.navigate(['/dailies'], {
       queryParams: { scriptorium: work.id },
     });
   }
@@ -349,6 +452,42 @@ export class ScriptoriumFolioPage implements OnInit {
     }
     void this.router.navigate(['/horologium'], {
       queryParams: { vigilia: work.id },
+    });
+  }
+
+  private completeWork(work: ScriptoriumWorkView): void {
+    this.saving.set(true);
+    this.api.complete(work.id).subscribe({
+      next: (result) => {
+        this.saving.set(false);
+        this.pendingConfirm.set(null);
+        for (const award of result.awards ?? []) {
+          this.xpFeedback.publishAward(award);
+        }
+        this.applyWork(result.work);
+        this.timed.set('Completed and shelved.');
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.saving.set(false);
+        this.pendingConfirm.set(null);
+        this.timed.set(err.error?.message ?? 'Could not complete the folio.');
+      },
+    });
+  }
+
+  private eraseWork(work: ScriptoriumWorkView): void {
+    this.saving.set(true);
+    this.api.remove(work.id).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.pendingConfirm.set(null);
+        void this.router.navigate(['/scriptorium']);
+      },
+      error: () => {
+        this.saving.set(false);
+        this.pendingConfirm.set(null);
+        this.timed.set('Could not erase the folio.');
+      },
     });
   }
 

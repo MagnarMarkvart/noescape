@@ -20,6 +20,7 @@ export interface QuestSubtaskView {
   completionOrder: number | null;
   elapsedMs?: number;
   estimateMinutes?: number | null;
+  habitLink?: QuestHabitLinkView | null;
 }
 
 export interface QuestMissedDay {
@@ -64,6 +65,54 @@ export interface QuestSkillShareView {
 
 export const QUEST_WEIGHT_TOTAL = 10;
 
+export type QuestHabitRule = 'COUNT' | 'STREAK' | 'WINDOW';
+export type QuestHabitTarget = 'JOURNEY' | 'SUBTASK';
+
+export interface QuestHabitLinkView {
+  habitId: number;
+  habitName: string;
+  habitIcon: string | null;
+  target: QuestHabitTarget;
+  subtaskId: number | null;
+  rule: QuestHabitRule;
+  requiredCount: number;
+  windowDays: number | null;
+  progress: number;
+  completed: boolean;
+}
+
+export function habitQuestProgressLabel(link: {
+  rule: QuestHabitRule;
+  progress: number;
+  requiredCount: number;
+  windowDays: number | null;
+  completed: boolean;
+}): string {
+  if (link.completed) {
+    return 'Habitus condition met';
+  }
+  if (link.rule === 'STREAK') {
+    return `Habitus streak ${link.progress}/${link.requiredCount}`;
+  }
+  if (link.rule === 'WINDOW') {
+    return `Habitus ${link.progress}/${link.requiredCount} in ${link.windowDays ?? 7}d`;
+  }
+  return `Habitus ${link.progress}/${link.requiredCount}`;
+}
+
+export function formatQuestMinutes(minutes: number | null | undefined): string {
+  const m = Math.round(Number(minutes) || 0);
+  if (m <= 0) {
+    return '';
+  }
+  if (m < 60) {
+    return `${m}m`;
+  }
+  const hours = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
 export interface QuestRunView {
   id: number;
   status: string;
@@ -75,6 +124,10 @@ export interface QuestRunView {
   completedAtLabel: string | null;
   lastLogDate: string | null;
   destinationDone: boolean;
+  /** Whole-quest Vigilia total (independent of subtask / daily-work slices). */
+  elapsedMs?: number;
+  /** Daily-work / journey slice Vigilia total. */
+  journeyElapsedMs?: number;
   logs: Array<{
     id: number;
     date: string;
@@ -110,6 +163,8 @@ export interface QuestView {
   dailyWorkMinutes: number | null;
   /** Label used when adding the daily-work slice to today's dailies. */
   dailyWorkTitle: string | null;
+  /** Habitus rule that owns this journey; when set, the quest view is read-only. */
+  journeyHabitLink: QuestHabitLinkView | null;
   coverImage: string | null;
   coverUrl: string | null;
   skillSlug: string | null;

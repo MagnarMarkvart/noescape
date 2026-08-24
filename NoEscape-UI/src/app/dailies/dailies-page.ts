@@ -16,7 +16,7 @@ import {
   required,
   submit,
 } from '@angular/forms/signals';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import {
@@ -62,6 +62,16 @@ import { DailyDayCard } from './daily-day-card';
 import { filledSlotsFromBoard, scoreFromSlots } from './day-score';
 import { calculateDailyTaskXp } from './daily-xp';
 import { splitQuestXp } from '../quests/quest.model';
+import { HorologiumTimerService } from '../horologium/horologium-timer.service';
+import { HorologiumWatchService } from '../horologium/horologium-watch.service';
+import { ElapsedComplete } from '../shared/ui/elapsed-complete';
+import {
+  DragGrip,
+  DragItem,
+  DragSortDrop,
+  DropGroup,
+  DropList,
+} from '../shared/ui/drag-sort';
 
 @Component({
   selector: 'app-dailies-page',
@@ -80,6 +90,11 @@ import { splitQuestXp } from '../quests/quest.model';
     UiIconBtn,
     DailyDayCard,
     WorkIntervalLog,
+    ElapsedComplete,
+    DropGroup,
+    DropList,
+    DragItem,
+    DragGrip,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dailies-page.html',
@@ -92,6 +107,9 @@ export class DailiesPage implements OnInit {
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly character = inject(CharacterService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly timer = inject(HorologiumTimerService);
+  private readonly watches = inject(HorologiumWatchService);
 
   protected readonly habits = signal<HabitView[]>([]);
   protected readonly templates = signal<DailyTaskTemplate[]>([]);
@@ -108,6 +126,8 @@ export class DailiesPage implements OnInit {
   protected readonly editingKey = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly completingId = signal<number | null>(null);
+  protected readonly pendingElapsedId = signal<number | null>(null);
+  protected readonly pendingMinutes = signal<number | null>(null);
   protected readonly uncompletingId = signal<number | null>(null);
   protected readonly postponingId = signal<number | null>(null);
   protected readonly postponePickerOpen = signal(false);
@@ -119,6 +139,7 @@ export class DailiesPage implements OnInit {
   protected readonly historyUnlocked = signal(false);
   /** When true, skip auto-hide after the base 1/3/5 board is filled. */
   private setupPinned = false;
+  private pendingScriptoriumId: number | null = null;
   protected readonly calendarMarks = signal<CalendarMarks>({});
 
   protected readonly slotModel = signal<SlotFormModel>(this.blankModel());
@@ -247,6 +268,11 @@ export class DailiesPage implements OnInit {
     if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
       this.selectedDate.set(queryDate);
     }
+    const scriptoriumRaw = this.route.snapshot.queryParamMap.get('scriptorium');
+    const scriptoriumId = scriptoriumRaw ? Number(scriptoriumRaw) : NaN;
+    if (Number.isFinite(scriptoriumId) && scriptoriumId > 0) {
+      this.pendingScriptoriumId = scriptoriumId;
+    }
     const cachedTree = this.skillsService.peekTree();
     if (cachedTree) {
       this.skillTree.set(cachedTree);
@@ -328,9 +354,10 @@ export class DailiesPage implements OnInit {
   }
 
   protected startEdit(slot: DailyTaskSlot): void {
-    if (slot.completed || !this.canMutate()) {
+    if (slot.completed || !this.canMutate() || slot.scriptoriumWorkId) {
       return;
     }
+    this.cancelElapsedComplete();
     this.setupOpen.set(true);
     this.setupPinned = true;
     this.slotModel.set({
@@ -508,10 +535,55 @@ export class DailiesPage implements OnInit {
     if (!slot.id || slot.completed || !this.canMutate()) {
       return;
     }
+    if (this.isSlotTracked(slot)) {
+      this.submitComplete(slot);
+      return;
+    }
+    this.pendingElapsedId.set(slot.id);
+    this.pendingMinutes.set(null);
+  }
+
+  protected confirmElapsedComplete(): void {
+    const id = this.pendingElapsedId();
+    const slot = this.board()
+      ?.tiers.flatMap((tier) => tier.slots)
+      .find((row) => row.id === id);
+    if (!slot) {
+      return;
+    }
+    this.submitComplete(slot, this.pendingMinutes());
+  }
+
+  protected cancelElapsedComplete(): void {
+    this.pendingElapsedId.set(null);
+    this.pendingMinutes.set(null);
+  }
+
+  protected isSlotTracked(slot: DailyTaskSlot): boolean {
+    if ((slot.elapsedMs ?? 0) > 0) {
+      return true;
+    }
+    if (!slot.id) {
+      return false;
+    }
+    if (this.watches.elapsedForDaily(slot.id) > 0) {
+      return true;
+    }
+    const bound = this.timer.boundDaily();
+    return Boolean(this.timer.running() && bound?.dailyTaskId === slot.id);
+  }
+
+  private submitComplete(slot: DailyTaskSlot, minutes?: number | null): void {
+    if (!slot.id || slot.completed || !this.canMutate()) {
+      return;
+    }
     this.completingId.set(slot.id);
-    this.dailiesService.complete(slot.id).subscribe({
+    const elapsedMs =
+      minutes != null && minutes > 0 ? minutes * 60_000 : undefined;
+    this.dailiesService.complete(slot.id, elapsedMs).subscribe({
       next: (result) => {
         this.completingId.set(null);
+        this.cancelElapsedComplete();
         this.skillsService.invalidateTree();
         for (const award of result.awards ?? (result.award ? [result.award] : [])) {
           this.xpFeedback.publishAward(award);
@@ -621,6 +693,44 @@ export class DailiesPage implements OnInit {
     });
   }
 
+  protected onDailyDrop(event: DragSortDrop): void {
+    if (!this.canMutate()) {
+      return;
+    }
+    const board = this.board();
+    if (!board) {
+      return;
+    }
+    const fromImportance = event.fromList as TaskImportance;
+    const toImportance = event.toList as TaskImportance;
+    let toIndex = event.toIndex;
+    if (toIndex < 0) {
+      const empty = board.tiers
+        .find((tier) => tier.importance === toImportance)
+        ?.slots.find((slot) => slot.isEmpty);
+      if (!empty) {
+        return;
+      }
+      toIndex = empty.slotIndex;
+    }
+    if (fromImportance === toImportance && event.fromIndex === toIndex) {
+      return;
+    }
+    this.cancelEdit();
+    this.dailiesService
+      .reorderSlots(
+        board.date,
+        { importance: fromImportance, slotIndex: event.fromIndex },
+        { importance: toImportance, slotIndex: toIndex },
+      )
+      .subscribe({
+        next: (next) => this.applyBoard(next),
+        error: (err: { error?: { message?: string | string[] } }) => {
+          this.timed.set(this.readError(err, 'Could not reorder'));
+        },
+      });
+  }
+
   protected copyIncomplete(): void {
     this.dailiesService.copyIncomplete(this.selectedDate()).subscribe({
       next: (result) => {
@@ -677,6 +787,7 @@ export class DailiesPage implements OnInit {
 
   private setDate(date: string): void {
     this.cancelEdit();
+    this.cancelElapsedComplete();
     this.setupPinned = false;
     this.historyUnlocked.set(false);
     this.selectedDate.set(date);
@@ -704,6 +815,7 @@ export class DailiesPage implements OnInit {
         this.loading.set(false);
         this.error.set(null);
         this.refreshCalendar();
+        this.consumeScriptoriumBind();
       },
       error: () => {
         this.loading.set(false);
@@ -712,6 +824,29 @@ export class DailiesPage implements OnInit {
             'Could not reach the Dailies server. Is the backend running?',
           );
         }
+      },
+    });
+  }
+
+  private consumeScriptoriumBind(): void {
+    const workId = this.pendingScriptoriumId;
+    if (!workId) {
+      return;
+    }
+    this.pendingScriptoriumId = null;
+    const date = this.selectedDate();
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { date: date === this.todayIso() ? null : date },
+      replaceUrl: true,
+    });
+    this.dailiesService.fromScriptorium({ date, workId }).subscribe({
+      next: (board) => {
+        this.applyBoard(board);
+        this.timed.set('Bound to a daily.');
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.timed.set(err.error?.message ?? 'Could not bind the folio.');
       },
     });
   }

@@ -38,11 +38,13 @@
     </button>
   </div>
 
+  @if (error()) {
+    <p class="state error">{{ error() }}</p>
+  }
+
   @if (loading() && works().length === 0) {
     <p class="state">Unrolling the scrolls…</p>
-  } @else if (error()) {
-    <p class="state error">{{ error() }}</p>
-  } @else {
+  } @else if (works().length || !error()) {
     <div class="tiers">
       @for (col of columns(); track col.id) {
         <section class="tier" [attr.data-tier]="col.id" [attr.aria-label]="col.name">
@@ -58,35 +60,82 @@
             <ul class="cards">
               @for (w of col.works; track w.id) {
                 <li>
-                  <a
+                  <article
                     class="card"
                     [class.archived]="w.status === 'ARCHIVED'"
-                    [routerLink]="['/scriptorium', w.id]"
+                    [class.assigned]="workLocked(w)"
                   >
-                    <span class="card-icon" aria-hidden="true">{{ w.icon || defaultIcon }}</span>
-                    <span class="card-body">
-                      <strong>{{ w.title }}</strong>
-                      <small
-                        [class.overdue]="dueTone(w.dueDate) === 'overdue'"
-                        [class.today]="dueTone(w.dueDate) === 'today'"
-                        [class.soon]="dueTone(w.dueDate) === 'soon'"
-                      >{{ dueLabel(w.dueDate) }}</small>
-                      <span class="meta">
-                        <span>Effort {{ w.effort }}</span>
-                        <span>{{ durationLabel(w.durationMinutes) }}</span>
-                        @if (w.subtaskTotal) {
-                          <span>{{ w.subtaskDone }}/{{ w.subtaskTotal }}</span>
+                    <a class="card-main" [routerLink]="['/scriptorium', w.id]">
+                      <span class="card-icon" aria-hidden="true">{{ w.icon || defaultIcon }}</span>
+                      <span class="card-body">
+                        <strong>{{ w.title }}</strong>
+                        <small
+                          [class.overdue]="dueTone(w.dueDate) === 'overdue'"
+                          [class.today]="dueTone(w.dueDate) === 'today'"
+                          [class.soon]="dueTone(w.dueDate) === 'soon'"
+                        >{{ dueLabel(w.dueDate) }}</small>
+                        @if (assignedLabel(w); as stamp) {
+                          <span class="assigned-stamp">{{ stamp }}</span>
                         }
-                      </span>
-                      @if (w.skillShares.length) {
-                        <span class="skills">
-                          @for (s of w.skillShares; track s.slug) {
-                            <span>{{ s.icon || '◆' }} {{ s.name }}</span>
+                        <span class="meta">
+                          <span>Effort {{ w.effort }}</span>
+                          <span>{{ durationLabel(w.durationMinutes) }}</span>
+                          @if (w.subtaskTotal) {
+                            <span>{{ w.subtaskDone }}/{{ w.subtaskTotal }}</span>
                           }
                         </span>
+                        @if (w.skillShares.length) {
+                          <span class="skills">
+                            @for (s of w.skillShares; track s.slug) {
+                              <span>{{ s.icon || '◆' }} {{ s.name }}</span>
+                            }
+                          </span>
+                        }
+                      </span>
+                    </a>
+                    <div class="card-actions">
+                      @if (w.status !== 'ARCHIVED' && !workLocked(w)) {
+                        <app-ui-icon-btn
+                          icon="check"
+                          label="Complete"
+                          [disabled]="busyId() === w.id"
+                          (clicked)="askComplete(w)"
+                        />
+                        <app-ui-icon-btn
+                          icon="quest"
+                          label="Assign to quest"
+                          href="/quests/forge"
+                          [queryParams]="{ scriptorium: '' + w.id }"
+                        />
+                        <app-ui-icon-btn
+                          icon="calendar"
+                          label="Assign to daily"
+                          href="/dailies"
+                          [queryParams]="{ scriptorium: '' + w.id }"
+                        />
+                        <app-ui-icon-btn
+                          icon="shelf"
+                          label="Shelve"
+                          [disabled]="busyId() === w.id"
+                          (clicked)="archiveWork(w)"
+                        />
                       }
-                    </span>
-                  </a>
+                      @if (w.status === 'ARCHIVED') {
+                        <app-ui-icon-btn
+                          icon="shelf"
+                          label="Restore"
+                          [disabled]="busyId() === w.id"
+                          (clicked)="archiveWork(w)"
+                        />
+                      }
+                      <app-ui-icon-btn
+                        icon="close"
+                        label="Erase"
+                        [disabled]="busyId() === w.id"
+                        (clicked)="askErase(w)"
+                      />
+                    </div>
+                  </article>
                 </li>
               }
             </ul>
@@ -96,3 +145,21 @@
     </div>
   }
 </section>
+
+@if (confirm(); as pending) {
+  <app-ui-confirm
+    kicker="Scriptorium"
+    [title]="pending.kind === 'erase'
+      ? 'Erase “' + pending.work.title + '”?'
+      : 'Complete “' + pending.work.title + '”?'"
+    [body]="pending.kind === 'erase'
+      ? 'The folio is struck from the vault. Assigned dailies stay, but the link is cut.'
+      : 'Awards XP from complexity and volume, then shelves the folio. It remains on the shelves.'"
+    [confirmLabel]="pending.kind === 'erase' ? 'Erase' : 'Complete'"
+    [tone]="pending.kind === 'erase' ? 'danger' : 'accent'"
+    [busy]="busyId() === pending.work.id"
+    (dismiss)="cancelConfirm()"
+    (secondary)="cancelConfirm()"
+    (confirm)="runConfirm()"
+  />
+}

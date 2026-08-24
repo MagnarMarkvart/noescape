@@ -21,6 +21,7 @@ export class ClockSyncService {
   private readonly skills = inject(SkillsService);
   private readonly ngZone = inject(NgZone);
   private source: EventSource | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   readonly skewMs = signal(0);
   readonly hydrated = signal(false);
 
@@ -28,10 +29,20 @@ export class ClockSyncService {
     this.hydrate();
     this.connect();
     if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => {
-        this.hydrate();
-        this.connect();
+      window.addEventListener('online', () => this.resync());
+      window.addEventListener('pageshow', () => this.hydrate());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.resync();
+        }
       });
+    }
+  }
+
+  private resync(): void {
+    this.hydrate();
+    if (!this.source || this.source.readyState === EventSource.CLOSED) {
+      this.connect();
     }
   }
 
@@ -81,27 +92,35 @@ export class ClockSyncService {
     if (typeof EventSource === 'undefined') {
       return;
     }
+    if (this.reconnectTimer != null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.source?.close();
     const es = new EventSource(this.api.streamUrl());
     this.source = es;
     const onSnapshot = (raw: MessageEvent) => {
       this.ngZone.run(() => {
-        try {
-          const event = JSON.parse(String(raw.data)) as ClockEvent;
-          if (event && event.kind) {
-            this.applyEvent(event, true);
-          }
-        } catch {
-          /* ping or malformed */
+        const event = parseClockEvent(raw.data);
+        if (event) {
+          this.applyEvent(event, true);
         }
       });
     };
     es.addEventListener('clock.snapshot', onSnapshot);
     es.onmessage = onSnapshot;
+    es.onopen = () => {
+      this.ngZone.run(() => this.hydrate());
+    };
     es.onerror = () => {
       es.close();
-      this.source = null;
-      window.setTimeout(() => this.connect(), 2000);
+      if (this.source === es) {
+        this.source = null;
+      }
+      if (this.reconnectTimer != null) {
+        clearTimeout(this.reconnectTimer);
+      }
+      this.reconnectTimer = setTimeout(() => this.connect(), 2000);
     };
   }
 
@@ -130,4 +149,25 @@ export class ClockSyncService {
       }
     }
   }
+}
+
+function parseClockEvent(raw: unknown): ClockEvent | null {
+  try {
+    let parsed: unknown =
+      typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'data' in parsed &&
+      !('kind' in parsed)
+    ) {
+      parsed = (parsed as { data: unknown }).data;
+    }
+    if (parsed && typeof parsed === 'object' && 'kind' in parsed) {
+      return parsed as ClockEvent;
+    }
+  } catch {
+    /* ping or malformed */
+  }
+  return null;
 }

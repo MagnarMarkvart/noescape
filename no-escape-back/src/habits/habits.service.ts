@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { CharacterService } from '../character/character.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -75,6 +77,7 @@ export class HabitsService {
     private readonly characterService: CharacterService,
     private readonly time: TimeService,
     private readonly skills: SkillsService,
+    @Inject(forwardRef(() => QuestsService))
     private readonly quests: QuestsService,
   ) {}
 
@@ -585,6 +588,12 @@ export class HabitsService {
       where: { id: habitId },
       data: { questId },
     });
+    if (target === 'JOURNEY') {
+      await this.prisma.quest.update({
+        where: { id: questId },
+        data: { dailyWorkTitle: null },
+      });
+    }
     return this.getOne(habitId);
   }
 
@@ -963,14 +972,16 @@ export class HabitsService {
           tallyInBand,
         },
       });
-      await this.quests.applyHabitusProgress({
-        questId: link.questId,
-        target: parseHabitQuestTarget(link.target),
-        subtaskId: link.subtaskId,
-        date,
-        note: 'Habitus',
-      });
     }
+    await this.quests.applyHabitusProgress({
+      questId: link.questId,
+      target: parseHabitQuestTarget(link.target),
+      subtaskId: link.subtaskId,
+      date,
+      note: 'Habitus',
+      success,
+      completed: snapshot.completed,
+    });
   }
 
   private withBoardFlags(

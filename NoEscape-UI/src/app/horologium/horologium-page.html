@@ -198,6 +198,15 @@
 
       @if (focusMode() && notesOpen()) {
         <aside class="notes-dock">
+          <div class="notes-head">
+            <p>Notes</p>
+            <app-ui-icon-btn
+              icon="close"
+              label="Close notes"
+              [round]="true"
+              (clicked)="toggleNotes()"
+            />
+          </div>
           <textarea
             class="live-notes"
             [value]="notes()"
@@ -350,26 +359,36 @@
           <ul class="session-log">
             @for (row of sessions(); track (row.kind || 'session') + ':' + row.id) {
               <li>
-                <div class="log-top">
-                  <strong>{{ formatDate(row.date) }}</strong>
-                  <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
-                    {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
-                  </span>
-                </div>
-                @if (row.kind === 'consuetudo') {
-                  <p class="log-meta">
-                    <span aria-hidden="true">{{ row.routineIcon || '◆' }}</span>
-                    Consuetudo · {{ row.routineName || row.taskLabel || 'Practice' }}
-                  </p>
-                } @else {
-                  @if (row.endedEarly) {
-                    <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
+                <button
+                  type="button"
+                  class="session-card"
+                  (click)="openActa(row)"
+                  [attr.aria-pressed]="
+                    selectedActa()?.id === row.id &&
+                    (selectedActa()?.kind || 'session') === (row.kind || 'session')
+                  "
+                >
+                  <div class="log-top">
+                    <strong>{{ formatDate(row.date) }}</strong>
+                    <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
+                      {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
+                    </span>
+                  </div>
+                  @if (row.kind === 'consuetudo') {
+                    <p class="log-meta">
+                      <span aria-hidden="true">{{ row.routineIcon || '◆' }}</span>
+                      Consuetudo · {{ row.routineName || row.taskLabel || 'Practice' }}
+                    </p>
+                  } @else {
+                    @if (row.endedEarly) {
+                      <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
+                    }
+                    <p class="log-meta">
+                      <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
+                      {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
+                    </p>
                   }
-                  <p class="log-meta">
-                    <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
-                    {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
-                  </p>
-                }
+                </button>
               </li>
             }
           </ul>
@@ -571,15 +590,22 @@
           <fieldset class="task-bind" [disabled]="!canEdit()">
             <legend>Vigilia</legend>
             <select
-              [value]="selectedWatchId() ?? ''"
+              [value]="vigiliaSelectValue()"
               (change)="selectWatch($any($event.target).value)"
             >
               <option value="">None</option>
-              @for (w of projectWatches(); track w.id) {
-                <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
+              @for (g of vigiliaGroups(); track g.id) {
+                <optgroup [attr.label]="g.label">
+                  @for (o of g.options; track o.value) {
+                    <option [value]="o.value">{{ o.label }}</option>
+                  }
+                </optgroup>
               }
             </select>
-            @if (scriptoriumWorks().length) {
+            @if (vigiliaTrackQuests() && vigiliaQuests().length === 0) {
+              <p class="muted">No active quests to track. Start one from the catalog and it will appear here.</p>
+            }
+            @if (vigiliaTrackScriptorium() && scriptoriumWorks().length) {
               <label class="scriptorium-bind">
                 From Scriptorium
                 <select (change)="bindScriptoriumWork($any($event.target).value)">
@@ -620,7 +646,42 @@
               <p class="muted">{{ watchHint() }}</p>
               <app-work-interval-log [target]="{ watchId: watch.id }" />
             }
-            <a routerLink="/scriptorium" class="preset-manage">Scriptorium →</a>
+            @if (siblingVigiliaOptions().length > 0 || extraWatches().length > 0) {
+              <div class="extra-vigilias">
+                @if (siblingVigiliaOptions().length > 0) {
+                  <p class="muted">Also track (quest and a subtask can run together):</p>
+                  <select (change)="attachSiblingVigilia($any($event.target).value); $any($event.target).value = ''">
+                    <option value="">+ Also track…</option>
+                    @for (o of siblingVigiliaOptions(); track o.value) {
+                      <option [value]="o.value">{{ o.label }}</option>
+                    }
+                  </select>
+                }
+                @if (extraWatches().length > 0) {
+                  <ul class="extra-watch-list">
+                    @for (w of extraWatches(); track w.id) {
+                      <li>
+                        <span class="extra-watch-name">{{ w.name }}</span>
+                        <span class="extra-watch-elapsed">{{ extraWatchElapsed(w) }}</span>
+                        @if (canFinishWatch(w)) {
+                          <button type="button" class="ghost chip" (click)="completeWatch(w.id)">
+                            Done
+                          </button>
+                        } @else {
+                          <span class="muted small">quest — no finish here</span>
+                        }
+                        <button type="button" class="ghost chip" (click)="detachExtraWatch(w.id)">
+                          Detach
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+            @if (vigiliaTrackScriptorium()) {
+              <a routerLink="/scriptorium" class="preset-manage">Scriptorium →</a>
+            }
           </fieldset>
           } @else if (!isConsuetudo() && projectWatches().length > 0) {
           <fieldset class="task-bind" [disabled]="!canEdit()">
@@ -733,7 +794,11 @@
     [showConsuetudo]="showConsuetudoMode()"
     [routines]="routines()"
     [selectedRoutineId]="selectedRoutineId()"
-    [scriptoriumWorks]="scriptoriumWorks()"
+    [scriptoriumWorks]="vigiliaTrackScriptorium() ? scriptoriumWorks() : []"
+    [vigiliaGroups]="vigiliaGroups()"
+    [vigiliaSelectValue]="vigiliaSelectValue()"
+    [vigiliaCustomAllowed]="vigiliaCustomAllowed()"
+    [vigiliaTrackScriptorium]="vigiliaTrackScriptorium()"
     (closed)="exitScenery()"
     (taskDone)="completeBoundTask()"
     (taskFocus)="openTaskFocus()"
@@ -743,6 +808,7 @@
     (dailyChange)="selectDaily($event)"
     (setupKindChange)="setSetupKind($event)"
     (routineChange)="selectRoutine($event)"
+    (vigiliaBind)="selectWatch($event)"
   />
 }
 
@@ -772,4 +838,8 @@
     (secondary)="secondaryPrompt()"
     (confirm)="acceptPrompt()"
   />
+}
+
+@if (selectedActa(); as row) {
+  <app-horologium-session-sheet [session]="row" (closed)="closeActa()" />
 }

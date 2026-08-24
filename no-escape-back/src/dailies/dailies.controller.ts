@@ -20,6 +20,11 @@ import { LogQuickTaskDto } from './dto/log-quick-task.dto';
 import { DailiesService } from './dailies.service';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
 
+function optionalElapsedMs(raw: unknown): number | undefined {
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 @Controller('dailies')
 export class DailiesController {
   constructor(private readonly dailiesService: DailiesService) {}
@@ -69,6 +74,18 @@ export class DailiesController {
     return this.dailiesService.upsertSlot(dto);
   }
 
+  @Post('slots/reorder')
+  reorderSlots(
+    @Body()
+    body: {
+      date?: string;
+      from: { importance: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR'; slotIndex: number };
+      to: { importance: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR'; slotIndex: number };
+    },
+  ) {
+    return this.dailiesService.reorderSlot(body);
+  }
+
   @Post('from-quest')
   fromQuest(
     @Body()
@@ -81,6 +98,19 @@ export class DailiesController {
     },
   ) {
     return this.dailiesService.fromQuest(body);
+  }
+
+  @Post('from-scriptorium')
+  fromScriptorium(
+    @Body()
+    body: {
+      date?: string;
+      workId: number;
+      importance?: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR';
+      slotIndex?: number;
+    },
+  ) {
+    return this.dailiesService.fromScriptorium(body);
   }
 
   @Get('templates')
@@ -117,8 +147,13 @@ export class DailiesController {
   }
 
   @Post(':id/complete')
-  complete(@Param('id', ParseIntPipe) id: number) {
-    return this.dailiesService.complete(id);
+  complete(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { elapsedMs?: number },
+  ) {
+    return this.dailiesService.complete(id, {
+      elapsedMs: optionalElapsedMs(body?.elapsedMs),
+    });
   }
 
   @Post(':id/uncomplete')

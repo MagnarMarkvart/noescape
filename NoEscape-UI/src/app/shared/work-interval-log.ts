@@ -153,6 +153,7 @@ export class WorkIntervalLog {
       (t.dailyTaskId != null ||
         t.questSubtaskId != null ||
         t.questId != null ||
+        t.questRunId != null ||
         t.scriptoriumWorkId != null ||
         t.watchId != null)
     );

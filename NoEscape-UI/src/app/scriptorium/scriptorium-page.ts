@@ -8,6 +8,9 @@ import {
 } from '@angular/core';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { CharacterService } from '../character/character.service';
+import { UiConfirm } from '../shared/ui/ui-confirm';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
+import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import {
   durationLabel,
   DEFAULT_SCRIPTORIUM_ICON,
@@ -15,12 +18,17 @@ import {
   SCRIPTORIUM_TIERS,
   ScriptoriumSortId,
   ScriptoriumWorkView,
+  workLocked,
 } from './scriptorium.model';
 import { ScriptoriumService } from './scriptorium.service';
 
+type CatalogConfirm =
+  | { kind: 'erase'; work: ScriptoriumWorkView }
+  | { kind: 'complete'; work: ScriptoriumWorkView };
+
 @Component({
   selector: 'app-scriptorium-page',
-  imports: [RouterLink],
+  imports: [RouterLink, UiConfirm, UiIconBtn],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './scriptorium-page.html',
   styleUrl: './scriptorium-page.css',
@@ -30,6 +38,7 @@ export class ScriptoriumPage implements OnInit {
   private readonly character = inject(CharacterService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly xpFeedback = inject(XpFeedbackService);
 
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
@@ -37,10 +46,13 @@ export class ScriptoriumPage implements OnInit {
   protected readonly query = signal('');
   protected readonly sortId = signal<ScriptoriumSortId>('due');
   protected readonly showArchived = signal(false);
+  protected readonly confirm = signal<CatalogConfirm | null>(null);
+  protected readonly busyId = signal<number | null>(null);
 
   protected readonly sorts = SCRIPTORIUM_SORTS;
   protected readonly durationLabel = durationLabel;
   protected readonly defaultIcon = DEFAULT_SCRIPTORIUM_ICON;
+  protected readonly workLocked = workLocked;
 
   protected readonly todayIso = this.character.todayIso;
 
@@ -55,8 +67,8 @@ export class ScriptoriumPage implements OnInit {
         w.title,
         w.notes,
         w.tier,
-        ...(w.subtasks.map((s) => s.title)),
-        ...(w.skillShares.map((s) => s.name)),
+        ...w.subtasks.map((s) => s.title),
+        ...w.skillShares.map((s) => s.name),
       ]
         .join(' ')
         .toLowerCase();
@@ -113,6 +125,73 @@ export class ScriptoriumPage implements OnInit {
     this.reload();
   }
 
+  protected assignedLabel(work: ScriptoriumWorkView): string {
+    if (work.assignedKind === 'quest' || work.questId) {
+      return work.questName ? `Assigned · ${work.questName}` : 'Assigned to a quest';
+    }
+    if (work.assignedKind === 'daily') {
+      return work.assignedDailyDate
+        ? `Assigned · daily ${this.character.formatDate(work.assignedDailyDate)}`
+        : 'Assigned to a daily';
+    }
+    if (work.status === 'ARCHIVED') {
+      return 'Shelved';
+    }
+    return '';
+  }
+
+  protected askComplete(work: ScriptoriumWorkView): void {
+    if (workLocked(work) || work.status === 'ARCHIVED') {
+      return;
+    }
+    this.confirm.set({ kind: 'complete', work });
+  }
+
+  protected askErase(work: ScriptoriumWorkView): void {
+    this.confirm.set({ kind: 'erase', work });
+  }
+
+  protected cancelConfirm(): void {
+    if (this.busyId()) {
+      return;
+    }
+    this.confirm.set(null);
+  }
+
+  protected runConfirm(): void {
+    const pending = this.confirm();
+    if (!pending || this.busyId()) {
+      return;
+    }
+    if (pending.kind === 'complete') {
+      this.completeWork(pending.work);
+      return;
+    }
+    this.eraseWork(pending.work);
+  }
+
+  protected archiveWork(work: ScriptoriumWorkView): void {
+    if (workLocked(work) && work.status !== 'ARCHIVED') {
+      return;
+    }
+    const next = work.status === 'ARCHIVED' ? 'OPEN' : 'ARCHIVED';
+    this.busyId.set(work.id);
+    this.api.update(work.id, { status: next }).subscribe({
+      next: () => {
+        this.busyId.set(null);
+        this.reload();
+      },
+      error: () => {
+        this.busyId.set(null);
+        this.error.set(
+          next === 'ARCHIVED'
+            ? 'Could not shelve the folio.'
+            : 'Could not restore the folio.',
+        );
+      },
+    });
+  }
+
   protected dueLabel(iso: string | null): string {
     if (!iso) {
       return 'No due day';
@@ -147,6 +226,41 @@ export class ScriptoriumPage implements OnInit {
       return 'soon';
     }
     return '';
+  }
+
+  private completeWork(work: ScriptoriumWorkView): void {
+    this.busyId.set(work.id);
+    this.api.complete(work.id).subscribe({
+      next: (result) => {
+        this.busyId.set(null);
+        this.confirm.set(null);
+        for (const award of result.awards ?? []) {
+          this.xpFeedback.publishAward(award);
+        }
+        this.reload();
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.busyId.set(null);
+        this.confirm.set(null);
+        this.error.set(err.error?.message ?? 'Could not complete the folio.');
+      },
+    });
+  }
+
+  private eraseWork(work: ScriptoriumWorkView): void {
+    this.busyId.set(work.id);
+    this.api.remove(work.id).subscribe({
+      next: () => {
+        this.busyId.set(null);
+        this.confirm.set(null);
+        this.reload();
+      },
+      error: () => {
+        this.busyId.set(null);
+        this.confirm.set(null);
+        this.error.set('Could not erase the folio.');
+      },
+    });
   }
 
   private compareWorks(

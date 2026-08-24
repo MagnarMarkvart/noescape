@@ -112,6 +112,7 @@
       <legend>Journey</legend>
       <p class="hint">
         Continuous work that moves you toward the destination. Logged on the days your commitment expects.
+        Bind it to a daily slice, a Habitus habit, or neither.
       </p>
       <label>
         Continuous activity
@@ -140,92 +141,49 @@
         />
         <span class="commit-label">{{ commitmentLabel(createModel().commitmentLevel) }}</span>
       </label>
-    </fieldset>
-
-    <fieldset>
-      <legend>Subtasks</legend>
-      <p class="hint">
-        Each completed subtask fills the green progress bar. All of them = 90%.
-        Mark a subtask as a gate to lock the daily check-in until it is done.
-      </p>
-      <div class="inline-add">
-        <label class="grow">
-          Add subtask
-          <input
-            type="text"
-            [value]="subtaskDraft()"
-            (input)="setSubtaskDraft($event)"
-            (keydown.enter)="$event.preventDefault(); addSubtask()"
-            placeholder="Ship the first vertical slice"
-          />
-        </label>
-        <app-rune-check
-          label="Gate"
-          [checked]="gateDraft()"
-          (checkedChange)="setGateDraft($event)"
-        />
-        <app-date-field
-          label=""
-          placeholder="Due"
-          [compact]="true"
-          [value]="subtaskDeadlineDraft()"
-          (valueChange)="setSubtaskDeadlineDraft($event)"
-        />
-        <label class="minutes-field">
-          Est. min
-          <app-number-field
-            ariaLabel="Estimated minutes"
-            [min]="0"
-            [max]="1440"
-            [value]="subtaskEstimateDraft() ?? 0"
-            (valueChange)="setSubtaskEstimateDraft($event)"
-          />
-        </label>
-        <button type="button" class="ghost-btn" (click)="addSubtask()">Add</button>
+      <app-duration-field
+        legend="How long it takes"
+        [inset]="true"
+        [allowUnset]="true"
+        [presets]="journeyDurationPresets"
+        [minutes]="createModel().dailyWorkMinutes"
+        [maxHours]="24"
+        (minutesChange)="setDailyWorkMinutes($event)"
+      />
+      <p class="sublegend">Bind (optional)</p>
+      <div class="chip-row">
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="journeyBind() === 'none'"
+          (click)="setJourneyBind('none')"
+        >
+          None
+        </button>
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="journeyBind() === 'daily'"
+          (click)="setJourneyBind('daily')"
+        >
+          Daily work slice
+        </button>
+        @if (habits().length) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="journeyBind() === 'habitus'"
+            (click)="setJourneyBind('habitus')"
+          >
+            Habitus
+          </button>
+        }
       </div>
-      @if (subtasks().length) {
-        <ol class="subtask-list">
-          @for (t of subtasks(); track t.id ?? $index) {
-            <li>
-              <span>{{ t.title }}</span>
-              <app-date-field
-                label=""
-                placeholder="Due"
-                [compact]="true"
-                [value]="t.deadline ?? ''"
-                (valueChange)="setSubtaskDeadline($index, $event)"
-              />
-              <label class="minutes-field">
-                Est. min
-                <app-number-field
-                  ariaLabel="Estimated minutes"
-                  [min]="0"
-                  [max]="1440"
-                  [value]="t.estimateMinutes ?? 0"
-                  (valueChange)="setSubtaskEstimate($index, $event)"
-                />
-              </label>
-              <app-rune-check
-                label="Gate"
-                [checked]="t.gatesJourney"
-                (checkedChange)="toggleGate($index)"
-              />
-              <button type="button" (click)="removeSubtask($index)" aria-label="Remove subtask">×</button>
-            </li>
-          }
-        </ol>
-      }
-    </fieldset>
-
-    <fieldset>
-      <legend>Daily work slice (optional)</legend>
-      <p class="hint">
-        Expected time for the quest's main daily work — e.g. "4h of subtask
-        work today". Add it to a daily and Horologium can track it as both a
-        daily and a quest task.
-      </p>
-      <div class="inline-add">
-        <label class="grow">
+      @if (journeyBind() === 'daily') {
+        <p class="hint">
+          Add this journey to a daily. Horologium can track it as both a daily and a quest task.
+        </p>
+        <label>
           Label on the daily
           <input
             type="text"
@@ -234,17 +192,88 @@
             placeholder="Falls back to journey label / quest name"
           />
         </label>
-        <label class="minutes-field">
-          Minutes
-          <app-number-field
-            ariaLabel="Daily work minutes"
-            [min]="0"
-            [max]="1440"
-            [value]="createModel().dailyWorkMinutes ?? 0"
-            (valueChange)="setDailyWorkMinutes($event)"
-          />
-        </label>
-      </div>
+      }
+      @if (journeyBind() === 'habitus') {
+        <app-quest-habit-bind
+          [habits]="habits()"
+          [takenIds]="journeyTakenIds()"
+          [habitId]="linkedHabitId()"
+          [rule]="habitRule()"
+          [requiredCount]="habitRequiredCount()"
+          [windowDays]="habitWindowDays()"
+          (habitIdChange)="setLinkedHabit($event)"
+          (ruleChange)="setHabitRule($event)"
+          (requiredCountChange)="setHabitRequiredCount($event)"
+          (windowDaysChange)="setHabitWindowDays($event)"
+        />
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Subtasks</legend>
+      <p class="hint">
+        Each completed subtask fills the green progress bar. All of them = 90%.
+        Mark a subtask as a gate to lock the daily check-in until it is done.
+        A Habitus link uses the same count, streak, or window rule as the journey.
+      </p>
+      <app-forge-line
+        [title]="subtaskDraft()"
+        placeholder="Ship the first vertical slice"
+        [deadline]="subtaskDeadlineDraft() || null"
+        [estimateMinutes]="subtaskEstimateDraft()"
+        [gates]="gateDraft()"
+        action="commit"
+        (titleChange)="setSubtaskDraftText($event)"
+        (deadlineChange)="setSubtaskDeadlineDraft($event)"
+        (estimateChange)="setSubtaskEstimateDraft($event)"
+        (gatesChange)="setGateDraft($event)"
+        (commit)="addSubtask()"
+      />
+      @if (subtasks().length) {
+        <app-drop-group (dropped)="onSubtaskDrop($event)">
+        <ol
+          class="subtask-list"
+          appDropList
+          dropListId="subtasks"
+          dropMode="insert"
+        >
+          @for (t of subtasks(); track t.id ?? $index) {
+            <li [appDragItem]="$index">
+              <app-drag-grip />
+              <div class="drag-body">
+              <app-forge-line
+                [title]="t.title"
+                placeholder="Subtask"
+                [deadline]="t.deadline"
+                [estimateMinutes]="t.estimateMinutes"
+                [gates]="t.gatesJourney"
+                action="remove"
+                (titleChange)="setSubtaskTitle($index, $event)"
+                (deadlineChange)="setSubtaskDeadline($index, $event)"
+                (estimateChange)="setSubtaskEstimate($index, $event)"
+                (gatesChange)="setSubtaskGate($index, $event)"
+                (remove)="removeSubtask($index)"
+              />
+              @if (habits().length) {
+                <app-quest-habit-bind
+                  [habits]="habits()"
+                  [takenIds]="subtaskTakenIds($index)"
+                  [habitId]="t.habitId"
+                  [rule]="t.habitRule"
+                  [requiredCount]="t.habitRequiredCount"
+                  [windowDays]="t.habitWindowDays"
+                  (habitIdChange)="setSubtaskHabit($index, $event)"
+                  (ruleChange)="setSubtaskHabitRule($index, $event)"
+                  (requiredCountChange)="setSubtaskHabitRequiredCount($index, $event)"
+                  (windowDaysChange)="setSubtaskHabitWindowDays($index, $event)"
+                />
+              }
+              </div>
+            </li>
+          }
+        </ol>
+        </app-drop-group>
+      }
     </fieldset>
 
     <fieldset>
@@ -313,88 +342,6 @@
             placeholder="0.00"
           />
         </label>
-      }
-    </fieldset>
-
-    <fieldset>
-      <legend>Habitus link (optional)</legend>
-      <p class="hint">
-        Pick an existing habit. Completing it can mark a journey day or a subtask, using a count, streak, or window rule.
-      </p>
-      <label>
-        Habit
-        <select
-          [value]="linkedHabitId() ?? 0"
-          (change)="setLinkedHabit($any($event.target).value)"
-        >
-          <option [value]="0">— none —</option>
-          @for (h of habits(); track h.id) {
-            <option [value]="h.id">{{ h.icon || '◆' }} {{ h.name }}</option>
-          }
-        </select>
-      </label>
-      @if (linkedHabitId()) {
-        <div class="chip-row">
-          <button
-            type="button"
-            class="chip"
-            [class.selected]="habitTarget() === 'JOURNEY'"
-            (click)="setHabitTarget('JOURNEY')"
-          >
-            Journey day
-          </button>
-          <button
-            type="button"
-            class="chip"
-            [class.selected]="habitTarget() === 'SUBTASK'"
-            (click)="setHabitTarget('SUBTASK')"
-          >
-            Subtask
-          </button>
-        </div>
-        @if (habitTarget() === 'SUBTASK') {
-          <label>
-            Subtask
-            <select
-              [value]="habitSubtaskId() ?? 0"
-              (change)="setHabitSubtask($any($event.target).value)"
-            >
-              <option [value]="0">— pick a subtask —</option>
-              @for (s of subtasks(); track s.id ?? s.title) {
-                <option [value]="s.id ?? 0">{{ s.title }}</option>
-              }
-            </select>
-          </label>
-        }
-        <div class="chip-row">
-          <button type="button" class="chip" [class.selected]="habitRule() === 'COUNT'" (click)="setHabitRule('COUNT')">Count</button>
-          <button type="button" class="chip" [class.selected]="habitRule() === 'STREAK'" (click)="setHabitRule('STREAK')">Streak</button>
-          <button type="button" class="chip" [class.selected]="habitRule() === 'WINDOW'" (click)="setHabitRule('WINDOW')">Window</button>
-        </div>
-        <div class="inline-add">
-          <label>
-            Need
-            <app-number-field
-              ariaLabel="Required successes"
-              [min]="1"
-              [max]="365"
-              [value]="habitRequiredCount()"
-              (valueChange)="setHabitRequiredCount($event)"
-            />
-          </label>
-          @if (habitRule() === 'WINDOW') {
-            <label>
-              Days
-              <app-number-field
-                ariaLabel="Window days"
-                [min]="1"
-                [max]="365"
-                [value]="habitWindowDays()"
-                (valueChange)="setHabitWindowDays($event)"
-              />
-            </label>
-          }
-        </div>
       }
     </fieldset>
 

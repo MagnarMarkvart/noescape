@@ -266,6 +266,23 @@
   cursor: not-allowed;
 }
 
+.journey-check.habitus {
+  cursor: default;
+  opacity: 1;
+}
+
+.habitus-link {
+  display: inline-block;
+  margin-top: 0.45rem;
+  color: var(--rs-accent);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.habitus-link:hover {
+  text-decoration: underline;
+}
+
 .gate-flag {
   margin-left: 0.4rem;
   font-style: normal;
@@ -344,9 +361,14 @@
 
 .subtask-checks li {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: start;
   min-width: 0;
+}
+
+.subtask-checks app-drag-grip {
+  margin-top: 0.15rem;
 }
 
 .subtask-checks app-rune-check {
@@ -362,6 +384,7 @@
   white-space: nowrap;
 }
 
+.subtask-checks li app-elapsed-complete,
 .subtask-checks li app-work-interval-log {
   flex: 1 1 100%;
   margin-top: 0.2rem;

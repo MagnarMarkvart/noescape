@@ -17,6 +17,7 @@ npm run dev
 - Backend: `http://localhost:3000`
 - UI Dashboard: `http://localhost:4200/status`
 - UI Dailies: `http://localhost:4200/dailies`
+- UI Scriptorium: `http://localhost:4200/scriptorium`
 - UI Tabularium: `http://localhost:4200/tabularium`
 
 ---
@@ -113,8 +114,10 @@ Live timer state (pause/resume across refresh) is **not** in those session rows.
 - `POST /clocks/vigilia/start|pause` `{ watchId }`
 - `POST /clocks/:kind/pause|resume|skip|stop`
 - `POST /clocks/consuetudo/complete-step` · `skip-step`
-- `PATCH /clocks/:kind/notes` — live notes while a clock is running (UI shows them in the running view and Scenery only)
+- `PATCH /clocks/:kind/notes` — live notes while a clock is running (desktop: side panel; mobile: bottom sheet with a Close control so the toggle stays reachable)
 - `PATCH /clocks/:kind/bound-daily`
+
+Consuetudo overtime: pausing after the planned duration **keeps** the negative remaining time (the dial does not snap back to `+00:00`). Resume continues from that overtime.
 
 ### Dailies board structure
 
@@ -178,6 +181,10 @@ Completing a daily task:
 4. Writes an `Activity` note like `Daily: <title>` per skill
 5. Locks the slot (completed tasks cannot be edited)
 
+If the slot was never tracked in Horologium, the UI asks for **time spent** (`elapsedMs`) before complete. That optional body is stored as a `clockKind: 'manual'` work interval. Tracked slots skip the prompt.
+
+Scriptorium-bound dailies cannot be edited or cleared while assigned. Completing one shelves the folio; undoing complete restores it to OPEN. Carry-over and postpone keep the bind. Sealing the day **incomplete** (without carry-over) makes the folio assignable again.
+
 ### Consuetudo (practice) XP
 
 Walking a routine in Horologium uses the **same duration × effort rate** as dailies, billed from **completed** (not skipped) planned minutes. Finishing the whole practice adds a bonus that shrinks with skips:
@@ -192,6 +199,24 @@ totalXp = baseXp + bonus
 `skipRatio = skippedSteps / totalSteps`. More than half skipped → no bonus. Total XP is then split with the same 10-point skill weights as dailies and quests.
 
 Source of truth: `no-escape-back/src/xp/consuetudo-xp.util.ts`.
+
+### Scriptorium (works vault)
+
+Folios are dated (or undated) works on three shelves: **Imminens** / **Tempestiva** / **Cogitata**. Default catalogue lists `status=OPEN`. **Show shelves** lists archived folios too (`status=all`).
+
+**Catalogue card actions** (icons, not a browser `confirm()`):
+
+| Action | What it does |
+|--------|----------------|
+| Complete | Awards daily-formula XP from complexity × volume (skills required; unset volume counts as 45m), then **shelves** the folio. No quest or daily. |
+| Assign to quest | Opens Quest Forge with the folio prefilled (`/quests/forge?scriptorium=<id>`). Creating the quest locks the folio. |
+| Assign to daily | Opens Dailies (`/dailies?scriptorium=<id>`), fills a Regular slot, and locks the folio. |
+| Shelve / Restore | `PATCH` `{ status: 'ARCHIVED' \| 'OPEN' }`. Shelved works stay reachable under Show shelves. |
+| Erase | RPG `app-ui-confirm`, then `DELETE`. |
+
+Assigned folios stay on the active catalogue but cannot be edited until the assignment ends. Completing the bound daily shelves them. Completing the folio itself also shelves them (they are not deleted).
+
+Lock source of truth: `questId` **or** an incomplete daily on an **unsealed** day with `scriptoriumWorkId`. Sealed incomplete dailies do not keep the lock unless carried over.
 
 ---
 
@@ -212,7 +237,9 @@ Source of truth: `no-escape-back/src/xp/consuetudo-xp.util.ts`.
 - `PUT /dailies/slots` — create/update a slot
 - `GET /dailies/templates` · `POST /dailies/templates` · `PATCH|DELETE /dailies/templates/:id` — saved default tasks
 - `GET /dailies/quick` · `POST /dailies/quick` — one-off log from Dashboard / Character (same effort × duration XP as a Regular daily)
-- `POST /dailies/:id/complete` — complete + award XP
+- `POST /dailies/from-quest` `{ questId, questSubtaskId?, date? }` — fill a slot from a quest (or one subtask)
+- `POST /dailies/from-scriptorium` `{ workId, date? }` — fill a slot from a Scriptorium folio and lock it
+- `POST /dailies/:id/complete` `{ elapsedMs? }` — complete + award XP (optional manual elapsed when untracked)
 - `POST /dailies/:id/uncomplete` — undo completion and reverse awarded XP
 - `DELETE /dailies/:id` — clear an incomplete slot
 - `POST /dailies/regular-slots` `{ date? }` — add an extra Regular slot (default 5, max 20)
@@ -241,10 +268,22 @@ Separate from Horologium and Dailies. Optional quest bind only. One **tabula** i
 
 UI: catalog `/tabularium`, forge `/tabularium/new` and `/tabularium/:id`, ledger `/tabularium/log`. Dashboard has a compact clicker widget.
 
+### Scriptorium API
+
+- `GET /scriptorium?status=OPEN|all` — catalogue (`OPEN` is the active vault)
+- `GET /scriptorium/due?days=` — open works with a due day in the window
+- `GET /scriptorium/:id` — folio + `locked` / `assignedKind` (`quest` \| `daily`)
+- `POST /scriptorium` · `PATCH /scriptorium/:id` — create / update (assigned folios cannot be edited)
+- `POST /scriptorium/:id/complete` — award XP, then set `status=ARCHIVED`
+- `DELETE /scriptorium/:id` — erase
+- `POST /scriptorium/:id/subtasks` · `PATCH …/subtasks/:subId` · `DELETE …/subtasks/:subId` · `PATCH …/subtasks/order`
+
 ### Day rollover / Seal gate
 
 Unsealed prior days with filled tasks **block** working ahead. Seal them manually first (`POST /dailies/seal`). After seal, the new day is open. **Carry Over** copies incomplete quests from the last log only.
 
 ### UI notes
 
-Forms use Angular **Signal Forms** (`@angular/forms/signals`) — not template-driven / reactive legacy forms. Dailies skill pickers are tile-based (parent skill → subskill icons). **Effort / Complexity** in Forge views is a 1–10 slider dial (same values as the old chips). Duration still uses presets (15m→4h + custom). Default-tasks **Back** remembers whether you opened the list from Character, Dailies, or Dashboard.
+Forms use Angular **Signal Forms** (`@angular/forms/signals`) — not template-driven / reactive legacy forms. Dailies skill pickers are tile-based (parent skill → subskill icons). **Effort / Complexity** in Forge views is a 1–10 slider dial (same values as the old chips). Duration still uses presets (15m→4h + custom). Default-tasks **Back** remembers whether you opened the list from Character, Dailies, or Dashboard. New Scriptorium folios save back to the catalogue (`/scriptorium`), not the folio editor.
+
+Destructive Scriptorium confirms use the shared RPG dialog `app-ui-confirm`, not `window.confirm`. The global emoji picker (`HABIT_ICON_GROUPS` in `habit-icons.ts`) includes **Bug** (`🐛`) in Craft, next to Code. Catalogue / folio chrome icons live in `ui-icon.ts` (`quest`, `shelf`, `check`, `calendar`, `close`).

@@ -22,7 +22,7 @@ function formatMinutes(minutes: number): string {
   imports: [NumberField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <fieldset class="duration">
+    <fieldset class="duration" [class.inset]="inset()">
       @if (legend()) {
         <legend>{{ legend() }}</legend>
       }
@@ -34,7 +34,7 @@ function formatMinutes(minutes: number): string {
             [class.selected]="minutes() == null && !custom()"
             (click)="unset()"
           >
-            Unset
+            {{ unsetLabel() }}
           </button>
         }
         @for (m of presets(); track m) {
@@ -136,6 +136,19 @@ function formatMinutes(minutes: number): string {
     .hm app-number-field {
       width: 4.5rem;
     }
+    .duration.inset {
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+    .duration.inset legend {
+      padding: 0;
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+      font-family: inherit;
+      text-transform: none;
+      color: #b8a878;
+    }
   `,
 })
 export class DurationField {
@@ -143,6 +156,8 @@ export class DurationField {
   readonly presets = input<number[]>([]);
   readonly legend = input('Duration');
   readonly allowUnset = input(false);
+  readonly unsetLabel = input('Unset');
+  readonly inset = input(false);
   readonly maxHours = input(168);
   readonly minutesChange = output<number | null>();
 

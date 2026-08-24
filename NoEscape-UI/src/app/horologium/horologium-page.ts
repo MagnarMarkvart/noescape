@@ -32,7 +32,11 @@ import {
   HorologiumSetupKind,
   HorologiumWatchRecord,
   HorologiumXpPreview,
+  VigiliaPickerGroup,
+  formatElapsedMs,
   horologiumBindKey,
+  parseVigiliaPickerValue,
+  vigiliaPickerValue,
 } from './horologium.model';
 import {
   HOROLOGIUM_SCENERY,
@@ -41,12 +45,14 @@ import {
   saveSceneryId,
 } from './horologium-scenery';
 import { HorologiumTaskFocus } from './horologium-task-focus';
+import { HorologiumSessionSheet } from './horologium-session-sheet';
 import { UiConfirm } from '../shared/ui/ui-confirm';
 import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import { NumberField } from '../shared/ui/number-field';
 import { ClockKind } from '../clocks/clock.model';
 import { AppShellService } from '../shared/app-shell.service';
 import {
+  QuestView,
   questDailySpecialPool,
   splitQuestXp,
 } from '../quests/quest.model';
@@ -69,6 +75,7 @@ import { WorkIntervalLog } from '../shared/work-interval-log';
     RouterLink,
     HorologiumSceneryOverlay,
     HorologiumTaskFocus,
+    HorologiumSessionSheet,
     UiConfirm,
     UiIconBtn,
     NumberField,
@@ -177,7 +184,7 @@ export class HorologiumPage implements OnInit {
   protected readonly canSkipRest = this.timer.canSkipRest;
   protected readonly continueLabel = this.timer.continueLabel;
 
-  protected readonly projectWatches = this.watches.watches;
+  protected readonly projectWatches = this.watches.visibleWatches;
   protected readonly selectedWatch = this.watches.selected;
   protected readonly selectedWatchId = this.watches.selectedId;
   protected readonly watchDraftName = this.watches.draftName;
@@ -193,6 +200,7 @@ export class HorologiumPage implements OnInit {
   protected readonly focusMode = signal(false);
 
   protected readonly sessions = signal<HorologiumSessionRecord[]>([]);
+  protected readonly selectedActa = signal<HorologiumSessionRecord | null>(null);
   protected readonly preview = signal<HorologiumXpPreview | null>(null);
   protected readonly dailies = signal<HorologiumBoundDaily[]>([]);
   protected readonly bindKey = horologiumBindKey;
@@ -232,6 +240,127 @@ export class HorologiumPage implements OnInit {
   );
   protected readonly showVigiliaMode = this.character.vigiliaEnabled;
   protected readonly vigiliaCustomAllowed = this.character.vigiliaTrackCustom;
+  protected readonly vigiliaTrackScriptorium =
+    this.character.vigiliaTrackScriptorium;
+  protected readonly vigiliaTrackQuests = this.character.vigiliaTrackQuests;
+  protected readonly vigiliaTrackDailies = this.character.vigiliaTrackDailies;
+  protected readonly vigiliaQuests = signal<QuestView[]>([]);
+  protected readonly boardDailies = signal<HorologiumBoundDaily[]>([]);
+  protected readonly vigiliaSelectValue = computed(() =>
+    vigiliaPickerValue(this.selectedWatch()),
+  );
+  protected readonly vigiliaGroups = computed((): VigiliaPickerGroup[] => {
+    this.watches.clock();
+    const groups: VigiliaPickerGroup[] = [];
+    const used = new Set<string>();
+    const stamp = (ms: number) =>
+      ms > 0 ? ` · ${formatElapsedMs(ms)}` : '';
+
+    if (this.vigiliaTrackQuests()) {
+      for (const q of this.vigiliaQuests()) {
+        if (q.run?.status !== 'ACTIVE') {
+          continue;
+        }
+        const options: VigiliaPickerGroup['options'] = [];
+        const questValue = `q:${q.id}`;
+        options.push({
+          value: questValue,
+          label: `${q.name}${stamp(this.watches.elapsedForQuest(q.id, q.run.elapsedMs ?? 0))}`,
+        });
+        used.add(questValue);
+        const dailyLabel = q.dailyWorkTitle || q.journeyLabel;
+        if (dailyLabel) {
+          const dailyValue = `qd:${q.id}`;
+          options.push({
+            value: dailyValue,
+            label: `${dailyLabel}${stamp(this.watches.elapsedForDailyWork(q.id, q.run.journeyElapsedMs ?? 0))}`,
+          });
+          used.add(dailyValue);
+        }
+        for (const t of q.subtasks ?? []) {
+          if (t.completed && t.habitLink) {
+            continue;
+          }
+          const value = `s:${t.id}`;
+          const running = this.watches
+            .watches()
+            .some(
+              (w) =>
+                w.bindKind === 'subtask' &&
+                w.questSubtaskId === t.id &&
+                w.status === 'ACTIVE',
+            );
+          if (t.completed && !running) {
+            continue;
+          }
+          options.push({
+            value,
+            label: `${t.title}${stamp(this.watches.elapsedForSubtask(t.id, t.elapsedMs ?? 0))}`,
+          });
+          used.add(value);
+        }
+        if (options.length) {
+          groups.push({ id: `quest-${q.id}`, label: q.name, options });
+        }
+      }
+    }
+
+    if (this.vigiliaTrackDailies()) {
+      const options = this.boardDailies().map((d) => {
+        const value = `d:${d.dailyTaskId}`;
+        used.add(value);
+        return {
+          value,
+          label: `${d.name}${stamp(d.elapsedMs)}`,
+        };
+      });
+      if (options.length) {
+        groups.push({ id: 'dailies', label: 'Dailies', options });
+      }
+    }
+
+    const leftover = this.projectWatches().filter((w) => {
+      const kind = w.bindKind ?? 'custom';
+      if (kind === 'quest' || kind === 'quest_daily_work' || kind === 'subtask') {
+        return false;
+      }
+      const value = vigiliaPickerValue(w);
+      return !used.has(value);
+    });
+    if (leftover.length) {
+      groups.push({
+        id: 'open',
+        label: 'Open Vigilias',
+        options: leftover.map((w) => ({
+          value: vigiliaPickerValue(w),
+          label: `${w.name}${stamp(this.watches.elapsedOf(w))}`,
+        })),
+      });
+    }
+    return groups;
+  });
+  protected readonly siblingVigiliaOptions = computed(() => {
+    const selected = this.vigiliaSelectValue();
+    if (!selected.startsWith('q:') && !selected.startsWith('qd:') && !selected.startsWith('s:')) {
+      return [];
+    }
+    const watch = this.selectedWatch();
+    const group = this.vigiliaGroups().find((g) =>
+      g.options.some((o) => o.value === selected),
+    );
+    if (!group) {
+      return [];
+    }
+    const extraValues = new Set(
+      this.extraWatches().map((w) => vigiliaPickerValue(w)),
+    );
+    return group.options.filter(
+      (o) =>
+        o.value !== selected &&
+        !extraValues.has(o.value) &&
+        !(watch && vigiliaPickerValue(watch) === o.value),
+    );
+  });
   protected readonly selectedRoutine = computed((): RoutineView | null => {
     const rows = this.routines();
     const id = this.selectedRoutineId();
@@ -407,6 +536,13 @@ export class HorologiumPage implements OnInit {
       this.liveNotes.setKind(this.clockKind());
     });
     effect(() => {
+      if (this.character.vigiliaTrackScriptorium()) {
+        this.reloadScriptorium();
+      } else {
+        this.scriptoriumWorks.set([]);
+      }
+    });
+    effect(() => {
       const done = this.consuetudo.lastComplete() as {
         xpAwarded?: number;
         bonusXp?: number;
@@ -439,7 +575,9 @@ export class HorologiumPage implements OnInit {
     this.refreshPreview();
     this.reloadDailies();
     this.reloadRoutines();
-    this.reloadScriptorium();
+    if (this.character.vigiliaTrackScriptorium()) {
+      this.reloadScriptorium();
+    }
     const consuetudoRaw = this.route.snapshot.queryParamMap.get('consuetudo');
     const consuetudoId = consuetudoRaw ? Number(consuetudoRaw) : NaN;
     this.pendingConsuetudoId =
@@ -832,8 +970,20 @@ export class HorologiumPage implements OnInit {
   }
 
   protected selectWatch(raw: string): void {
-    const id = Number(raw);
-    this.watches.select(Number.isFinite(id) && id > 0 ? id : null);
+    const parsed = parseVigiliaPickerValue(raw);
+    if (!parsed) {
+      this.watches.select(null);
+      return;
+    }
+    this.watches.bindTarget(parsed);
+  }
+
+  protected attachSiblingVigilia(raw: string): void {
+    const parsed = parseVigiliaPickerValue(raw);
+    if (!parsed) {
+      return;
+    }
+    this.watches.attachBind(parsed);
   }
 
   protected setWatchDraftName(raw: string): void {
@@ -982,6 +1132,9 @@ export class HorologiumPage implements OnInit {
     if (!Number.isFinite(id) || id <= 0) {
       return;
     }
+    if (!this.character.vigiliaTrackScriptorium()) {
+      return;
+    }
     this.setSetupKind('vigilia');
     this.scriptoriumApi.getOne(id).subscribe({
       next: (work) => {
@@ -1039,6 +1192,11 @@ export class HorologiumPage implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
       next: ({ quests, board }) => {
+        this.vigiliaQuests.set(
+          quests.filter(
+            (q) => q.availability === 'active' || q.run?.status === 'ACTIVE',
+          ),
+        );
         const questRows: HorologiumBoundDaily[] = quests
           .filter((q) => q.canLogJourney && q.journeyDueToday && q.run)
           .map((q) => ({
@@ -1114,6 +1272,7 @@ export class HorologiumPage implements OnInit {
                       : []),
                 }))
             : [];
+        this.boardDailies.set(boardRows);
         const available = [...boardRows, ...subtaskRows, ...questRows];
         this.dailies.set(available);
         const bound = this.boundDaily();
@@ -1133,6 +1292,14 @@ export class HorologiumPage implements OnInit {
 
   protected formatDate(iso: string): string {
     return this.character.formatDate(iso);
+  }
+
+  protected openActa(row: HorologiumSessionRecord): void {
+    this.selectedActa.set(row);
+  }
+
+  protected closeActa(): void {
+    this.selectedActa.set(null);
   }
 
   private reloadSessions(): void {

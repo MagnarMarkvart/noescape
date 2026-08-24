@@ -11,6 +11,11 @@ import {
 } from '@nestjs/common';
 import { QuestsService } from './quests.service';
 
+function optionalElapsedMs(raw: unknown): number | undefined {
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 @Controller('quests')
 export class QuestsController {
   constructor(private readonly questsService: QuestsService) {}
@@ -124,6 +129,14 @@ export class QuestsController {
     return this.questsService.update(id, body);
   }
 
+  @Patch(':id/subtasks/order')
+  reorderSubtasks(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { ids?: number[] },
+  ) {
+    return this.questsService.reorderSubtasks(id, body?.ids ?? []);
+  }
+
   @Post('runs/:runId/log')
   logDay(
     @Param('runId', ParseIntPipe) runId: number,
@@ -144,12 +157,13 @@ export class QuestsController {
   toggleSubtask(
     @Param('runId', ParseIntPipe) runId: number,
     @Param('subtaskId', ParseIntPipe) subtaskId: number,
-    @Body() body: { completed: boolean },
+    @Body() body: { completed: boolean; elapsedMs?: number },
   ) {
     return this.questsService.toggleSubtask(
       runId,
       subtaskId,
       Boolean(body?.completed),
+      { elapsedMs: optionalElapsedMs(body?.elapsedMs) },
     );
   }
 

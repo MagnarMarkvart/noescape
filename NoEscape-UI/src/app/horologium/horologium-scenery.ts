@@ -23,6 +23,7 @@ import {
   HorologiumBoundDaily,
   HorologiumConfig,
   HorologiumSetupKind,
+  VigiliaPickerGroup,
   horologiumBindKey,
 } from './horologium.model';
 import { RoutineView } from '../consuetudo/routines.service';
@@ -172,6 +173,10 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   @Input() routines: RoutineView[] = [];
   @Input() selectedRoutineId: number | null = null;
   @Input() scriptoriumWorks: ScriptoriumWorkView[] = [];
+  @Input() vigiliaGroups: VigiliaPickerGroup[] = [];
+  @Input() vigiliaSelectValue = '';
+  @Input() vigiliaCustomAllowed = false;
+  @Input() vigiliaTrackScriptorium = false;
   @Output() readonly closed = new EventEmitter<void>();
   @Output() readonly taskDone = new EventEmitter<void>();
   @Output() readonly taskFocus = new EventEmitter<void>();
@@ -181,6 +186,7 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   @Output() readonly dailyChange = new EventEmitter<string>();
   @Output() readonly setupKindChange = new EventEmitter<HorologiumSetupKind>();
   @Output() readonly routineChange = new EventEmitter<string>();
+  @Output() readonly vigiliaBind = new EventEmitter<string>();
   protected readonly bindKey = horologiumBindKey;
   @ViewChild('loop') private loop?: ElementRef<HTMLVideoElement>;
   @ViewChild('ambience') private ambience?: ElementRef<HTMLAudioElement>;
@@ -214,7 +220,7 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   protected readonly canSkipRest = this.timer.canSkipRest;
   protected readonly continueLabel = this.timer.continueLabel;
   protected readonly timerPreset = this.timer.presetId;
-  protected readonly projectWatches = this.watches.watches;
+  protected readonly projectWatches = this.watches.visibleWatches;
   protected readonly selectedWatch = this.watches.selected;
   protected readonly selectedWatchId = this.watches.selectedId;
   protected readonly watchDraftName = this.watches.draftName;
@@ -425,12 +431,10 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
   }
 
   protected selectWatch(raw: string): void {
-    const id = Number(raw);
-    const next = Number.isFinite(id) && id > 0 ? id : null;
-    if (next == null && this.watches.selectedId() != null && !this.canEdit) {
+    if (!raw && this.watches.selectedId() != null && !this.canEdit) {
       return;
     }
-    this.watches.select(next);
+    this.vigiliaBind.emit(raw);
   }
 
   protected setWatchDraftName(raw: string): void {

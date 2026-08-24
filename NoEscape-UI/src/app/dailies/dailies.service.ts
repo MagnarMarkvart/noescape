@@ -15,6 +15,7 @@ import {
   QuickTaskLog,
   UpsertDailyTaskPayload,
   UpsertDailyTemplatePayload,
+  TaskImportance,
 } from './daily.model';
 
 @Injectable({ providedIn: 'root' })
@@ -95,6 +96,21 @@ export class DailiesService {
       .pipe(tap((slot) => this.invalidateBoard(slot.date)));
   }
 
+  reorderSlots(
+    date: string,
+    from: { importance: TaskImportance; slotIndex: number },
+    to: { importance: TaskImportance; slotIndex: number },
+  ) {
+    return this.http
+      .post<DailyBoard>(`${this.baseUrl}/slots/reorder`, { date, from, to })
+      .pipe(
+        tap((board) => {
+          this.boardCache.set(board.date, board);
+          this.board$.delete(board.date);
+        }),
+      );
+  }
+
   patchElapsed(id: number, elapsedMs: number) {
     return this.http
       .patch<DailyTaskSlot>(`${this.baseUrl}/${id}/elapsed`, { elapsedMs })
@@ -114,13 +130,16 @@ export class DailiesService {
     }
   }
 
-  complete(id: number) {
+  complete(id: number, elapsedMs?: number) {
     return this.http
       .post<{
         task: DailyTaskSlot;
         award: LogActivityResponse | null;
         awards: LogActivityResponse[];
-      }>(`${this.baseUrl}/${id}/complete`, {})
+      }>(
+        `${this.baseUrl}/${id}/complete`,
+        elapsedMs != null && elapsedMs > 0 ? { elapsedMs } : {},
+      )
       .pipe(
         tap((result) => {
           this.invalidateBoard(result.task.date);
@@ -158,6 +177,17 @@ export class DailiesService {
         this.board$.delete(board.date);
       }),
     );
+  }
+
+  fromScriptorium(payload: { date?: string; workId: number }) {
+    return this.http
+      .post<DailyBoard>(`${this.baseUrl}/from-scriptorium`, payload)
+      .pipe(
+        tap((board) => {
+          this.boardCache.set(board.date, board);
+          this.board$.delete(board.date);
+        }),
+      );
   }
 
   addRegularSlot(date?: string) {

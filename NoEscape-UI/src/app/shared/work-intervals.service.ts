@@ -14,6 +14,7 @@ export class WorkIntervalsService {
     if (target.dailyTaskId != null) params['dailyTaskId'] = String(target.dailyTaskId);
     if (target.questSubtaskId != null) params['questSubtaskId'] = String(target.questSubtaskId);
     if (target.questId != null) params['questId'] = String(target.questId);
+    if (target.questRunId != null) params['questRunId'] = String(target.questRunId);
     if (target.scriptoriumWorkId != null)
       params['scriptoriumWorkId'] = String(target.scriptoriumWorkId);
     if (target.watchId != null) params['watchId'] = String(target.watchId);
