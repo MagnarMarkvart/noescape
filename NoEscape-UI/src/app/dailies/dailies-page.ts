@@ -57,6 +57,7 @@ import { CharacterService } from '../character/character.service';
 import { formatElapsedShort, monthRange } from '../shared/time';
 import { DailiesService } from './dailies.service';
 import { DefaultTaskPicker } from './default-task-picker';
+import { QuestTaskPicker, QuestTaskPick } from './quest-task-picker';
 import { DailyDayCard } from './daily-day-card';
 import { filledSlotsFromBoard, scoreFromSlots } from './day-score';
 import { calculateDailyTaskXp } from './daily-xp';
@@ -75,6 +76,7 @@ import { splitQuestXp } from '../quests/quest.model';
     DurationField,
     EffortField,
     DefaultTaskPicker,
+    QuestTaskPicker,
     UiIconBtn,
     DailyDayCard,
     WorkIntervalLog,
@@ -341,6 +343,8 @@ export class DailiesPage implements OnInit {
       saveAsDefault: false,
       loadedTemplateId: 0,
       wealthAmount: centsToInput(slot.wealthCents),
+      questId: slot.questId ?? 0,
+      questSubtaskId: slot.questSubtaskId ?? 0,
     });
     this.selectedCategory.set(slot.skill?.category ?? '');
     this.editingSlot.set(slot);
@@ -396,8 +400,30 @@ export class DailiesPage implements OnInit {
       durationMinutes: t.durationMinutes,
       loadedTemplateId: t.id,
       wealthAmount: centsToInput(t.wealthCents),
+      questId: 0,
+      questSubtaskId: 0,
     }));
     this.selectedCategory.set(t.skill.category);
+  }
+
+  protected applyQuestTask(pick: QuestTaskPick): void {
+    const slug = pick.skillWeights[0]?.slug;
+    const skill = slug
+      ? this.allSkills().find((s) => s.slug === slug)
+      : undefined;
+    this.slotModel.set({
+      ...this.blankModel(),
+      title: pick.title,
+      skillId: skill?.id ?? 0,
+      skillWeights: pick.skillWeights,
+      effortLevel: pick.effortLevel,
+      durationMinutes: pick.durationMinutes,
+      questId: pick.questId,
+      questSubtaskId: pick.questSubtaskId ?? 0,
+    });
+    if (skill) {
+      this.selectedCategory.set(skill.category);
+    }
   }
 
   protected selectEffort(level: number): void {
@@ -438,6 +464,8 @@ export class DailiesPage implements OnInit {
           wealthCents: boostsWealth(model.skillWeights)
             ? parseMoneyToCents(model.wealthAmount)
             : 0,
+          questId: model.questId > 0 ? model.questId : null,
+          questSubtaskId: model.questSubtaskId > 0 ? model.questSubtaskId : null,
         })
         .subscribe({
           next: () => {
@@ -860,6 +888,8 @@ export class DailiesPage implements OnInit {
       saveAsDefault: false,
       loadedTemplateId: 0,
       wealthAmount: '',
+      questId: 0,
+      questSubtaskId: 0,
     };
   }
 

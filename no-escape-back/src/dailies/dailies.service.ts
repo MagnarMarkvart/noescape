@@ -452,6 +452,27 @@ export class DailiesService {
       throw new BadRequestException('Completed tasks cannot be edited');
     }
 
+    const questId =
+      dto.questId != null && Number(dto.questId) > 0
+        ? Math.round(Number(dto.questId))
+        : null;
+    const questSubtaskId =
+      dto.questSubtaskId != null && Number(dto.questSubtaskId) > 0
+        ? Math.round(Number(dto.questSubtaskId))
+        : null;
+    const questBindKind = questSubtaskId
+      ? 'subtask'
+      : questId
+        ? 'daily_work'
+        : null;
+    let questRunId: number | null = null;
+    if (questId) {
+      const run = await this.prisma.questRun.findFirst({
+        where: { questId, status: 'ACTIVE' },
+      });
+      questRunId = run?.id ?? null;
+    }
+
     const task = await this.prisma.dailyTask.upsert({
       where: {
         date_importance_slotIndex: {
@@ -474,6 +495,10 @@ export class DailiesService {
         wealthCents: boostsWealth(plan.weights)
           ? parseRewardCents(dto.wealthCents)
           : 0,
+        questId,
+        questSubtaskId,
+        questBindKind,
+        questRunId,
       },
       update: {
         title,
@@ -486,6 +511,10 @@ export class DailiesService {
         wealthCents: boostsWealth(plan.weights)
           ? parseRewardCents(dto.wealthCents)
           : 0,
+        questId,
+        questSubtaskId,
+        questBindKind,
+        questRunId,
       },
       include: { skill: { select: this.skillSelect() } },
     });

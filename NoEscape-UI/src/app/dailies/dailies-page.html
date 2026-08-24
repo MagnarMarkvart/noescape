@@ -127,6 +127,8 @@
                           (pick)="applyTemplate($event)"
                         />
 
+                        <app-quest-task-picker (pick)="applyQuestTask($event)" />
+
                         @if (habits().length) {
                           <label class="title-field">
                             Habit (optional)

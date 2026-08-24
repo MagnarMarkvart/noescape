@@ -114,6 +114,8 @@ export interface UpsertDailyTaskPayload {
   habitId?: number | null;
   fixedXp?: number | null;
   wealthCents?: number | null;
+  questId?: number | null;
+  questSubtaskId?: number | null;
 }
 
 export interface DailyHabitRef {
@@ -212,6 +214,10 @@ export interface SlotFormModel {
   loadedTemplateId: number;
   /** Major-unit amount when Finance is among skills. */
   wealthAmount: string;
+  /** 0 = not set */
+  questId: number;
+  /** 0 = not set */
+  questSubtaskId: number;
 }
 
 export type ParentSkillCategory = Pick<SkillCategory, 'category' | 'label' | 'icon'>;
