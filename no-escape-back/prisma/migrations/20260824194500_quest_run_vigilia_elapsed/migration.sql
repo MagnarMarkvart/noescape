@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE "QuestRun" ADD COLUMN "elapsedMs" BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE "QuestRun" ADD COLUMN "journeyElapsedMs" BIGINT NOT NULL DEFAULT 0;

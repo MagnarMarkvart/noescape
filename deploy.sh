@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # NoEscape deploy script — tõmbab GitHubist uusima versiooni, buildib, deployb.
-# Jooksuta: ./deploy.sh  (või ütle Hermesele "deploy noescape")
+# Jooksuta: ./deploy.sh (või ütle Hermesele "deploy noescape")
 set -euo pipefail
 
 cd ~/dev/noescape
@@ -13,14 +13,14 @@ echo "🔧 Backend — installing deps..."
 cd no-escape-back
 npm ci 2>/dev/null || npm install
 
-echo "🗄️  Running Prisma migrations..."
+echo "🗄️ Running Prisma migrations..."
 npx prisma migrate deploy
 npx prisma generate
 
 echo "🌱 Seeding catalog (skills, rewards, quests)..."
 npx prisma db seed
 
-echo "🏗️  Building backend..."
+echo "🏗️ Building backend..."
 npm run build
 
 echo ""
@@ -28,7 +28,7 @@ echo "🎨 Frontend — installing deps..."
 cd ../NoEscape-UI
 npm ci 2>/dev/null || npm install
 
-echo "🏗️  Building frontend (production)..."
+echo "🏗️ Building frontend (production)..."
 npx ng build --configuration production
 
 echo ""
@@ -37,7 +37,7 @@ pm2 restart noescape
 
 echo ""
 echo "✅ Deploy complete!"
-echo "   API:  http://localhost:8084/api"
-echo "   UI:   http://localhost:8084/"
+echo " API: http://localhost:8084/api"
+echo " UI: http://localhost:8084/"
 echo ""
-echo "   (Tailscale → add route)"
+echo " (Tailscale → add route)"
