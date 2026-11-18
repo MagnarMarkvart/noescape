@@ -17,7 +17,7 @@ import {
 } from './lists.model';
 import { ListsService } from './lists.service';
 
-type ItemConfirm
+type ItemConfirm =
   | { kind: 'delete-item'; item: ListItemView }
   | { kind: 'delete-memory'; memory: ListItemMemoryView };
 
