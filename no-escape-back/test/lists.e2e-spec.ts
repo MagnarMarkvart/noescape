@@ -286,7 +286,7 @@ describe('ListsController (e2e)', () => {
       expect(doneRes2.body.memory[0].useCount).toBe(2);
     });
 
-    it('should reorder items', async () => {
+    it('should reorder items without route conflict', async () => {
       const createRes = await request(app.getHttpServer())
         .post('/lists')
         .send({ name: 'Shopping' });
@@ -317,9 +317,152 @@ describe('ListsController (e2e)', () => {
       expect(reorderRes.body.items[1].title).toBe('A');
       expect(reorderRes.body.items[2].title).toBe('B');
     });
+
+    it('should reject invalid reorder ids', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post('/lists')
+        .send({ name: 'Shopping' });
+
+      const listId = createRes.body.id;
+
+      await request(app.getHttpServer())
+        .post(`/lists/${listId}/items`)
+        .send({ title: 'A' });
+
+      await request(app.getHttpServer())
+        .post(`/lists/${listId}/items`)
+        .send({ title: 'B' });
+
+      await request(app.getHttpServer())
+        .patch(`/lists/${listId}/items/order`)
+        .send({ ids: [999] })
+        .expect(400);
+    });
   });
 
   describe('Memory operations', () => {
+    it('should return empty array when suggestions disabled', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post('/lists')
+        .send({ name: 'Shopping', suggestionsEnabled: false });
+
+      const listId = createRes.body.id;
+
+      await prisma.listItemMemory.create({
+        data: {
+          listId,
+          title: 'Milk',
+          titleNormalized: 'milk',
+          useCount: 1,
+          lastUsedAt: new Date(),
+        },
+      });
+
+      const memoryRes = await request(app.getHttpServer())
+        .get(`/lists/${listId}/memory`)
+        .expect(200);
+
+      expect(memoryRes.body).toHaveLength(0);
+    });
+
+    it('should handle case-insensitive dedup', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post('/lists')
+        .send({ name: 'Shopping' });
+
+      const listId = createRes.body.id;
+
+      const addRes1 = await request(app.getHttpServer())
+        .post(`/lists/${listId}/items`)
+        .send({ title: 'Milk' });
+
+      await request(app.getHttpServer())
+        .patch(`/lists/${listId}/items/${addRes1.body.items[0].id}`)
+        .send({ done: true });
+
+      const addRes2 = await request(app.getHttpServer())
+        .post(`/lists/${listId}/items`)
+        .send({ title: 'MILK' });
+
+      await request(app.getHttpServer())
+        .patch(`/lists/${listId}/items/${addRes2.body.items[0].id}`)
+        .send({ done: true });
+
+      const memoryRes = await request(app.getHttpServer())
+        .get(`/lists/${listId}/memory`)
+        .expect(200);
+
+      expect(memoryRes.body).toHaveLength(1);
+      expect(memoryRes.body[0].useCount).toBe(2);
+    });
+
+    it('should prevent duplicate active items when restoring', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post('/lists')
+        .send({ name: 'Shopping' });
+
+      const listId = createRes.body.id;
+
+      const memEntry = await prisma.listItemMemory.create({
+        data: {
+          listId,
+          title: 'Milk',
+          titleNormalized: 'milk',
+          useCount: 2,
+          lastUsedAt: new Date(),
+        },
+      });
+
+      await request(app.getHttpServer())
+        .post(`/lists/${listId}/items`)
+        .send({ title: 'Milk' });
+
+      await request(app.getHttpServer())
+        .post(`/lists/${listId}/memory/${memEntry.id}/restore`)
+        .expect(400);
+    });
+
+    it('should bump useCount only on add, not on done toggle', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post('/lists')
+        .send({ name: 'Shopping' });
+
+      const listId = createRes.body.id;
+
+      const addRes = await request(app.getHttpServer())
+        .post(`/lists/${listId}/items`)
+        .send({ title: 'Milk' });
+
+      const itemId = addRes.body.items[0].id;
+
+      const afterAdd = await request(app.getHttpServer()).get(
+        `/lists/${listId}`,
+      );
+      expect(afterAdd.body.memory[0].useCount).toBe(1);
+
+      await request(app.getHttpServer())
+        .patch(`/lists/${listId}/items/${itemId}`)
+        .send({ done: true });
+
+      const afterDone = await request(app.getHttpServer()).get(
+        `/lists/${listId}`,
+      );
+      expect(afterDone.body.memory[0].useCount).toBe(1);
+
+      await request(app.getHttpServer())
+        .patch(`/lists/${listId}/items/${itemId}`)
+        .send({ done: false });
+
+      await request(app.getHttpServer())
+        .patch(`/lists/${listId}/items/${itemId}`)
+        .send({ done: true });
+
+      const afterToggle = await request(app.getHttpServer()).get(
+        `/lists/${listId}`,
+      );
+      expect(afterToggle.body.memory[0].useCount).toBe(1);
+    });
+
     it('should get memory suggestions', async () => {
       const createRes = await request(app.getHttpServer())
         .post('/lists')
