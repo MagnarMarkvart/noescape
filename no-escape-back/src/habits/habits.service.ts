@@ -18,10 +18,7 @@ import {
 } from '../tabularium/tabula-period';
 import { TimeService } from '../time/time.service';
 import { FINANCE_SKILL_SLUG, parseRewardCents } from '../wealth/money.util';
-import {
-  parseSkillWeights,
-  validateSkillWeights,
-} from '../xp/quest-xp.util';
+import { parseSkillWeights, validateSkillWeights } from '../xp/quest-xp.util';
 import { QuestsService } from '../quests/quests.service';
 import { SkillsService } from '../skills/skills.service';
 import {
@@ -206,12 +203,7 @@ export class HabitsService {
     });
   }
 
-  async rangeLog(
-    habitId: number,
-    from: string,
-    to: string,
-    devBypass = false,
-  ) {
+  async rangeLog(habitId: number, from: string, to: string, devBypass = false) {
     await this.assertUnlocked(devBypass);
     if (!ISO.test(from) || !ISO.test(to)) {
       throw new BadRequestException('from/to must be YYYY-MM-DD');
@@ -382,7 +374,12 @@ export class HabitsService {
       where: { habitId_date: { habitId, date } },
     });
     if (!existing) {
-      return { removed: false, date, habit: await this.getOne(habitId), awards: [] };
+      return {
+        removed: false,
+        date,
+        habit: await this.getOne(habitId),
+        awards: [],
+      };
     }
     const awarded = parseRewardCents(existing.wealthAwardedCents);
     if (awarded > 0) {
@@ -425,7 +422,7 @@ export class HabitsService {
       throw new BadRequestException('delta must not be 0');
     }
     const date = this.localToday();
-    const period = (isTabulaPeriod(habit.period) ? habit.period : 'day') as TabulaPeriod;
+    const period = isTabulaPeriod(habit.period) ? habit.period : 'day';
     const window = periodWindow(date, period, this.time.weekStartsOn());
     const agg = await this.prisma.habitClick.aggregate({
       where: {
@@ -478,7 +475,9 @@ export class HabitsService {
     if (!trimmed) {
       throw new BadRequestException('name is required');
     }
-    const max = await this.prisma.habitGroup.aggregate({ _max: { sortOrder: true } });
+    const max = await this.prisma.habitGroup.aggregate({
+      _max: { sortOrder: true },
+    });
     return this.prisma.habitGroup.create({
       data: { name: trimmed, sortOrder: (max._max.sortOrder ?? 0) + 1 },
     });
@@ -490,7 +489,10 @@ export class HabitsService {
     if (!trimmed) {
       throw new BadRequestException('name is required');
     }
-    return this.prisma.habitGroup.update({ where: { id }, data: { name: trimmed } });
+    return this.prisma.habitGroup.update({
+      where: { id },
+      data: { name: trimmed },
+    });
   }
 
   async removeGroup(id: number) {
@@ -503,10 +505,13 @@ export class HabitsService {
     return { deleted: true, id };
   }
 
-  async placeHabit(habitId: number, groupId: number | null, sortOrder?: number) {
+  async placeHabit(
+    habitId: number,
+    groupId: number | null,
+    sortOrder?: number,
+  ) {
     await this.require(habitId);
-    const resolved =
-      groupId != null && groupId > 0 ? groupId : null;
+    const resolved = groupId != null && groupId > 0 ? groupId : null;
     if (resolved != null) {
       await this.requireGroup(resolved);
     }
@@ -547,7 +552,9 @@ export class HabitsService {
     if (target === 'SUBTASK') {
       const sid = Math.round(Number(link.subtaskId) || 0);
       if (sid < 1) {
-        throw new BadRequestException('subtaskId is required for SUBTASK links');
+        throw new BadRequestException(
+          'subtaskId is required for SUBTASK links',
+        );
       }
       const sub = await this.prisma.questSubtask.findFirst({
         where: { id: sid, questId },
@@ -561,9 +568,7 @@ export class HabitsService {
     const rule = parseHabitQuestRule(link.rule);
     const requiredCount = Math.max(1, Math.round(link.requiredCount ?? 1));
     const windowDays =
-      rule === 'WINDOW'
-        ? Math.max(1, Math.round(link.windowDays ?? 7))
-        : null;
+      rule === 'WINDOW' ? Math.max(1, Math.round(link.windowDays ?? 7)) : null;
     await this.prisma.habitQuestLink.upsert({
       where: { habitId },
       create: {
@@ -625,26 +630,26 @@ export class HabitsService {
     });
     const ids = habits.map((h) => h.id);
     if (ids.length === 0) {
-    const days: Array<{
-      date: string;
-      points: number;
-      completions: number;
-      clicks: number;
-      marks: Array<{ id: number; icon: string | null; done: boolean }>;
-    }> = [];
-    if (grain !== 'all') {
-      let cursor = from;
-      while (cursor <= to) {
-        days.push({
-          date: cursor,
-          points: 0,
-          completions: 0,
-          clicks: 0,
-          marks: [],
-        });
-        cursor = this.offsetDate(cursor, 1);
+      const days: Array<{
+        date: string;
+        points: number;
+        completions: number;
+        clicks: number;
+        marks: Array<{ id: number; icon: string | null; done: boolean }>;
+      }> = [];
+      if (grain !== 'all') {
+        let cursor = from;
+        while (cursor <= to) {
+          days.push({
+            date: cursor,
+            points: 0,
+            completions: 0,
+            clicks: 0,
+            marks: [],
+          });
+          cursor = this.offsetDate(cursor, 1);
+        }
       }
-    }
       return {
         from,
         to: grain === 'all' ? today : to,
@@ -694,7 +699,11 @@ export class HabitsService {
       string,
       { points: number; completions: number; clicks: number }
     >();
-    const bump = (date: string, field: 'points' | 'completions' | 'clicks', n: number) => {
+    const bump = (
+      date: string,
+      field: 'points' | 'completions' | 'clicks',
+      n: number,
+    ) => {
       const row = dayMap.get(date) ?? { points: 0, completions: 0, clicks: 0 };
       row[field] += n;
       if (field !== 'points') {
@@ -748,7 +757,11 @@ export class HabitsService {
     }> = [];
     let cursor = from;
     while (cursor <= to) {
-      const row = dayMap.get(cursor) ?? { points: 0, completions: 0, clicks: 0 };
+      const row = dayMap.get(cursor) ?? {
+        points: 0,
+        completions: 0,
+        clicks: 0,
+      };
       days.push({
         date: cursor,
         ...row,
@@ -757,7 +770,10 @@ export class HabitsService {
       cursor = this.offsetDate(cursor, 1);
     }
 
-    const seriesMap = new Map<string, { key: string; label: string; value: number }>();
+    const seriesMap = new Map<
+      string,
+      { key: string; label: string; value: number }
+    >();
     for (const day of days) {
       const bucket = this.bucketKey(day.date, grain);
       const prev = seriesMap.get(bucket.key) ?? {
@@ -837,10 +853,10 @@ export class HabitsService {
   ) {
     const habit = await this.require(habitId);
     const today = this.localToday();
-    const period = (isTabulaPeriod(habit.period) ? habit.period : 'day') as TabulaPeriod;
-    const polarity = (isTabulaPolarity(habit.polarity)
+    const period = isTabulaPeriod(habit.period) ? habit.period : 'day';
+    const polarity = isTabulaPolarity(habit.polarity)
       ? habit.polarity
-      : 'virtue') as TabulaPolarity;
+      : 'virtue';
     const window = periodWindow(today, period, this.time.weekStartsOn());
     const agg = await this.prisma.habitClick.aggregate({
       where: {
@@ -1019,9 +1035,7 @@ export class HabitsService {
     successfulToday: boolean,
   ) {
     const n =
-      habit.cadence === 'EVERY_N_DAYS'
-        ? Math.max(1, habit.everyNDays || 1)
-        : 1;
+      habit.cadence === 'EVERY_N_DAYS' ? Math.max(1, habit.everyNDays || 1) : 1;
     const last = view.lastLog ?? null;
     const period = habit.period ?? 'day';
     let dueToday = !successfulToday;
@@ -1117,7 +1131,10 @@ export class HabitsService {
       data.cadence = cadence;
     }
     if (input.everyNDays !== undefined || creating) {
-      const n = Math.max(1, Math.round(input.everyNDays || current?.everyNDays || 1));
+      const n = Math.max(
+        1,
+        Math.round(input.everyNDays || current?.everyNDays || 1),
+      );
       data.everyNDays = cadence === 'DAILY' ? 1 : n;
     }
 
@@ -1152,7 +1169,11 @@ export class HabitsService {
       data.skillWeightsJson = null;
     }
 
-    if (input.skillId !== undefined || input.skillWeights !== undefined || creating) {
+    if (
+      input.skillId !== undefined ||
+      input.skillWeights !== undefined ||
+      creating
+    ) {
       data.skillId = skillId;
     }
 
@@ -1211,7 +1232,9 @@ export class HabitsService {
     if (input.period !== undefined || creating) {
       const period = String(input.period ?? current?.period ?? 'day');
       if (!isTabulaPeriod(period)) {
-        throw new BadRequestException('period must be day, week, month, or year');
+        throw new BadRequestException(
+          'period must be day, week, month, or year',
+        );
       }
       data.period = period;
     }
@@ -1246,7 +1269,9 @@ export class HabitsService {
     }
     if (input.questId !== undefined || creating) {
       data.questId = await this.resolveQuestId(
-        input.questId === undefined ? (current?.questId ?? null) : input.questId,
+        input.questId === undefined
+          ? (current?.questId ?? null)
+          : input.questId,
       );
     }
     return data as Record<string, unknown> & {

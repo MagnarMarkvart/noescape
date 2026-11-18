@@ -1,10 +1,7 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { SkillsService } from '../skills/skills.service';
 import { calculateHabitBoardXp } from '../xp/daily-xp.util';
-import {
-  parseSkillWeights,
-  splitQuestXp,
-} from '../xp/quest-xp.util';
+import { parseSkillWeights, splitQuestXp } from '../xp/quest-xp.util';
 
 export async function grantHabitBoardXp(opts: {
   prisma: PrismaService;
@@ -90,7 +87,11 @@ export async function reverseHabitBoardXp(opts: {
       continue;
     }
     reversals.push(
-      await opts.skills.reverseXp(activity.skillId, activity.xpGained, activity.id),
+      await opts.skills.reverseXp(
+        activity.skillId,
+        activity.xpGained,
+        activity.id,
+      ),
     );
   }
   return reversals;
@@ -105,7 +106,9 @@ export function parseActivityIds(raw?: string | null): number[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0);
+    return parsed
+      .map((n) => Number(n))
+      .filter((n) => Number.isInteger(n) && n > 0);
   } catch {
     return [];
   }

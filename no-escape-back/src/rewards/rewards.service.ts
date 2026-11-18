@@ -7,10 +7,7 @@ import { UnlockType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type RewardStatus =
-  | 'unlocked'
-  | 'available'
-  | 'locked_level'
-  | 'locked_requirements';
+  'unlocked' | 'available' | 'locked_level' | 'locked_requirements';
 
 export interface RewardView {
   id: number;
@@ -132,7 +129,10 @@ export class RewardsService {
       wealthLevel,
     });
 
-    if (view.status === 'locked_level' || view.status === 'locked_requirements') {
+    if (
+      view.status === 'locked_level' ||
+      view.status === 'locked_requirements'
+    ) {
       throw new BadRequestException(
         `Cannot claim "${reward.label}": ${view.missing.join(', ') || 'locked'}`,
       );
@@ -175,7 +175,10 @@ export class RewardsService {
   ): RewardView {
     const missing = this.missingPrereqs(reward, ctx);
     let status: RewardStatus;
-    if (reward.unlocked || (missing.length === 0 && ctx.skillLevel >= reward.levelReq)) {
+    if (
+      reward.unlocked ||
+      (missing.length === 0 && ctx.skillLevel >= reward.levelReq)
+    ) {
       status = reward.claimedAt ? 'unlocked' : 'available';
     } else if (ctx.skillLevel < reward.levelReq) {
       status = 'locked_level';
@@ -195,7 +198,8 @@ export class RewardsService {
       questIds: reward.questIds,
       orderIndex: reward.orderIndex,
       icon: reward.icon,
-      unlocked: reward.unlocked || status === 'available' || status === 'unlocked',
+      unlocked:
+        reward.unlocked || status === 'available' || status === 'unlocked',
       claimedAt: reward.claimedAt,
       status,
       missing,
@@ -223,7 +227,9 @@ export class RewardsService {
     const questIds = this.parseQuestIds(reward.questIds);
     if (questIds.length > 0) {
       // Quests are not in the DB yet — treat any listed quest as unmet.
-      missing.push(`Quest${questIds.length > 1 ? 's' : ''} ${questIds.join(', ')}`);
+      missing.push(
+        `Quest${questIds.length > 1 ? 's' : ''} ${questIds.join(', ')}`,
+      );
     }
     return missing;
   }
@@ -252,7 +258,9 @@ export class RewardsService {
   }
 
   private async requireSkill(skillId: number) {
-    const skill = await this.prisma.skill.findUnique({ where: { id: skillId } });
+    const skill = await this.prisma.skill.findUnique({
+      where: { id: skillId },
+    });
     if (!skill) {
       throw new NotFoundException(`Skill #${skillId} not found`);
     }

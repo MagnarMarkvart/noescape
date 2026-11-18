@@ -49,7 +49,11 @@ export function effortXpPerMinute(effortLevel: number): number {
 
 /** Duration that actually counts toward XP (0 … 480). */
 export function billedDurationMinutes(durationMinutes: number): number {
-  return clamp(Math.floor(Number(durationMinutes) || 0), 0, DAILY_DURATION_CAP_MINUTES);
+  return clamp(
+    Math.floor(Number(durationMinutes) || 0),
+    0,
+    DAILY_DURATION_CAP_MINUTES,
+  );
 }
 
 /**

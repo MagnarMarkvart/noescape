@@ -157,7 +157,9 @@ export class ScriptoriumService {
       this.prisma,
       rows.map((row) => row.id),
     );
-    return rows.map((row) => this.dueView(row, skills, today, binds.get(row.id) ?? null));
+    return rows.map((row) =>
+      this.dueView(row, skills, today, binds.get(row.id) ?? null),
+    );
   }
 
   async getOne(id: number) {
@@ -285,7 +287,9 @@ export class ScriptoriumService {
       work.skillWeightsJson ? JSON.parse(work.skillWeightsJson) : [],
     );
     if (weights.length === 0) {
-      throw new BadRequestException('Assign skills on the folio before completing');
+      throw new BadRequestException(
+        'Assign skills on the folio before completing',
+      );
     }
     const durationMinutes = work.durationMinutes ?? 45;
     const xp = calculateDailyTaskXp({
@@ -293,7 +297,9 @@ export class ScriptoriumService {
       durationMinutes,
     });
     if (xp <= 0) {
-      throw new BadRequestException('Set a volume before completing this folio');
+      throw new BadRequestException(
+        'Set a volume before completing this folio',
+      );
     }
 
     const catalog = await this.prisma.skill.findMany({

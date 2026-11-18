@@ -156,7 +156,9 @@ export class SkillsService implements OnModuleInit {
     skillId: number,
     input: { xpGained: number; duration?: number; note?: string },
   ) {
-    const skill = await this.prisma.skill.findUnique({ where: { id: skillId } });
+    const skill = await this.prisma.skill.findUnique({
+      where: { id: skillId },
+    });
     if (!skill) {
       throw new NotFoundException(`Skill #${skillId} not found`);
     }
@@ -274,7 +276,9 @@ export class SkillsService implements OnModuleInit {
     xpGained: number,
     activityId?: number | null,
   ) {
-    const skill = await this.prisma.skill.findUnique({ where: { id: skillId } });
+    const skill = await this.prisma.skill.findUnique({
+      where: { id: skillId },
+    });
     if (!skill) {
       throw new NotFoundException(`Skill #${skillId} not found`);
     }
@@ -336,11 +340,7 @@ export class SkillsService implements OnModuleInit {
       }
       for (const req of reqs) {
         const level = Number(req.level) || 0;
-        if (
-          req.slug === slug &&
-          level > previousLevel &&
-          level <= newLevel
-        ) {
+        if (req.slug === slug && level > previousLevel && level <= newLevel) {
           hits.push({
             questName: quest.name,
             label: `${skillName} Lv ${level}`,

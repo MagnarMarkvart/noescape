@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { AbandonHorologiumSessionDto } from './dto/abandon-session.dto';
 import { AwardHorologiumBlockDto } from './dto/award-block.dto';
 import { CompleteHorologiumSessionDto } from './dto/complete-session.dto';
@@ -20,10 +30,7 @@ export class HorologiumController {
   ) {}
 
   @Get('sessions/calendar')
-  sessionCalendar(
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
+  sessionCalendar(@Query('from') from?: string, @Query('to') to?: string) {
     return this.horologiumService.sessionCalendar(from ?? '', to ?? '');
   }
 
@@ -47,8 +54,7 @@ export class HorologiumController {
     @Query('iterations') iterations?: string,
     @Query('mode') mode?: string,
   ) {
-    const resolvedMode: HorologiumMode =
-      mode === 'adhoc' ? 'adhoc' : 'planned';
+    const resolvedMode: HorologiumMode = mode === 'adhoc' ? 'adhoc' : 'planned';
     return this.horologiumService.preview(
       Number(workMinutes ?? 25),
       Number(restMinutes ?? 5),

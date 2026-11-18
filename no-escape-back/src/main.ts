@@ -16,7 +16,14 @@ async function bootstrap() {
   );
 
   // Angular SPA dist
-  const distPath = join(process.cwd(), '..', 'NoEscape-UI', 'dist', 'NoEscape-UI', 'browser');
+  const distPath = join(
+    process.cwd(),
+    '..',
+    'NoEscape-UI',
+    'dist',
+    'NoEscape-UI',
+    'browser',
+  );
   if (existsSync(distPath)) {
     app.useStaticAssets(distPath);
     // SPA fallback — check raw Accept header because */* in browsers matches everything
@@ -25,7 +32,10 @@ async function bootstrap() {
         const accept: string = req.headers['accept'] || '';
         // Browser navigation: Accept includes text/html
         // API call (Angular HttpClient): Accept includes application/json
-        if (accept.includes('text/html') && !accept.includes('application/json')) {
+        if (
+          accept.includes('text/html') &&
+          !accept.includes('application/json')
+        ) {
           res.sendFile(join(distPath, 'index.html'));
           return;
         }
@@ -44,10 +54,7 @@ async function bootstrap() {
   });
 
   app.enableCors({
-    origin: [
-      'http://localhost:4200',
-      'http://127.0.0.1:4200',
-    ],
+    origin: ['http://localhost:4200', 'http://127.0.0.1:4200'],
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
     credentials: true,

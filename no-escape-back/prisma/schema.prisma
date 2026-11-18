@@ -778,3 +778,48 @@ model TabulaClick {
   @@index([tabulaId, date])
   @@index([date])
 }
+
+/// Lists — flexible list management with item memory and suggestions.
+model List {
+  id                 Int              @id @default(autoincrement())
+  name               String
+  icon               String?
+  isMain             Boolean          @default(false)
+  suggestionsEnabled Boolean          @default(true)
+  sortOrder          Int              @default(0)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  items              ListItem[]
+  itemMemory         ListItemMemory[]
+
+  @@index([sortOrder])
+}
+
+model ListItem {
+  id        Int      @id @default(autoincrement())
+  listId    Int
+  list      List     @relation(fields: [listId], references: [id], onDelete: Cascade)
+  title     String
+  done      Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([listId])
+  @@index([listId, done])
+}
+
+model ListItemMemory {
+  id         Int      @id @default(autoincrement())
+  listId     Int
+  list       List     @relation(fields: [listId], references: [id], onDelete: Cascade)
+  title      String
+  lastUsedAt DateTime @default(now())
+  useCount   Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([listId, title])
+  @@index([listId])
+  @@index([listId, lastUsedAt])
+}

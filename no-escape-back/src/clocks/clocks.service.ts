@@ -133,7 +133,11 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
     const existing = await this.prisma.liveClock.findUnique({
       where: { ownerId_kind: { ownerId, kind: 'consuetudo' } },
     });
-    if (existing && existing.status !== 'idle' && existing.status !== 'complete') {
+    if (
+      existing &&
+      existing.status !== 'idle' &&
+      existing.status !== 'complete'
+    ) {
       if (existing.status === 'paused') {
         return this.resume('consuetudo');
       }
@@ -188,7 +192,9 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
 
   async pause(kind: ClockKind) {
     if (kind === 'vigilia') {
-      throw new BadRequestException('Pass watchId via POST /clocks/vigilia/pause');
+      throw new BadRequestException(
+        'Pass watchId via POST /clocks/vigilia/pause',
+      );
     }
     const row = await this.require(kind);
     if (row.status !== 'running') {
@@ -263,7 +269,8 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
     if (row.phase !== 'rest') {
       throw new BadRequestException('Nothing to skip');
     }
-    const leftover = Math.ceil(Math.max(0, this.liveRemaining(row)) / 1000) * 1000;
+    const leftover =
+      Math.ceil(Math.max(0, this.liveRemaining(row)) / 1000) * 1000;
     const payload = this.sessioPayload(row);
     payload.restCarryMs += leftover;
     const updated = await this.prisma.liveClock.update({
@@ -467,7 +474,9 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
         elapsedMinutes: this.elapsedMinutes(payload),
         questRunId: daily.runId,
         questSubtaskId:
-          daily.source === 'subtask' ? daily.subtaskId ?? undefined : undefined,
+          daily.source === 'subtask'
+            ? (daily.subtaskId ?? undefined)
+            : undefined,
         endSession: row.phase === 'complete' ? false : endSession,
         disciplineGranted: payload.disciplineGranted,
         specialLapsAwarded: Math.min(
@@ -489,7 +498,10 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
       complete !== null &&
       'endedEarly' in complete &&
       Boolean((complete as { endedEarly?: boolean }).endedEarly);
-    if (endedEarly || (endSession && daily.source === 'daily' && row.phase !== 'complete')) {
+    if (
+      endedEarly ||
+      (endSession && daily.source === 'daily' && row.phase !== 'complete')
+    ) {
       if (daily.source === 'daily' && endSession && row.phase !== 'complete') {
         await this.horologium.closeEarly({
           workMinutes: payload.workMinutes,
@@ -534,9 +546,9 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
     const payload = this.sessioPayload(row);
     const runNow = forceContinue || (await this.sessioAutoContinue());
     let awards: unknown[] | undefined;
-    let jingle: 'work' | 'rest' | null = playSound
+    const jingle: 'work' | 'rest' | null = playSound
       ? row.phase === 'work' || row.phase === 'rest'
-        ? (row.phase as 'work' | 'rest')
+        ? row.phase
         : null
       : null;
     let toast: string | null = null;
@@ -556,7 +568,7 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
               : undefined,
           questSubtaskId:
             payload.boundDaily?.source === 'subtask'
-              ? payload.boundDaily.subtaskId ?? undefined
+              ? (payload.boundDaily.subtaskId ?? undefined)
               : undefined,
           lapIndex: payload.completedBlocks,
           laps: payload.mode === 'adhoc' ? 1 : payload.iterations,
@@ -623,7 +635,11 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
     payload: ClockSessioPayload,
     phase: 'work' | 'rest',
     totalPhaseMs: number,
-    extra: { awards?: unknown[]; jingle: 'work' | 'rest' | null; toast?: string | null },
+    extra: {
+      awards?: unknown[];
+      jingle: 'work' | 'rest' | null;
+      toast?: string | null;
+    },
     runNow: boolean,
   ) {
     payload.awaitingContinue = !runNow;

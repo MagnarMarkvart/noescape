@@ -1,15 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeService } from '../time/time.service';
 import { WorkIntervalsService } from '../work-intervals/work-intervals.service';
 
 export type VigiliaBindKind =
-  | 'custom'
-  | 'quest'
-  | 'quest_daily_work'
-  | 'daily'
-  | 'subtask'
-  | 'scriptorium';
+  'custom' | 'quest' | 'quest_daily_work' | 'daily' | 'subtask' | 'scriptorium';
 
 export type HorologiumWatchDto = {
   id: number;
@@ -110,7 +109,9 @@ export class HorologiumWatchesService {
       );
     }
 
-    let trimmed = String(input.name ?? '').trim().slice(0, 80);
+    let trimmed = String(input.name ?? '')
+      .trim()
+      .slice(0, 80);
     let workId: number | null = null;
     let questId: number | null = null;
     let questRunId: number | null = null;
@@ -144,7 +145,12 @@ export class HorologiumWatchesService {
       }
       const quest = await this.prisma.quest.findUnique({
         where: { id: qId },
-        select: { id: true, name: true, dailyWorkTitle: true, journeyLabel: true },
+        select: {
+          id: true,
+          name: true,
+          dailyWorkTitle: true,
+          journeyLabel: true,
+        },
       });
       if (!quest) {
         throw new NotFoundException(`Quest #${qId} not found`);
@@ -267,7 +273,10 @@ export class HorologiumWatchesService {
       }
       data.name = trimmed;
     }
-    if (typeof input.elapsedMs === 'number' && Number.isFinite(input.elapsedMs)) {
+    if (
+      typeof input.elapsedMs === 'number' &&
+      Number.isFinite(input.elapsedMs)
+    ) {
       data.elapsedMs = BigInt(Math.max(0, Math.round(input.elapsedMs)));
     }
     if (input.running === false) {
@@ -343,7 +352,7 @@ export class HorologiumWatchesService {
         questSubtaskId: existing.questSubtaskId ?? undefined,
         questId:
           existing.bindKind === 'quest_daily_work'
-            ? existing.questId ?? undefined
+            ? (existing.questId ?? undefined)
             : undefined,
         scriptoriumWorkId: existing.scriptoriumWorkId ?? undefined,
       });
@@ -428,7 +437,11 @@ export class HorologiumWatchesService {
       });
       return;
     }
-    if (watch.bindKind === 'subtask' && watch.questRunId && watch.questSubtaskId) {
+    if (
+      watch.bindKind === 'subtask' &&
+      watch.questRunId &&
+      watch.questSubtaskId
+    ) {
       await this.prisma.questSubtaskCompletion.upsert({
         where: {
           runId_subtaskId: {

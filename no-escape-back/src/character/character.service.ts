@@ -75,10 +75,16 @@ export class CharacterService implements OnModuleInit {
       title: character.title,
       nickname: character.nickname,
       timezone: character.timezone || DEFAULT_TZ,
-      dateFormat: isDateFormat(character.dateFormat) ? character.dateFormat : 'DMY',
-      timeFormat: isTimeFormat(character.timeFormat) ? character.timeFormat : 'H24',
+      dateFormat: isDateFormat(character.dateFormat)
+        ? character.dateFormat
+        : 'DMY',
+      timeFormat: isTimeFormat(character.timeFormat)
+        ? character.timeFormat
+        : 'H24',
       dayStartHour: clampDayStartHour(character.dayStartHour),
-      weekStartsOn: isWeekStart(character.weekStartsOn) ? character.weekStartsOn : 1,
+      weekStartsOn: isWeekStart(character.weekStartsOn)
+        ? character.weekStartsOn
+        : 1,
       menuAutoToggleMobile: character.menuAutoToggleMobile !== false,
       menuAutoToggleDesktop: character.menuAutoToggleDesktop !== false,
       pomodoroAutoContinue: character.pomodoroAutoContinue !== false,
@@ -166,14 +172,18 @@ export class CharacterService implements OnModuleInit {
     if (input.dayStartHour !== undefined) {
       const hour = Number(input.dayStartHour);
       if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
-        throw new BadRequestException('dayStartHour must be an integer from 0 to 23');
+        throw new BadRequestException(
+          'dayStartHour must be an integer from 0 to 23',
+        );
       }
       data.dayStartHour = hour;
     }
     if (input.weekStartsOn !== undefined) {
       const start = Number(input.weekStartsOn);
       if (!isWeekStart(start)) {
-        throw new BadRequestException('weekStartsOn must be 0 (Sunday) or 1 (Monday)');
+        throw new BadRequestException(
+          'weekStartsOn must be 0 (Sunday) or 1 (Monday)',
+        );
       }
       data.weekStartsOn = start;
     }
@@ -316,8 +326,7 @@ export class CharacterService implements OnModuleInit {
     if (cents === 0) {
       throw new BadRequestException('Enter an amount');
     }
-    const remove =
-      String(input.direction || 'add').toLowerCase() === 'remove';
+    const remove = String(input.direction || 'add').toLowerCase() === 'remove';
     return this.adjustWealth({
       deltaCents: remove ? -cents : cents,
       note: input.note,

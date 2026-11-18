@@ -6,6 +6,7 @@ import { CharacterModule } from './character/character.module';
 import { DailiesModule } from './dailies/dailies.module';
 import { HabitsModule } from './habits/habits.module';
 import { HorologiumModule } from './horologium/horologium.module';
+import { ListsModule } from './lists/lists.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QuestsModule } from './quests/quests.module';
 import { RewardsModule } from './rewards/rewards.module';
@@ -29,6 +30,7 @@ import { WorkIntervalsModule } from './work-intervals/work-intervals.module';
     HabitsModule,
     RoutinesModule,
     ScriptoriumModule,
+    ListsModule,
     ClocksModule,
     TabulariumModule,
     WorkIntervalsModule,

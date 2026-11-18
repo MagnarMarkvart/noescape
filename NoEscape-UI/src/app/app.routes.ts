@@ -257,6 +257,23 @@ export const routes: Routes = [
     title: 'Scriptorium — No Escape',
   },
   {
+    path: 'lists/new',
+    loadComponent: () =>
+      import('./lists/list-detail-page').then((m) => m.ListDetailPage),
+    title: 'New List — No Escape',
+  },
+  {
+    path: 'lists/:id',
+    loadComponent: () =>
+      import('./lists/list-detail-page').then((m) => m.ListDetailPage),
+    title: 'List — No Escape',
+  },
+  {
+    path: 'lists',
+    loadComponent: () => import('./lists/lists-page').then((m) => m.ListsPage),
+    title: 'Lists — No Escape',
+  },
+  {
     path: 'level-ups',
     loadComponent: () =>
       import('./level-ups/level-ups-page').then((m) => m.LevelUpsPage),

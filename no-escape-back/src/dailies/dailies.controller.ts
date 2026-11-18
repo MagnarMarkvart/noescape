@@ -79,8 +79,14 @@ export class DailiesController {
     @Body()
     body: {
       date?: string;
-      from: { importance: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR'; slotIndex: number };
-      to: { importance: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR'; slotIndex: number };
+      from: {
+        importance: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR';
+        slotIndex: number;
+      };
+      to: {
+        importance: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR';
+        slotIndex: number;
+      };
     },
   ) {
     return this.dailiesService.reorderSlot(body);

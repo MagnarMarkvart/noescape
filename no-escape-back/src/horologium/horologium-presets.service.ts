@@ -83,7 +83,9 @@ export class HorologiumPresetsService implements OnModuleInit {
   }
 
   async update(id: number, input: HorologiumPresetInput) {
-    const row = await this.prisma.horologiumPreset.findUnique({ where: { id } });
+    const row = await this.prisma.horologiumPreset.findUnique({
+      where: { id },
+    });
     if (!row) {
       throw new NotFoundException(`Preset #${id} not found`);
     }
@@ -101,7 +103,9 @@ export class HorologiumPresetsService implements OnModuleInit {
   }
 
   async remove(id: number) {
-    const row = await this.prisma.horologiumPreset.findUnique({ where: { id } });
+    const row = await this.prisma.horologiumPreset.findUnique({
+      where: { id },
+    });
     if (!row) {
       throw new NotFoundException(`Preset #${id} not found`);
     }
@@ -110,7 +114,9 @@ export class HorologiumPresetsService implements OnModuleInit {
   }
 
   private normalize(input: HorologiumPresetInput, requireLabel: boolean) {
-    const label = String(input.label ?? '').trim().slice(0, 40);
+    const label = String(input.label ?? '')
+      .trim()
+      .slice(0, 40);
     if (requireLabel && !label) {
       throw new BadRequestException('label is required');
     }
@@ -126,12 +132,7 @@ export class HorologiumPresetsService implements OnModuleInit {
       60,
       'restMinutes',
     );
-    const iterations = this.assertRange(
-      input.iterations,
-      2,
-      12,
-      'iterations',
-    );
+    const iterations = this.assertRange(input.iterations, 2, 12, 'iterations');
     return {
       label,
       workMinutes,

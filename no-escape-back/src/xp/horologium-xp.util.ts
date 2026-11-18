@@ -106,10 +106,7 @@ export function calculateHorologiumBlockXp(input: {
   const restMult = restXpMultiplier(input.restMinutes);
   const workLengthMult = workLengthMultiplier(workMinutes);
   const raw =
-    workMinutes *
-    HOROLOGIUM_XP_PER_WORK_MINUTE *
-    restMult *
-    workLengthMult;
+    workMinutes * HOROLOGIUM_XP_PER_WORK_MINUTE * restMult * workLengthMult;
   return {
     xp: Math.max(1, Math.round(raw)),
     restMult: round3(restMult),
@@ -144,14 +141,8 @@ export function calculateHorologiumGoalBonus(input: {
   let goalBonusXp = 0;
   // Sessio bonus only from 2+ committed rounds; Track has no goal bonus.
   if (workScale > 0 && iterations >= HOROLOGIUM_MIN_SESSIO_ITERATIONS) {
-    const billedWork = Math.min(
-      workMinutes,
-      HOROLOGIUM_GOAL_PEAK_WORK_MINUTES,
-    );
-    const iterFactor = Math.pow(
-      iterations - 1,
-      HOROLOGIUM_GOAL_ITER_EXPONENT,
-    );
+    const billedWork = Math.min(workMinutes, HOROLOGIUM_GOAL_PEAK_WORK_MINUTES);
+    const iterFactor = Math.pow(iterations - 1, HOROLOGIUM_GOAL_ITER_EXPONENT);
     goalBonusXp = Math.max(
       0,
       Math.round(
