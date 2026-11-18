@@ -1,0 +1,98 @@
+<div class="lists-page">
+  <header class="page-header">
+    <h1>Lists</h1>
+    <a routerLink="/lists/new" class="btn-primary">
+      <span class="icon">+</span>
+      New List
+    </a>
+  </header>
+
+  @if (error()) {
+    <div class="error-banner">
+      {{ error() }}
+    </div>
+  }
+
+  @if (loading()) {
+    <div class="loading">Loading lists...</div>
+  } @else {
+    @if (sortedLists().length === 0) {
+      <div class="empty-state">
+        <div class="empty-icon">📝</div>
+        <p>No lists yet. Create your first list to get started.</p>
+      </div>
+    } @else {
+      <div class="lists-grid">
+        @for (list of sortedLists(); track list.id) {
+          <div
+            class="list-card"
+            [class.expanded]="isExpanded(list.id)"
+            [class.main]="list.isMain"
+            (click)="toggleExpand(list.id)"
+          >
+            <div class="list-header">
+              <div class="list-title">
+                <span class="list-icon">{{ list.icon || DEFAULT_ICON }}</span>
+                <span class="list-name">{{ list.name }}</span>
+                @if (list.isMain) {
+                  <span class="main-badge">Main</span>
+                }
+              </div>
+
+              <div class="list-actions" (click)="$event.stopPropagation()">
+                <button
+                  class="btn-icon"
+                  title="Open list"
+                  (click)="navigateToDetail(list.id, $event)"
+                >
+                  →
+                </button>
+                <button
+                  class="btn-icon btn-danger"
+                  title="Delete list"
+                  (click)="askDelete(list, $event)"
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+
+            <div class="list-meta">
+              <span>{{ list.activeCount }} active</span>
+              <span>{{ list.doneCount }} done</span>
+              @if (!list.suggestionsEnabled) {
+                <span class="subtle">Suggestions off</span>
+              }
+            </div>
+
+            @if (isExpanded(list.id)) {
+              <div class="list-preview">
+                <p class="preview-hint">
+                  Open the list to add, edit, and mark items done.
+                </p>
+                <button
+                  class="btn-secondary"
+                  (click)="navigateToDetail(list.id, $event)"
+                >
+                  Open List
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  }
+</div>
+
+@if (confirm(); as c) {
+  <app-ui-confirm
+    [title]="confirmTitle"
+    [message]="confirmMessage"
+    [confirmLabel]="'Delete'"
+    [danger]="true"
+    [busy]="!!busyId()"
+    (confirm)="runConfirm()"
+    (cancel)="cancelConfirm()"
+  />
+}

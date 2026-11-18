@@ -1,0 +1,182 @@
+<div class="list-detail-page">
+  <header class="page-header">
+    <a routerLink="/lists" class="back-link">← Lists</a>
+
+    @if (isEditing()) {
+      <div class="edit-form">
+        <input
+          type="text"
+          [(ngModel)]="editIcon"
+          placeholder="Icon"
+          class="input-icon"
+          maxlength="4"
+        />
+        <input
+          type="text"
+          [(ngModel)]="editName"
+          placeholder="List name"
+          class="input-name"
+          maxlength="120"
+        />
+        <button class="btn-primary" (click)="saveList()">Save</button>
+        <button class="btn-secondary" (click)="cancelEdit()">Cancel</button>
+      </div>
+    } @else {
+      @if (list(); as l) {
+        <div class="list-header">
+          <h1>
+            <span class="list-icon">{{ l.icon || DEFAULT_ICON }}</span>
+            {{ l.name }}
+            @if (l.isMain) {
+              <span class="main-badge">Main</span>
+            }
+          </h1>
+          <button class="btn-icon" title="Edit list" (click)="startEdit()">
+            ✏️
+          </button>
+        </div>
+      }
+    }
+  </header>
+
+  @if (error()) {
+    <div class="error-banner">
+      {{ error() }}
+    </div>
+  }
+
+  @if (loading()) {
+    <div class="loading">Loading list...</div>
+  } @else if (list(); as l) {
+    <div class="list-content">
+      <div class="add-item-section">
+        <div class="input-wrapper">
+          <input
+            type="text"
+            [(ngModel)]="newItemTitle"
+            placeholder="Add new item..."
+            class="input-new-item"
+            (keydown.enter)="addItem()"
+          />
+          <button class="btn-add" (click)="addItem()">Add</button>
+        </div>
+
+        @if (filteredSuggestions().length > 0) {
+          <div class="suggestions">
+            <div class="suggestions-label">Suggestions from memory:</div>
+            <div class="suggestions-list">
+              @for (mem of filteredSuggestions(); track mem.id) {
+                <button
+                  class="suggestion-item"
+                  (click)="selectSuggestion(mem)"
+                >
+                  <span>{{ mem.title }}</span>
+                  <span class="suggestion-meta"
+                    >{{ mem.useCount }}× · {{ mem.score }} score</span
+                  >
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="list-settings">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            [checked]="l.suggestionsEnabled"
+            (change)="toggleSuggestions()"
+          />
+          <span>Enable suggestions (remember completed items)</span>
+        </label>
+      </div>
+
+      <div class="items-section">
+        <h2>Active Items ({{ activeItems().length }})</h2>
+        @if (activeItems().length === 0) {
+          <p class="empty-message">No active items. Add some above!</p>
+        } @else {
+          <div class="items-list">
+            @for (item of activeItems(); track item.id) {
+              <div class="item-row">
+                <input
+                  type="checkbox"
+                  [checked]="item.done"
+                  [disabled]="busyItemId() === item.id"
+                  (change)="toggleItemDone(item)"
+                />
+                <span class="item-title">{{ item.title }}</span>
+                <button
+                  class="btn-icon btn-danger"
+                  title="Delete item"
+                  [disabled]="busyItemId() === item.id"
+                  (click)="askDeleteItem(item)"
+                >
+                  🗑️
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="items-section">
+        <h2>Done Items ({{ doneItems().length }})</h2>
+        @if (doneItems().length === 0) {
+          <p class="empty-message">No done items yet.</p>
+        } @else {
+          <div class="items-list">
+            @for (item of doneItems(); track item.id) {
+              <div class="item-row done">
+                <input
+                  type="checkbox"
+                  [checked]="item.done"
+                  [disabled]="busyItemId() === item.id"
+                  (change)="toggleItemDone(item)"
+                />
+                <span class="item-title">{{ item.title }}</span>
+                <button
+                  class="btn-icon btn-danger"
+                  title="Delete item"
+                  [disabled]="busyItemId() === item.id"
+                  (click)="askDeleteItem(item)"
+                >
+                  🗑️
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      @if (l.memory.length > 0) {
+        <div class="memory-section">
+          <h2>Memory ({{ l.memory.length }} items)</h2>
+          <div class="memory-list">
+            @for (mem of l.memory; track mem.id) {
+              <div class="memory-item">
+                <span class="memory-title">{{ mem.title }}</span>
+                <span class="memory-meta"
+                  >Used {{ mem.useCount }}× · Score: {{ mem.score }}</span
+                >
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
+
+@if (confirm(); as c) {
+  <app-ui-confirm
+    [title]="confirmTitle"
+    [message]="confirmMessage"
+    [confirmLabel]="'Delete'"
+    [danger]="true"
+    [busy]="!!busyItemId()"
+    (confirm)="runConfirm()"
+    (cancel)="cancelConfirm()"
+  />
+}
