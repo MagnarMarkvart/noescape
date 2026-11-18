@@ -17,7 +17,9 @@ import {
 } from './lists.model';
 import { ListsService } from './lists.service';
 
-type ItemConfirm = { kind: 'delete-item'; item: ListItemView };
+type ItemConfirm
+  | { kind: 'delete-item'; item: ListItemView }
+  | { kind: 'delete-memory'; memory: ListItemMemoryView };
 
 @Component({
   selector: 'app-list-detail-page',
@@ -35,9 +37,11 @@ export class ListDetailPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly list = signal<ListDetailView | null>(null);
   protected readonly newItemTitle = signal('');
+  protected readonly memoryQuery = signal('');
   protected readonly isEditing = signal(false);
   protected readonly editName = signal('');
   protected readonly editIcon = signal('');
+  protected readonly editIsMain = signal(false);
   protected readonly confirm = signal<ItemConfirm | null>(null);
   protected readonly busyItemId = signal<number | null>(null);
   protected readonly DEFAULT_ICON = DEFAULT_LIST_ICON;
@@ -52,12 +56,22 @@ export class ListDetailPage implements OnInit {
 
   protected readonly filteredSuggestions = computed(() => {
     const query = this.newItemTitle().trim().toLowerCase();
-    if (!query || !this.list()) {
-      return [];
+    const memories = this.list()?.memory ?? [];
+    if (!query) {
+      return memories.slice(0, 5);
     }
-    return (this.list()?.memory ?? [])
+    return memories
       .filter((mem) => mem.title.toLowerCase().includes(query))
       .slice(0, 5);
+  });
+
+  protected readonly filteredMemory = computed(() => {
+    const query = this.memoryQuery().trim().toLowerCase();
+    const memories = this.list()?.memory ?? [];
+    if (!query) {
+      return memories;
+    }
+    return memories.filter((mem) => mem.title.toLowerCase().includes(query));
   });
 
   ngOnInit(): void {
@@ -92,7 +106,7 @@ export class ListDetailPage implements OnInit {
       },
       error: () => {
         this.loading.set(false);
-        this.error.set('Could not load list. Is the backend running?');
+        this.error.set('Could not load list');
       },
     });
   }
@@ -101,6 +115,7 @@ export class ListDetailPage implements OnInit {
     this.isEditing.set(true);
     this.editName.set('');
     this.editIcon.set(DEFAULT_LIST_ICON);
+    this.editIsMain.set(false);
     this.loading.set(false);
   }
 
@@ -112,6 +127,7 @@ export class ListDetailPage implements OnInit {
     this.isEditing.set(true);
     this.editName.set(list.name);
     this.editIcon.set(list.icon || DEFAULT_LIST_ICON);
+    this.editIsMain.set(list.isMain);
   }
 
   protected cancelEdit(): void {
@@ -132,6 +148,7 @@ export class ListDetailPage implements OnInit {
     const payload = {
       name,
       icon: this.editIcon().trim() || null,
+      isMain: this.editIsMain(),
     };
 
     if (!this.list()) {
@@ -143,7 +160,7 @@ export class ListDetailPage implements OnInit {
           this.loadList(created.id);
         },
         error: () => {
-          this.error.set('Could not create list.');
+          this.error.set('Could not create list');
         },
       });
     } else {
@@ -153,7 +170,7 @@ export class ListDetailPage implements OnInit {
           this.reload();
         },
         error: () => {
-          this.error.set('Could not update list.');
+          this.error.set('Could not update list');
         },
       });
     }
@@ -177,7 +194,7 @@ export class ListDetailPage implements OnInit {
         this.error.set(null);
       },
       error: () => {
-        this.error.set('Could not add item.');
+        this.error.set('Could not add item');
       },
     });
   }
@@ -197,13 +214,17 @@ export class ListDetailPage implements OnInit {
       },
       error: () => {
         this.busyItemId.set(null);
-        this.error.set('Could not update item.');
+        this.error.set('Could not update item');
       },
     });
   }
 
   protected askDeleteItem(item: ListItemView): void {
     this.confirm.set({ kind: 'delete-item', item });
+  }
+
+  protected askDeleteMemory(memory: ListItemMemoryView): void {
+    this.confirm.set({ kind: 'delete-memory', memory });
   }
 
   protected cancelConfirm(): void {
@@ -218,7 +239,11 @@ export class ListDetailPage implements OnInit {
     if (!pending || this.busyItemId()) {
       return;
     }
-    this.deleteItem(pending.item);
+    if (pending.kind === 'delete-item') {
+      this.deleteItem(pending.item);
+    } else if (pending.kind === 'delete-memory') {
+      this.deleteMemory(pending.memory);
+    }
   }
 
   private deleteItem(item: ListItemView): void {
@@ -238,7 +263,29 @@ export class ListDetailPage implements OnInit {
       error: () => {
         this.busyItemId.set(null);
         this.confirm.set(null);
-        this.error.set('Could not delete item.');
+        this.error.set('Could not delete item');
+      },
+    });
+  }
+
+  private deleteMemory(memory: ListItemMemoryView): void {
+    const list = this.list();
+    if (!list) {
+      return;
+    }
+
+    this.busyItemId.set(memory.id);
+    this.api.removeMemory(list.id, memory.id).subscribe({
+      next: (updated) => {
+        this.list.set(updated);
+        this.busyItemId.set(null);
+        this.confirm.set(null);
+        this.error.set(null);
+      },
+      error: () => {
+        this.busyItemId.set(null);
+        this.confirm.set(null);
+        this.error.set('Could not delete memory entry');
       },
     });
   }
@@ -255,10 +302,14 @@ export class ListDetailPage implements OnInit {
         this.newItemTitle.set('');
         this.error.set(null);
       },
-      error: () => {
-        this.error.set('Could not restore item from memory.');
+      error: (err: { error?: { message?: string } }) => {
+        this.error.set(err.error?.message ?? 'Could not restore item');
       },
     });
+  }
+
+  protected restoreMemory(memory: ListItemMemoryView): void {
+    this.selectSuggestion(memory);
   }
 
   protected toggleSuggestions(): void {
@@ -274,7 +325,7 @@ export class ListDetailPage implements OnInit {
           this.reload();
         },
         error: () => {
-          this.error.set('Could not update suggestions setting.');
+          this.error.set('Could not update suggestions');
         },
       });
   }
@@ -284,10 +335,20 @@ export class ListDetailPage implements OnInit {
     if (pending && pending.kind === 'delete-item') {
       return `Delete "${pending.item.title}"?`;
     }
+    if (pending && pending.kind === 'delete-memory') {
+      return `Delete "${pending.memory.title}"?`;
+    }
     return '';
   }
 
   protected get confirmMessage(): string {
-    return 'This item will be removed from the list. The memory entry will remain.';
+    const pending = this.confirm();
+    if (pending && pending.kind === 'delete-item') {
+      return 'This item will be removed from the list';
+    }
+    if (pending && pending.kind === 'delete-memory') {
+      return 'This memory entry will be permanently deleted';
+    }
+    return '';
   }
 }

@@ -1,7 +1,10 @@
-<div class="lists-page">
-  <header class="page-header">
-    <h1>Lists</h1>
-    <a routerLink="/lists/new" class="btn-primary">
+<div class="lists-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">Catalog</p>
+      <h1>Lists</h1>
+    </div>
+    <a routerLink="/lists/new" class="btn-forge">
       <span class="icon">+</span>
       New List
     </a>
@@ -24,14 +27,14 @@
     } @else {
       <div class="lists-grid">
         @for (list of sortedLists(); track list.id) {
-          <div
+          <article
             class="list-card"
             [class.expanded]="isExpanded(list.id)"
             [class.main]="list.isMain"
             (click)="toggleExpand(list.id)"
           >
-            <div class="list-header">
-              <div class="list-title">
+            <div class="card-header">
+              <div class="card-title">
                 <span class="list-icon">{{ list.icon || DEFAULT_ICON }}</span>
                 <span class="list-name">{{ list.name }}</span>
                 @if (list.isMain) {
@@ -39,7 +42,7 @@
                 }
               </div>
 
-              <div class="list-actions" (click)="$event.stopPropagation()">
+              <div class="card-actions" (click)="$event.stopPropagation()">
                 <button
                   class="btn-icon"
                   title="Open list"
@@ -52,33 +55,49 @@
                   title="Delete list"
                   (click)="askDelete(list, $event)"
                 >
-                  🗑️
+                  ×
                 </button>
               </div>
             </div>
 
-            <div class="list-meta">
+            <div class="card-meta">
               <span>{{ list.activeCount }} active</span>
               <span>{{ list.doneCount }} done</span>
               @if (!list.suggestionsEnabled) {
-                <span class="subtle">Suggestions off</span>
+                <span class="subtle">No suggestions</span>
               }
             </div>
 
-            @if (isExpanded(list.id)) {
-              <div class="list-preview">
-                <p class="preview-hint">
-                  Open the list to add, edit, and mark items done.
-                </p>
+            @if (isExpanded(list.id) && expandedListDetail(); as detail) {
+              <div class="card-preview">
+                @if (detail.items.length === 0) {
+                  <p class="empty-hint">No items yet</p>
+                } @else {
+                  <div class="preview-items">
+                    @for (item of detail.items; track item.id) {
+                      <div class="preview-item" [class.done]="item.done">
+                        <label class="item-check">
+                          <input
+                            type="checkbox"
+                            [checked]="item.done"
+                            (click)="$event.stopPropagation()"
+                            (change)="toggleItemDone(list.id, item.id, item.done, $event)"
+                          />
+                          <span>{{ item.title }}</span>
+                        </label>
+                      </div>
+                    }
+                  </div>
+                }
                 <button
-                  class="btn-secondary"
+                  class="btn-open"
                   (click)="navigateToDetail(list.id, $event)"
                 >
-                  Open List
+                  Open List →
                 </button>
               </div>
             }
-          </div>
+          </article>
         }
       </div>
     }
