@@ -157,23 +157,34 @@ h1 {
 .btn-icon-sm {
   background: transparent;
   border: 1px solid var(--ld-border);
-  padding: 0.3rem 0.6rem;
+  padding: 0.5rem 0.75rem;
   cursor: pointer;
   border-radius: 2px;
   color: var(--ld-muted);
   transition: all 0.15s;
   font-size: 1rem;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-icon-sm {
-  padding: 0.2rem 0.5rem;
+  padding: 0.4rem 0.65rem;
   font-size: 0.95rem;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .btn-icon:hover,
 .btn-icon-sm:hover {
   color: var(--ld-accent);
   border-color: var(--ld-border-bright);
+}
+
+.btn-danger {
+  color: rgba(196, 92, 74, 0.8);
 }
 
 .btn-danger:hover {
@@ -224,6 +235,7 @@ h2 {
 .input-row {
   display: flex;
   gap: 0.65rem;
+  align-items: stretch;
 }
 
 .input-text,
@@ -324,12 +336,16 @@ h2 {
 }
 
 .item-row.done {
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .item-row.done .item-title {
   text-decoration: line-through;
   color: var(--ld-muted);
+}
+
+.item-row.done .btn-danger {
+  color: rgba(196, 92, 74, 0.5);
 }
 
 .item-row input[type='checkbox'] {
@@ -400,6 +416,20 @@ h2 {
   .btn-save,
   .btn-cancel {
     width: 100%;
+  }
+
+  .input-row {
+    flex-wrap: wrap;
+  }
+
+  .input-text {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .btn-add {
+    flex: 0 0 auto;
+    min-width: 60px;
   }
 
   h1 {
