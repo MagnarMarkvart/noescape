@@ -1,5 +1,10 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   DailyTaskSlot,
@@ -11,7 +16,10 @@ import {
 import {
   DAY_TASK_GOAL,
   DAY_TIME_GOAL_MINUTES,
+  actualTaskMinutes,
+  actualTimeSummary,
   formatAssignedHours,
+  formatTimeDelta,
 } from './day-score';
 
 const IMPORTANCE_LABEL: Record<TaskImportance, string> = {
@@ -64,6 +72,27 @@ const IMPORTANCE_LABEL: Record<TaskImportance, string> = {
       </dl>
 
       @if (tasks().length) {
+        <section class="spent" aria-label="Time actually spent" [attr.data-state]="spentState()">
+          <p class="spent-label">Time spent</p>
+          <p class="spent-main">
+            <strong>{{ formatHours(actual().actualMinutes) }}</strong>
+            <span class="of">of {{ formatHours(actual().goalMinutes) }}</span>
+            <span class="delta">— {{ goalDelta() }}</span>
+          </p>
+          <div class="spent-bar" aria-hidden="true">
+            <span [style.width.%]="spentPercent()"></span>
+          </div>
+          <p class="spent-sub">
+            Planned {{ formatHours(actual().plannedMinutes) }}
+            · {{ plannedDelta() }}
+            @if (actual().assumedCount > 0) {
+              · {{ actual().assumedCount }} assumed at planned time
+            }
+          </p>
+        </section>
+      }
+
+      @if (tasks().length) {
         <ul class="tasks">
           @for (slot of tasks(); track slot.importance + ':' + slot.slotIndex) {
             <li [class.done]="slot.completed" [class.miss]="!slot.completed">
@@ -72,12 +101,16 @@ const IMPORTANCE_LABEL: Record<TaskImportance, string> = {
                 <strong>{{ slot.title }}</strong>
                 <span class="meta">
                   {{ importanceLabel(slot.importance) }}
-                  · {{ formatDuration(slot.durationMinutes) }}
-                  @if ((slot.elapsedMs ?? 0) > 0) {
-                    · timed
-                  }
                   @if (skillLine(slot); as skills) {
                     · {{ skills }}
+                  }
+                </span>
+                <span class="time-row">
+                  <span>Planned {{ formatDuration(slot.durationMinutes) }}</span>
+                  @if (taskActual(slot); as spent) {
+                    <span class="actual" [class.assumed]="spent.assumed">
+                      Actual {{ spent.label }}{{ spent.assumed ? ' (assumed)' : '' }}
+                    </span>
                   }
                 </span>
               </span>
@@ -218,6 +251,66 @@ const IMPORTANCE_LABEL: Record<TaskImportance, string> = {
     .body strong { font-size: 0.92rem; }
     .meta { color: var(--rs-muted); font-size: 0.78rem; }
 
+    .time-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.15rem 0.7rem;
+      font-size: 0.78rem;
+      color: var(--rs-muted);
+    }
+    .time-row .actual { color: var(--rs-accent); }
+    .time-row .actual.assumed { color: var(--rs-muted); font-style: italic; }
+
+    .spent {
+      margin: 0.95rem 0 0;
+      padding: 0.7rem 0.8rem;
+      border: 1px solid rgba(212, 168, 75, 0.45);
+      background: rgba(16, 12, 8, 0.45);
+      min-width: 0;
+    }
+    .spent-label {
+      margin: 0;
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--rs-muted);
+    }
+    .spent-main {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.2rem 0.45rem;
+      margin: 0.2rem 0 0;
+      font-family: var(--font-display);
+      color: var(--rs-accent);
+    }
+    .spent-main strong { font-size: 1.5rem; font-weight: 600; }
+    .spent-main .of { font-size: 1rem; color: var(--rs-text); }
+    .spent-main .delta { font-size: 0.95rem; }
+    .spent[data-state='short'] .delta { color: var(--rs-bad); }
+    .spent[data-state='met'] .delta { color: #6ecf6a; }
+    .spent-bar {
+      height: 6px;
+      margin: 0.5rem 0 0;
+      border: 1px solid rgba(138, 115, 64, 0.6);
+      background: rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+    }
+    .spent-bar span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #8a7340, var(--rs-accent));
+    }
+    .spent[data-state='met'] .spent-bar span {
+      background: linear-gradient(90deg, #2f8f3a, #6ecf6a);
+    }
+    .spent-sub {
+      margin: 0.45rem 0 0;
+      font-size: 0.8rem;
+      color: var(--rs-muted);
+      line-height: 1.4;
+    }
+
     .board-link {
       display: inline-block;
       margin-top: 0.85rem;
@@ -243,6 +336,36 @@ export class DailyDayCard {
   protected readonly formatHours = formatAssignedHours;
   protected readonly formatDuration = formatTaskDuration;
   protected readonly skillLine = dailySkillLine;
+
+  protected readonly actual = computed(() => actualTimeSummary(this.tasks()));
+  protected readonly goalDelta = computed(() =>
+    formatTimeDelta(this.actual().deltaGoalMinutes),
+  );
+  protected readonly plannedDelta = computed(() => {
+    const delta = this.actual().deltaPlannedMinutes;
+    return delta === 0
+      ? 'as planned'
+      : formatTimeDelta(delta, 'under plan').replace(' over', ' over plan');
+  });
+  protected readonly spentState = computed(() =>
+    this.actual().deltaGoalMinutes >= 0 ? 'met' : 'short',
+  );
+  protected readonly spentPercent = computed(() => {
+    const { actualMinutes, goalMinutes } = this.actual();
+    return goalMinutes > 0
+      ? Math.min(100, Math.round((actualMinutes / goalMinutes) * 100))
+      : 0;
+  });
+
+  protected taskActual(
+    slot: DailyTaskSlot,
+  ): { label: string; assumed: boolean } | null {
+    const spent = actualTaskMinutes(slot);
+    if (!slot.completed && spent.minutes === 0) {
+      return null;
+    }
+    return { label: formatTaskDuration(spent.minutes), assumed: spent.assumed };
+  }
 
   protected importanceLabel(importance: TaskImportance): string {
     return IMPORTANCE_LABEL[importance] ?? importance;

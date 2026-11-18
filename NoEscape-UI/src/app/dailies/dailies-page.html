@@ -394,6 +394,7 @@
                                   @if (pendingElapsedId() === slot.id) {
                                     <app-elapsed-complete
                                       [minutes]="pendingMinutes()"
+                                      [plannedMinutes]="slot.durationMinutes"
                                       [busy]="completingId() === slot.id"
                                       (minutesChange)="pendingMinutes.set($event)"
                                       (confirm)="confirmElapsedComplete()"
