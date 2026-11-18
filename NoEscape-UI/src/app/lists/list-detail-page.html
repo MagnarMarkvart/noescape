@@ -6,17 +6,24 @@
       <div class="edit-form">
         <input
           type="text"
+          id="list-icon-input"
+          name="icon"
           [(ngModel)]="editIcon"
           placeholder="Icon"
           class="input-icon"
           maxlength="4"
+          autocomplete="off"
         />
         <input
           type="text"
+          id="list-name-input"
+          name="name"
           [(ngModel)]="editName"
           placeholder="List name"
           class="input-name"
           maxlength="120"
+          autocomplete="off"
+          required
         />
         <label class="toggle-main">
           <input type="checkbox" [(ngModel)]="editIsMain" />

@@ -175,6 +175,16 @@ export class ListsService {
       throw new BadRequestException('Item title is required');
     }
 
+    const normalized = this.normalizeTitle(trimmed);
+    const existing = list.items.find(
+      (item) => !item.done && this.normalizeTitle(item.title) === normalized,
+    );
+    if (existing) {
+      throw new BadRequestException(
+        'An active item with this title already exists',
+      );
+    }
+
     const nextOrder =
       list.items.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1;
 
@@ -493,7 +503,9 @@ export class ListsService {
       updatedAt: item.updatedAt.toISOString(),
     }));
 
-    const memory = this.rankMemories(row.itemMemory);
+    const memory = row.suggestionsEnabled
+      ? this.rankMemories(row.itemMemory)
+      : [];
 
     const activeCount = row.items.filter((item) => !item.done).length;
     const doneCount = row.items.filter((item) => item.done).length;
