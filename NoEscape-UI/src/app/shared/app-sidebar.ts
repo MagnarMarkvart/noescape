@@ -117,6 +117,9 @@ import { AppShellService } from './app-shell.service';
           <a routerLink="/scriptorium" routerLinkActive="active">
             Scriptorium
           </a>
+          <a routerLink="/lists" routerLinkActive="active">
+            Lists
+          </a>
           <a routerLink="/horologium" routerLinkActive="active">
             Horologium
           </a>
