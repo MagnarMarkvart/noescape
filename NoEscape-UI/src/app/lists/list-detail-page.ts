@@ -11,6 +11,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { UiConfirm } from '../shared/ui/ui-confirm';
 import {
   DEFAULT_LIST_ICON,
+  LIST_ICON_CHOICES,
   ListDetailView,
   ListItemMemoryView,
   ListItemView,
@@ -46,6 +47,9 @@ export class ListDetailPage implements OnInit {
   protected readonly busyItemId = signal<number | null>(null);
   protected readonly isUpdating = signal(false);
   protected readonly DEFAULT_ICON = DEFAULT_LIST_ICON;
+  protected readonly ICON_CHOICES = LIST_ICON_CHOICES;
+  protected readonly isNew = signal(false);
+  protected readonly deleting = signal(false);
 
   protected readonly activeItems = computed(() =>
     (this.list()?.items ?? []).filter((item) => !item.done),
@@ -85,8 +89,10 @@ export class ListDetailPage implements OnInit {
   });
 
   ngOnInit(): void {
+    // The 'lists/new' route has no :id param, so paramMap.get('id') is null.
+    // Number(null) === 0 used to fail the id check and bounce back to /lists.
     const idParam = this.route.snapshot.paramMap.get('id');
-    if (idParam === 'new') {
+    if (idParam === null || idParam === 'new') {
       this.createNewList();
       return;
     }
@@ -122,6 +128,7 @@ export class ListDetailPage implements OnInit {
   }
 
   private createNewList(): void {
+    this.isNew.set(true);
     this.isEditing.set(true);
     this.editName.set('');
     this.editIcon.set(DEFAULT_LIST_ICON);
@@ -138,6 +145,34 @@ export class ListDetailPage implements OnInit {
     this.editName.set(list.name);
     this.editIcon.set(list.icon || DEFAULT_LIST_ICON);
     this.editIsMain.set(list.isMain);
+  }
+
+  protected pickIcon(icon: string): void {
+    this.editIcon.set(icon);
+  }
+
+  protected deleteList(): void {
+    const list = this.list();
+    if (!list || this.deleting()) {
+      return;
+    }
+    const ok = window.confirm(
+      `Delete "${list.name}"? All items and memory will be permanently deleted.`,
+    );
+    if (!ok) {
+      return;
+    }
+    this.deleting.set(true);
+    this.api.remove(list.id).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        void this.router.navigate(['/lists'], { replaceUrl: true });
+      },
+      error: () => {
+        this.deleting.set(false);
+        this.error.set('Could not delete list');
+      },
+    });
   }
 
   protected cancelEdit(): void {
@@ -157,7 +192,7 @@ export class ListDetailPage implements OnInit {
 
     const payload = {
       name,
-      icon: this.editIcon().trim() || null,
+      icon: this.editIcon().trim().slice(0, 16) || null,
       isMain: this.editIsMain(),
     };
 
@@ -168,8 +203,8 @@ export class ListDetailPage implements OnInit {
             replaceUrl: true,
           });
         },
-        error: () => {
-          this.error.set('Could not create list');
+        error: (err: { error?: { message?: string } }) => {
+          this.error.set(err?.error?.message ?? 'Could not create list');
         },
       });
     } else {

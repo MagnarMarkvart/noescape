@@ -50,13 +50,6 @@
                 >
                   →
                 </button>
-                <button
-                  class="btn-icon btn-danger"
-                  title="Delete list"
-                  (click)="askDelete(list, $event)"
-                >
-                  ×
-                </button>
               </div>
             </div>
 
@@ -103,16 +96,3 @@
     }
   }
 </div>
-
-@if (confirm(); as c) {
-  <app-ui-confirm
-    [title]="confirmTitle"
-    [body]="confirmMessage"
-    [confirmLabel]="'Delete'"
-    [tone]="'danger'"
-    [busy]="!!busyId()"
-    (confirm)="runConfirm()"
-    (dismiss)="cancelConfirm()"
-    (secondary)="cancelConfirm()"
-  />
-}
