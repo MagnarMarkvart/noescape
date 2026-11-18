@@ -13,9 +13,9 @@ echo "🔧 Backend — installing deps..."
 cd no-escape-back
 npm ci 2>/dev/null || npm install
 
-echo "🗄️ Running Prisma migrations..."
-npx prisma migrate deploy
+echo "🗄️ Running Prisma push..."
 npx prisma generate
+npx prisma db push
 
 echo "🌱 Seeding catalog (skills, rewards, quests)..."
 npx prisma db seed

@@ -25,16 +25,19 @@ jobs:
             no-escape-back/package-lock.json
             NoEscape-UI/package-lock.json
 
+      - name: Copy .env from live deployment
+        run: cp ~/dev/noescape/no-escape-back/.env no-escape-back/.env
+
       - name: Backend — install deps
         run: |
           cd no-escape-back
           npm ci
 
-      - name: Backend — Prisma migrate & generate
+      - name: Backend — Prisma generate & push
         run: |
           cd no-escape-back
           npx prisma generate
-          npx prisma migrate deploy
+          npx prisma db push
 
       - name: Backend — build
         run: |
