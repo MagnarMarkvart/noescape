@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: self-hosted
@@ -25,13 +29,21 @@ jobs:
             no-escape-back/package-lock.json
             NoEscape-UI/package-lock.json
 
-      # Server .env only. Never .env.example — that file is the local Docker database.
-      - name: Copy .env from live deployment
-        run: cp ~/dev/noescape/no-escape-back/.env no-escape-back/.env
+      # The runner workspace and ~/dev/noescape are not the same directory.
+      # PM2 serves the live tree, so the build has to happen there.
+      # .env is gitignored and stays on the server. .env.example is local Docker only.
+      - name: Update the live checkout
+        run: |
+          set -euo pipefail
+          cd "$HOME/dev/noescape"
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
 
       - name: Refuse a local database URL
         run: |
-          db_url=$(grep -E '^DATABASE_URL=' no-escape-back/.env || true)
+          set -euo pipefail
+          db_url=$(grep -E '^DATABASE_URL=' "$HOME/dev/noescape/no-escape-back/.env" || true)
           case "$db_url" in
             *127.0.0.1*|*localhost*|*file:*)
               echo "Refusing to deploy: DATABASE_URL points at a local database."
@@ -43,31 +55,26 @@ jobs:
               ;;
           esac
 
-      - name: Backend — install deps
+      - name: Backend — install, push schema, build
         run: |
-          cd no-escape-back
+          set -euo pipefail
+          cd "$HOME/dev/noescape/no-escape-back"
           npm ci
-
-      - name: Backend — Prisma generate and push
-        run: |
-          cd no-escape-back
           npx prisma generate
           npx prisma db push
-
-      - name: Backend — build
-        run: |
-          cd no-escape-back
           npm run build
 
-      - name: Frontend — install deps
+      - name: Frontend — install and build
         run: |
-          cd NoEscape-UI
+          set -euo pipefail
+          cd "$HOME/dev/noescape/NoEscape-UI"
           npm ci
-
-      - name: Frontend — build (production)
-        run: |
-          cd NoEscape-UI
           npx ng build --configuration production
 
-      - name: Restart PM2
-        run: pm2 restart noescape
+      - name: Restart PM2 from the live tree
+        run: |
+          set -euo pipefail
+          cd "$HOME/dev/noescape"
+          pm2 delete noescape >/dev/null 2>&1 || true
+          pm2 start ecosystem.config.json
+          pm2 save

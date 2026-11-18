@@ -45,8 +45,13 @@ echo "🏗️ Building frontend (production)..."
 npx ng build --configuration production
 
 echo ""
-echo "🔄 Restarting PM2 process..."
-pm2 restart noescape
+echo "🔄 Restarting PM2 from the live tree..."
+cd ~/dev/noescape
+if pm2 describe noescape >/dev/null 2>&1; then
+  pm2 delete noescape
+fi
+pm2 start ecosystem.config.json
+pm2 save
 
 echo ""
 echo "✅ Deploy complete!"
