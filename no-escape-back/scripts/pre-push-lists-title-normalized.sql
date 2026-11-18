@@ -90,18 +90,16 @@ END $$;
 -- Step 5: Drop old unique constraint if it exists
 DO $$
 BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'ListItemMemory_listId_title_key'
-        AND conrelid = 'ListItemMemory'::regclass
-    ) THEN
+    -- Try to drop the constraint, ignore if it doesn't exist
+    BEGIN
         ALTER TABLE "ListItemMemory" 
-        DROP CONSTRAINT "ListItemMemory_listId_title_key";
+        DROP CONSTRAINT IF EXISTS "ListItemMemory_listId_title_key";
         
-        RAISE NOTICE 'Dropped old ListItemMemory_listId_title_key constraint';
-    ELSE
-        RAISE NOTICE 'Old constraint ListItemMemory_listId_title_key does not exist';
-    END IF;
+        RAISE NOTICE 'Dropped old ListItemMemory_listId_title_key constraint (if it existed)';
+    EXCEPTION
+        WHEN undefined_object THEN
+            RAISE NOTICE 'Old constraint ListItemMemory_listId_title_key does not exist';
+    END;
 END $$;
 
 -- Step 6: Create new unique constraint with Prisma's naming convention if it doesn't exist
@@ -110,7 +108,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint 
         WHERE conname = 'ListItemMemory_listId_titleNormalized_key'
-        AND conrelid = 'ListItemMemory'::regclass
+        AND conrelid = '"ListItemMemory"'::regclass
     ) THEN
         ALTER TABLE "ListItemMemory" 
         ADD CONSTRAINT "ListItemMemory_listId_titleNormalized_key" 
