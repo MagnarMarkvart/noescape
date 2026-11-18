@@ -6,17 +6,24 @@
       <div class="edit-form">
         <input
           type="text"
+          id="list-icon-input"
+          name="icon"
           [(ngModel)]="editIcon"
           placeholder="Icon"
           class="input-icon"
           maxlength="4"
+          autocomplete="off"
         />
         <input
           type="text"
+          id="list-name-input"
+          name="name"
           [(ngModel)]="editName"
           placeholder="List name"
           class="input-name"
           maxlength="120"
+          autocomplete="off"
+          required
         />
         <label class="toggle-main">
           <input type="checkbox" [(ngModel)]="editIsMain" />
@@ -162,34 +169,38 @@
             placeholder="Search memory..."
             class="input-search"
           />
-          <div class="memory-list">
-            @for (mem of filteredMemory(); track mem.id) {
-              <div class="memory-row">
-                <div class="memory-info">
-                  <span class="memory-title">{{ mem.title }}</span>
-                  <span class="memory-meta"
-                    >×{{ mem.useCount }} · score {{ mem.score }}</span
-                  >
+          @if (filteredMemory().length === 0) {
+            <p class="empty-message">No matches found</p>
+          } @else {
+            <div class="memory-list">
+              @for (mem of filteredMemory(); track mem.id) {
+                <div class="memory-row">
+                  <div class="memory-info">
+                    <span class="memory-title">{{ mem.title }}</span>
+                    <span class="memory-meta"
+                      >×{{ mem.useCount }} · score {{ mem.score }}</span
+                    >
+                  </div>
+                  <div class="memory-actions">
+                    <button
+                      class="btn-icon-sm"
+                      title="Add back"
+                      (click)="restoreMemory(mem)"
+                    >
+                      ↶
+                    </button>
+                    <button
+                      class="btn-icon-sm btn-danger"
+                      title="Delete"
+                      (click)="askDeleteMemory(mem)"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
-                <div class="memory-actions">
-                  <button
-                    class="btn-icon-sm"
-                    title="Add back"
-                    (click)="restoreMemory(mem)"
-                  >
-                    ↶
-                  </button>
-                  <button
-                    class="btn-icon-sm btn-danger"
-                    title="Delete"
-                    (click)="askDeleteMemory(mem)"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            }
-          </div>
+              }
+            </div>
+          }
         </section>
       }
     </div>

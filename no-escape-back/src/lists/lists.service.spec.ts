@@ -328,7 +328,7 @@ describe('ListsService', () => {
         useCount: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
-      } as any);
+      });
       jest.spyOn(prisma.listItemMemory, 'update').mockResolvedValue({} as any);
 
       await service.updateItem(1, 1, { done: true });
@@ -380,15 +380,11 @@ describe('ListsService', () => {
         updatedAt: new Date(),
       };
 
-      jest
-        .spyOn(prisma.list, 'findUnique')
-        .mockResolvedValue(mockList as any);
-      jest
-        .spyOn(prisma.listItem, 'create')
-        .mockResolvedValue(mockItem as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
+      jest.spyOn(prisma.listItem, 'create').mockResolvedValue(mockItem);
       jest
         .spyOn(prisma.listItemMemory, 'findUnique')
-        .mockResolvedValue(mockMemory as any);
+        .mockResolvedValue(mockMemory);
       jest.spyOn(prisma.listItemMemory, 'update').mockResolvedValue({} as any);
 
       await service.addItem(1, 'Milk');

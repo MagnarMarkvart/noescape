@@ -93,12 +93,37 @@ export class ListsPage implements OnInit {
 
   protected toggleItemDone(listId: number, itemId: number, done: boolean, event: Event): void {
     event.stopPropagation();
+
+    const currentDetail = this.expandedListDetail();
+    if (!currentDetail) {
+      return;
+    }
+
+    const optimisticDetail = { ...currentDetail };
+    optimisticDetail.items = currentDetail.items.map((item) =>
+      item.id === itemId ? { ...item, done: !done } : item,
+    );
+    this.expandedListDetail.set(optimisticDetail);
+
+    const optimisticLists = this.lists().map((list) => {
+      if (list.id !== listId) {
+        return list;
+      }
+      return {
+        ...list,
+        activeCount: done ? list.activeCount + 1 : list.activeCount - 1,
+        doneCount: done ? list.doneCount - 1 : list.doneCount + 1,
+      };
+    });
+    this.lists.set(optimisticLists);
+
     this.api.updateItem(listId, itemId, { done: !done }).subscribe({
       next: (updated) => {
         this.expandedListDetail.set(updated);
-        this.reload();
       },
       error: () => {
+        this.expandedListDetail.set(currentDetail);
+        this.reload();
         this.error.set('Could not update item');
       },
     });

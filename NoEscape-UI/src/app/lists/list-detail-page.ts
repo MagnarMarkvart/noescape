@@ -44,6 +44,7 @@ export class ListDetailPage implements OnInit {
   protected readonly editIsMain = signal(false);
   protected readonly confirm = signal<ItemConfirm | null>(null);
   protected readonly busyItemId = signal<number | null>(null);
+  protected readonly isUpdating = signal(false);
   protected readonly DEFAULT_ICON = DEFAULT_LIST_ICON;
 
   protected readonly activeItems = computed(() =>
@@ -57,10 +58,19 @@ export class ListDetailPage implements OnInit {
   protected readonly filteredSuggestions = computed(() => {
     const query = this.newItemTitle().trim().toLowerCase();
     const memories = this.list()?.memory ?? [];
+    const activeItems = this.activeItems();
+    const activeTitlesNormalized = new Set(
+      activeItems.map((item) => item.title.trim().toLowerCase()),
+    );
+
+    const availableMemories = memories.filter(
+      (mem) => !activeTitlesNormalized.has(mem.title.trim().toLowerCase()),
+    );
+
     if (!query) {
-      return memories.slice(0, 5);
+      return availableMemories.slice(0, 5);
     }
-    return memories
+    return availableMemories
       .filter((mem) => mem.title.toLowerCase().includes(query))
       .slice(0, 5);
   });
@@ -157,7 +167,6 @@ export class ListDetailPage implements OnInit {
           void this.router.navigate(['/lists', created.id], {
             replaceUrl: true,
           });
-          this.loadList(created.id);
         },
         error: () => {
           this.error.set('Could not create list');
@@ -187,23 +196,38 @@ export class ListDetailPage implements OnInit {
       return;
     }
 
+    this.isUpdating.set(true);
     this.api.addItem(list.id, title).subscribe({
       next: (updated) => {
         this.list.set(updated);
         this.newItemTitle.set('');
         this.error.set(null);
+        this.isUpdating.set(false);
       },
-      error: () => {
-        this.error.set('Could not add item');
+      error: (err) => {
+        this.isUpdating.set(false);
+        const message =
+          err?.error?.message ?? 'Could not add item';
+        this.error.set(message);
       },
     });
   }
 
   protected toggleItemDone(item: ListItemView): void {
+    if (this.busyItemId()) {
+      return;
+    }
+
     const list = this.list();
     if (!list) {
       return;
     }
+
+    const optimisticList = { ...list };
+    optimisticList.items = list.items.map((i) =>
+      i.id === item.id ? { ...i, done: !i.done } : i,
+    );
+    this.list.set(optimisticList);
 
     this.busyItemId.set(item.id);
     this.api.updateItem(list.id, item.id, { done: !item.done }).subscribe({
@@ -213,6 +237,7 @@ export class ListDetailPage implements OnInit {
         this.error.set(null);
       },
       error: () => {
+        this.list.set(list);
         this.busyItemId.set(null);
         this.error.set('Could not update item');
       },
@@ -318,6 +343,13 @@ export class ListDetailPage implements OnInit {
       return;
     }
 
+    const optimisticList = {
+      ...list,
+      suggestionsEnabled: !list.suggestionsEnabled,
+      memory: !list.suggestionsEnabled ? list.memory : [],
+    };
+    this.list.set(optimisticList);
+
     this.api
       .update(list.id, { suggestionsEnabled: !list.suggestionsEnabled })
       .subscribe({
@@ -325,6 +357,7 @@ export class ListDetailPage implements OnInit {
           this.reload();
         },
         error: () => {
+          this.list.set(list);
           this.error.set('Could not update suggestions');
         },
       });
