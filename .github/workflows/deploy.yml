@@ -96,6 +96,8 @@ jobs:
           . ./.pg-runtime.env
           set +a
           rm -f .pg-runtime.env
+          # Run pre-push migration for Lists titleNormalized column
+          npx prisma db execute --schema prisma/schema.prisma --file scripts/pre-push-lists-title-normalized.sql
           npx prisma db push
           npx prisma db execute --schema prisma/schema.prisma --file scripts/repair-id-sequences.sql
           npm run build
