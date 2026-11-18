@@ -1,5 +1,5 @@
-<div class="list-detail-page">
-  <header class="page-header">
+<div class="detail-shell">
+  <header class="toolbar">
     <a routerLink="/lists" class="back-link">← Lists</a>
 
     @if (isEditing()) {
@@ -18,8 +18,12 @@
           class="input-name"
           maxlength="120"
         />
-        <button class="btn-primary" (click)="saveList()">Save</button>
-        <button class="btn-secondary" (click)="cancelEdit()">Cancel</button>
+        <label class="toggle-main">
+          <input type="checkbox" [(ngModel)]="editIsMain" />
+          <span>Main list</span>
+        </label>
+        <button class="btn-save" (click)="saveList()">Save</button>
+        <button class="btn-cancel" (click)="cancelEdit()">Cancel</button>
       </div>
     } @else {
       @if (list(); as l) {
@@ -31,7 +35,7 @@
               <span class="main-badge">Main</span>
             }
           </h1>
-          <button class="btn-icon" title="Edit list" (click)="startEdit()">
+          <button class="btn-icon" title="Edit" (click)="startEdit()">
             ✏️
           </button>
         </div>
@@ -46,56 +50,55 @@
   }
 
   @if (loading()) {
-    <div class="loading">Loading list...</div>
+    <div class="loading">Loading...</div>
   } @else if (list(); as l) {
-    <div class="list-content">
-      <div class="add-item-section">
-        <div class="input-wrapper">
+    <div class="content-grid">
+      <section class="add-section panel">
+        <h2>Add Item</h2>
+        <div class="input-row">
           <input
             type="text"
             [(ngModel)]="newItemTitle"
-            placeholder="Add new item..."
-            class="input-new-item"
+            placeholder="New item..."
+            class="input-text"
             (keydown.enter)="addItem()"
           />
           <button class="btn-add" (click)="addItem()">Add</button>
         </div>
 
-        @if (filteredSuggestions().length > 0) {
+        @if (l.suggestionsEnabled && filteredSuggestions().length > 0) {
           <div class="suggestions">
-            <div class="suggestions-label">Suggestions from memory:</div>
-            <div class="suggestions-list">
+            <p class="suggestions-label">Suggestions:</p>
+            <div class="suggestions-grid">
               @for (mem of filteredSuggestions(); track mem.id) {
                 <button
-                  class="suggestion-item"
+                  class="suggestion-chip"
                   (click)="selectSuggestion(mem)"
                 >
                   <span>{{ mem.title }}</span>
-                  <span class="suggestion-meta"
-                    >{{ mem.useCount }}× · {{ mem.score }} score</span
-                  >
+                  <span class="suggestion-meta">×{{ mem.useCount }}</span>
                 </button>
               }
             </div>
           </div>
         }
-      </div>
+      </section>
 
-      <div class="list-settings">
-        <label class="checkbox-label">
+      <section class="settings-section panel">
+        <label class="toggle-label">
           <input
             type="checkbox"
             [checked]="l.suggestionsEnabled"
             (change)="toggleSuggestions()"
           />
-          <span>Enable suggestions (remember completed items)</span>
+          <span>Remember completed items for suggestions</span>
         </label>
-      </div>
+      </section>
 
-      <div class="items-section">
-        <h2>Active Items ({{ activeItems().length }})</h2>
+      <section class="items-section panel">
+        <h2>Active ({{ activeItems().length }})</h2>
         @if (activeItems().length === 0) {
-          <p class="empty-message">No active items. Add some above!</p>
+          <p class="empty-message">No active items</p>
         } @else {
           <div class="items-list">
             @for (item of activeItems(); track item.id) {
@@ -108,23 +111,23 @@
                 />
                 <span class="item-title">{{ item.title }}</span>
                 <button
-                  class="btn-icon btn-danger"
-                  title="Delete item"
+                  class="btn-icon-sm btn-danger"
+                  title="Delete"
                   [disabled]="busyItemId() === item.id"
                   (click)="askDeleteItem(item)"
                 >
-                  🗑️
+                  ×
                 </button>
               </div>
             }
           </div>
         }
-      </div>
+      </section>
 
-      <div class="items-section">
-        <h2>Done Items ({{ doneItems().length }})</h2>
+      <section class="items-section panel">
+        <h2>Done ({{ doneItems().length }})</h2>
         @if (doneItems().length === 0) {
-          <p class="empty-message">No done items yet.</p>
+          <p class="empty-message">No done items</p>
         } @else {
           <div class="items-list">
             @for (item of doneItems(); track item.id) {
@@ -137,33 +140,57 @@
                 />
                 <span class="item-title">{{ item.title }}</span>
                 <button
-                  class="btn-icon btn-danger"
-                  title="Delete item"
+                  class="btn-icon-sm btn-danger"
+                  title="Delete"
                   [disabled]="busyItemId() === item.id"
                   (click)="askDeleteItem(item)"
                 >
-                  🗑️
+                  ×
                 </button>
               </div>
             }
           </div>
         }
-      </div>
+      </section>
 
-      @if (l.memory.length > 0) {
-        <div class="memory-section">
-          <h2>Memory ({{ l.memory.length }} items)</h2>
+      @if (l.suggestionsEnabled && l.memory.length > 0) {
+        <section class="memory-section panel">
+          <h2>Memory ({{ l.memory.length }})</h2>
+          <input
+            type="text"
+            [(ngModel)]="memoryQuery"
+            placeholder="Search memory..."
+            class="input-search"
+          />
           <div class="memory-list">
-            @for (mem of l.memory; track mem.id) {
-              <div class="memory-item">
-                <span class="memory-title">{{ mem.title }}</span>
-                <span class="memory-meta"
-                  >Used {{ mem.useCount }}× · Score: {{ mem.score }}</span
-                >
+            @for (mem of filteredMemory(); track mem.id) {
+              <div class="memory-row">
+                <div class="memory-info">
+                  <span class="memory-title">{{ mem.title }}</span>
+                  <span class="memory-meta"
+                    >×{{ mem.useCount }} · score {{ mem.score }}</span
+                  >
+                </div>
+                <div class="memory-actions">
+                  <button
+                    class="btn-icon-sm"
+                    title="Add back"
+                    (click)="restoreMemory(mem)"
+                  >
+                    ↶
+                  </button>
+                  <button
+                    class="btn-icon-sm btn-danger"
+                    title="Delete"
+                    (click)="askDeleteMemory(mem)"
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
             }
           </div>
-        </div>
+        </section>
       }
     </div>
   }

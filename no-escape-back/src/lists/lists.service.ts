@@ -25,6 +25,7 @@ type ListRow = {
   itemMemory: Array<{
     id: number;
     title: string;
+    titleNormalized: string;
     lastUsedAt: Date;
     useCount: number;
     createdAt: Date;
@@ -181,6 +182,10 @@ export class ListsService {
       data: { listId, title: trimmed, sortOrder: nextOrder },
     });
 
+    if (list.suggestionsEnabled) {
+      await this.upsertMemory(listId, trimmed, true);
+    }
+
     return this.getOne(listId);
   }
 
@@ -210,8 +215,8 @@ export class ListsService {
     if (typeof input.done === 'boolean') {
       data.done = input.done;
 
-      if (input.done === true && !existing.done && list.suggestionsEnabled) {
-        await this.upsertMemory(listId, existing.title);
+      if (input.done === true && list.suggestionsEnabled) {
+        await this.updateMemoryLastUsed(listId, existing.title);
       }
     }
 
@@ -265,7 +270,11 @@ export class ListsService {
     listId: number,
     query?: string,
   ): Promise<ListItemMemoryView[]> {
-    await this.load(listId);
+    const list = await this.load(listId);
+
+    if (!list.suggestionsEnabled) {
+      return [];
+    }
 
     const memories = await this.prisma.listItemMemory.findMany({
       where: { listId },
@@ -310,12 +319,28 @@ export class ListsService {
       throw new NotFoundException(`Memory #${memoryId} not found`);
     }
 
+    const titleNormalized = this.normalizeTitle(memory.title);
+    const existingActive = list.items.find(
+      (item) =>
+        !item.done && this.normalizeTitle(item.title) === titleNormalized,
+    );
+
+    if (existingActive) {
+      throw new BadRequestException(
+        'An active item with this title already exists',
+      );
+    }
+
     const nextOrder =
       list.items.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1;
 
     await this.prisma.listItem.create({
       data: { listId, title: memory.title, sortOrder: nextOrder },
     });
+
+    if (list.suggestionsEnabled) {
+      await this.upsertMemory(listId, memory.title, true);
+    }
 
     return this.getOne(listId);
   }
@@ -341,22 +366,54 @@ export class ListsService {
     });
   }
 
-  private async upsertMemory(listId: number, title: string): Promise<void> {
+  private normalizeTitle(title: string): string {
+    return title.trim().toLowerCase();
+  }
+
+  private async upsertMemory(
+    listId: number,
+    title: string,
+    bumpCount: boolean,
+  ): Promise<void> {
+    const titleNormalized = this.normalizeTitle(title);
     const existing = await this.prisma.listItemMemory.findUnique({
-      where: { listId_title: { listId, title } },
+      where: { listId_titleNormalized: { listId, titleNormalized } },
     });
 
     if (existing) {
       await this.prisma.listItemMemory.update({
         where: { id: existing.id },
         data: {
-          useCount: existing.useCount + 1,
+          useCount: bumpCount ? existing.useCount + 1 : existing.useCount,
           lastUsedAt: new Date(),
         },
       });
     } else {
       await this.prisma.listItemMemory.create({
-        data: { listId, title, useCount: 1, lastUsedAt: new Date() },
+        data: {
+          listId,
+          title,
+          titleNormalized,
+          useCount: 1,
+          lastUsedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  private async updateMemoryLastUsed(
+    listId: number,
+    title: string,
+  ): Promise<void> {
+    const titleNormalized = this.normalizeTitle(title);
+    const existing = await this.prisma.listItemMemory.findUnique({
+      where: { listId_titleNormalized: { listId, titleNormalized } },
+    });
+
+    if (existing) {
+      await this.prisma.listItemMemory.update({
+        where: { id: existing.id },
+        data: { lastUsedAt: new Date() },
       });
     }
   }
@@ -373,6 +430,7 @@ export class ListsService {
     memories: Array<{
       id: number;
       title: string;
+      titleNormalized: string;
       lastUsedAt: Date;
       useCount: number;
       createdAt: Date;

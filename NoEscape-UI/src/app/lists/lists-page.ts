@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { UiConfirm } from '../shared/ui/ui-confirm';
-import { DEFAULT_LIST_ICON, ListView } from './lists.model';
+import { DEFAULT_LIST_ICON, ListDetailView, ListView } from './lists.model';
 import { ListsService } from './lists.service';
 
 type ListConfirm = { kind: 'delete'; list: ListView };
@@ -28,6 +28,7 @@ export class ListsPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly lists = signal<ListView[]>([]);
   protected readonly expandedListId = signal<number | null>(null);
+  protected readonly expandedListDetail = signal<ListDetailView | null>(null);
   protected readonly confirm = signal<ListConfirm | null>(null);
   protected readonly busyId = signal<number | null>(null);
   protected readonly DEFAULT_ICON = DEFAULT_LIST_ICON;
@@ -38,10 +39,6 @@ export class ListsPage implements OnInit {
 
   ngOnInit(): void {
     this.reload();
-    const mainList = this.lists().find((list) => list.isMain);
-    if (mainList) {
-      this.expandedListId.set(mainList.id);
-    }
   }
 
   protected reload(): void {
@@ -52,16 +49,14 @@ export class ListsPage implements OnInit {
         this.loading.set(false);
         this.error.set(null);
 
-        if (!this.expandedListId()) {
-          const mainList = rows.find((list) => list.isMain);
-          if (mainList) {
-            this.expandedListId.set(mainList.id);
-          }
+        const mainList = rows.find((list) => list.isMain);
+        if (mainList && !this.expandedListId()) {
+          this.expandList(mainList.id);
         }
       },
       error: () => {
         this.loading.set(false);
-        this.error.set('Could not load lists. Is the backend running?');
+        this.error.set('Could not load lists');
       },
     });
   }
@@ -69,9 +64,22 @@ export class ListsPage implements OnInit {
   protected toggleExpand(listId: number): void {
     if (this.expandedListId() === listId) {
       this.expandedListId.set(null);
+      this.expandedListDetail.set(null);
     } else {
-      this.expandedListId.set(listId);
+      this.expandList(listId);
     }
+  }
+
+  private expandList(listId: number): void {
+    this.expandedListId.set(listId);
+    this.api.getOne(listId).subscribe({
+      next: (detail) => {
+        this.expandedListDetail.set(detail);
+      },
+      error: () => {
+        this.error.set('Could not load list details');
+      },
+    });
   }
 
   protected isExpanded(listId: number): boolean {
@@ -81,6 +89,19 @@ export class ListsPage implements OnInit {
   protected navigateToDetail(listId: number, event: Event): void {
     event.stopPropagation();
     void this.router.navigate(['/lists', listId]);
+  }
+
+  protected toggleItemDone(listId: number, itemId: number, done: boolean, event: Event): void {
+    event.stopPropagation();
+    this.api.updateItem(listId, itemId, { done: !done }).subscribe({
+      next: (updated) => {
+        this.expandedListDetail.set(updated);
+        this.reload();
+      },
+      error: () => {
+        this.error.set('Could not update item');
+      },
+    });
   }
 
   protected askDelete(list: ListView, event: Event): void {
@@ -111,13 +132,14 @@ export class ListsPage implements OnInit {
         this.confirm.set(null);
         if (this.expandedListId() === list.id) {
           this.expandedListId.set(null);
+          this.expandedListDetail.set(null);
         }
         this.reload();
       },
       error: () => {
         this.busyId.set(null);
         this.confirm.set(null);
-        this.error.set('Could not delete the list.');
+        this.error.set('Could not delete list');
       },
     });
   }
@@ -133,7 +155,7 @@ export class ListsPage implements OnInit {
   protected get confirmMessage(): string {
     const pending = this.confirm();
     if (pending && pending.kind === 'delete') {
-      return 'All items and memory will be permanently deleted. This action cannot be undone.';
+      return 'All items and memory will be permanently deleted';
     }
     return '';
   }

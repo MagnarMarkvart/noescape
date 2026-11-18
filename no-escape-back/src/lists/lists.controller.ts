@@ -48,6 +48,14 @@ export class ListsController {
     return this.lists.addItem(id, body?.title ?? '');
   }
 
+  @Patch(':id/items/order')
+  reorderItems(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { ids?: number[] },
+  ) {
+    return this.lists.reorderItems(id, body?.ids ?? []);
+  }
+
   @Patch(':id/items/:itemId')
   updateItem(
     @Param('id', ParseIntPipe) id: number,
@@ -63,14 +71,6 @@ export class ListsController {
     @Param('itemId', ParseIntPipe) itemId: number,
   ) {
     return this.lists.removeItem(id, itemId);
-  }
-
-  @Patch(':id/items/order')
-  reorderItems(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { ids?: number[] },
-  ) {
-    return this.lists.reorderItems(id, body?.ids ?? []);
   }
 
   @Get(':id/memory')
