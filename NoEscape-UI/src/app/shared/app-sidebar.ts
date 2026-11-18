@@ -118,7 +118,7 @@ import { AppShellService } from './app-shell.service';
             Scriptorium
           </a>
           <a routerLink="/lists" routerLinkActive="active">
-            Lists
+            Inventarium
           </a>
           <a routerLink="/horologium" routerLinkActive="active">
             Horologium
@@ -453,7 +453,7 @@ export class AppSidebar implements OnInit {
       return 'SCRIPTORIUM';
     }
     if (path.startsWith('/lists')) {
-      return 'LISTS';
+      return 'INVENTARIUM';
     }
     if (path.startsWith('/level-ups')) {
       return 'LEVEL UPS';

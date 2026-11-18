@@ -1,6 +1,6 @@
 <div class="detail-shell">
   <header class="toolbar">
-    <a routerLink="/lists" class="back-link">← Lists</a>
+    <a routerLink="/lists" class="back-link">← Inventarium</a>
 
     @if (isEditing()) {
       <form class="edit-form" (submit)="$event.preventDefault(); saveList()">
@@ -47,10 +47,13 @@
           }
         </div>
         <div class="edit-actions">
-          <label class="toggle-main">
-            <input type="checkbox" name="isMain" [(ngModel)]="editIsMain" />
-            <span>Main list</span>
-          </label>
+          <app-rune-check
+            class="toggle-main"
+            [compact]="true"
+            label="Main list"
+            [checked]="editIsMain()"
+            (checkedChange)="editIsMain.set($event)"
+          />
           <button type="submit" class="btn-save">
             {{ isNew() ? 'Create' : 'Save' }}
           </button>
@@ -129,14 +132,11 @@
       </section>
 
       <section class="settings-section panel">
-        <label class="toggle-label">
-          <input
-            type="checkbox"
-            [checked]="l.suggestionsEnabled"
-            (change)="toggleSuggestions()"
-          />
-          <span>Remember completed items for suggestions</span>
-        </label>
+        <app-rune-check
+          label="Remember items for suggestions"
+          [checked]="l.suggestionsEnabled"
+          (checkedChange)="toggleSuggestions()"
+        />
       </section>
 
       <section class="items-section panel">
@@ -147,16 +147,17 @@
           <div class="items-list">
             @for (item of activeItems(); track item.id) {
               <div class="item-row">
-                <input
-                  type="checkbox"
+                <app-rune-check
+                  class="item-check"
                   [checked]="item.done"
                   [disabled]="busyItemId() === item.id"
-                  (change)="toggleItemDone(item)"
-                />
-                <span class="item-title">{{ item.title }}</span>
+                  (checkedChange)="toggleItemDone(item)"
+                  >{{ item.title }}</app-rune-check
+                >
                 <button
                   class="btn-icon-sm btn-danger"
                   title="Delete"
+                  [attr.aria-label]="'Delete ' + item.title"
                   [disabled]="busyItemId() === item.id"
                   (click)="askDeleteItem(item)"
                 >
@@ -168,78 +169,74 @@
         }
       </section>
 
-      <section class="items-section panel">
-        <h2>Done ({{ doneItems().length }})</h2>
-        @if (doneItems().length === 0) {
-          <p class="empty-message">No done items</p>
-        } @else {
-          <div class="items-list">
-            @for (item of doneItems(); track item.id) {
-              <div class="item-row done">
-                <input
-                  type="checkbox"
-                  [checked]="item.done"
-                  [disabled]="busyItemId() === item.id"
-                  (change)="toggleItemDone(item)"
-                />
-                <span class="item-title">{{ item.title }}</span>
-                <button
-                  class="btn-icon-sm btn-danger"
-                  title="Delete"
-                  [disabled]="busyItemId() === item.id"
-                  (click)="askDeleteItem(item)"
-                >
-                  ×
-                </button>
-              </div>
-            }
-          </div>
-        }
-      </section>
-
-      @if (l.suggestionsEnabled && l.memory.length > 0) {
-        <section class="memory-section panel">
-          <h2>Memory ({{ l.memory.length }})</h2>
+      <section class="history-section panel">
+        <h2>History ({{ historyRows().length }})</h2>
+        <p class="section-hint">
+          Done items and remembered items. Deleting here forgets the item
+          everywhere.
+        </p>
+        @if (historyRows().length > 0) {
           <input
             type="text"
             [(ngModel)]="memoryQuery"
-            placeholder="Search memory..."
+            placeholder="Search history..."
             class="input-search"
+            aria-label="Search history"
           />
-          @if (filteredMemory().length === 0) {
-            <p class="empty-message">No matches found</p>
-          } @else {
-            <div class="memory-list">
-              @for (mem of filteredMemory(); track mem.id) {
-                <div class="memory-row">
-                  <div class="memory-info">
-                    <span class="memory-title">{{ mem.title }}</span>
-                    <span class="memory-meta"
-                      >×{{ mem.useCount }} · score {{ mem.score }}</span
-                    >
+        }
+        @if (historyRows().length === 0) {
+          <p class="empty-message">No history yet</p>
+        } @else if (filteredHistory().length === 0) {
+          <p class="empty-message">No matches found</p>
+        } @else {
+          <div class="items-list">
+            @for (row of filteredHistory(); track row.key) {
+              <div class="item-row history-row" [class.done]="!!row.doneItem">
+                @if (row.doneItem; as done) {
+                  <app-rune-check
+                    class="item-check"
+                    [checked]="true"
+                    [disabled]="busyItemId() === done.id"
+                    (checkedChange)="toggleItemDone(done)"
+                  >
+                    <span class="history-title">{{ row.title }}</span>
+                    @if (row.memory; as mem) {
+                      <span class="history-meta">×{{ mem.useCount }}</span>
+                    }
+                  </app-rune-check>
+                } @else {
+                  <div class="history-info">
+                    <span class="history-title">{{ row.title }}</span>
+                    @if (row.memory; as mem) {
+                      <span class="history-meta">×{{ mem.useCount }}</span>
+                    }
                   </div>
-                  <div class="memory-actions">
-                    <button
-                      class="btn-icon-sm"
-                      title="Add back"
-                      (click)="restoreMemory(mem)"
-                    >
-                      ↶
-                    </button>
-                    <button
-                      class="btn-icon-sm btn-danger"
-                      title="Delete"
-                      (click)="askDeleteMemory(mem)"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              }
-            </div>
-          }
-        </section>
-      }
+                  @if (row.memory; as mem) {
+                    @if (!row.active) {
+                      <button
+                        class="btn-icon-sm"
+                        title="Add back to list"
+                        [attr.aria-label]="'Add ' + row.title + ' back'"
+                        (click)="restoreMemory(mem)"
+                      >
+                        ↶
+                      </button>
+                    }
+                  }
+                }
+                <button
+                  class="btn-icon-sm btn-danger"
+                  title="Delete from history"
+                  [attr.aria-label]="'Delete ' + row.title + ' from history'"
+                  (click)="askDeleteHistory(row)"
+                >
+                  ×
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </section>
     </div>
   }
 </div>

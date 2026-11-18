@@ -140,4 +140,72 @@ describe('ListsController Routes (e2e)', () => {
       expect(getRes.body.memory[0].title).toBe('Test Memory');
     });
   });
+
+  describe('unified history deletion', () => {
+    async function setup() {
+      const list = await request(app.getHttpServer())
+        .post('/lists')
+        .send({ name: 'History' })
+        .expect(201);
+      const id = list.body.id as number;
+      const add = await request(app.getHttpServer())
+        .post(`/lists/${id}/items`)
+        .send({ title: 'Milk' })
+        .expect(201);
+      const itemId = add.body.items[0].id as number;
+      await request(app.getHttpServer())
+        .patch(`/lists/${id}/items/${itemId}`)
+        .send({ done: true })
+        .expect(200);
+      return { id, itemId };
+    }
+
+    it('deleting a done item also deletes its memory entry', async () => {
+      const { id, itemId } = await setup();
+      const res = await request(app.getHttpServer())
+        .delete(`/lists/${id}/items/${itemId}`)
+        .expect(200);
+      expect(res.body.items).toHaveLength(0);
+      expect(res.body.memory).toHaveLength(0);
+      expect(await prisma.listItemMemory.count({ where: { listId: id } })).toBe(
+        0,
+      );
+    });
+
+    it('deleting a memory entry also removes done items with that title', async () => {
+      const { id } = await setup();
+      await request(app.getHttpServer())
+        .post(`/lists/${id}/items`)
+        .send({ title: 'Bread' })
+        .expect(201);
+      const detail = await request(app.getHttpServer()).get(`/lists/${id}`);
+      const milkMemory = detail.body.memory.find(
+        (m: { title: string }) => m.title === 'Milk',
+      );
+      const res = await request(app.getHttpServer())
+        .delete(`/lists/${id}/memory/${milkMemory.id}`)
+        .expect(200);
+      expect(res.body.items.map((i: { title: string }) => i.title)).toEqual([
+        'Bread',
+      ]);
+      expect(res.body.memory.map((m: { title: string }) => m.title)).toEqual([
+        'Bread',
+      ]);
+    });
+
+    it('deleting memory keeps an active item with the same title', async () => {
+      const { id } = await setup();
+      await request(app.getHttpServer())
+        .post(`/lists/${id}/items`)
+        .send({ title: 'milk' })
+        .expect(201);
+      const detail = await request(app.getHttpServer()).get(`/lists/${id}`);
+      const res = await request(app.getHttpServer())
+        .delete(`/lists/${id}/memory/${detail.body.memory[0].id}`)
+        .expect(200);
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0]).toMatchObject({ title: 'milk', done: false });
+      expect(res.body.memory).toHaveLength(0);
+    });
+  });
 });

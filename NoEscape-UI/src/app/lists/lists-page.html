@@ -1,8 +1,8 @@
 <div class="lists-shell">
   <header class="toolbar">
     <div>
-      <p class="kicker">Catalog</p>
-      <h1>Lists</h1>
+      <p class="kicker">Lists &amp; history</p>
+      <h1>Inventarium</h1>
     </div>
     <a routerLink="/lists/new" class="btn-forge">
       <span class="icon">+</span>
@@ -17,12 +17,12 @@
   }
 
   @if (loading()) {
-    <div class="loading">Loading lists...</div>
+    <div class="loading">Opening the Inventarium...</div>
   } @else {
     @if (sortedLists().length === 0) {
       <div class="empty-state">
         <div class="empty-icon">📝</div>
-        <p>No lists yet. Create your first list to get started.</p>
+        <p>The Inventarium is empty. Create your first list to get started.</p>
       </div>
     } @else {
       <div class="lists-grid">
@@ -69,15 +69,13 @@
                   <div class="preview-items">
                     @for (item of detail.items; track item.id) {
                       <div class="preview-item" [class.done]="item.done">
-                        <label class="item-check">
-                          <input
-                            type="checkbox"
-                            [checked]="item.done"
-                            (click)="$event.stopPropagation()"
-                            (change)="toggleItemDone(list.id, item.id, item.done, $event)"
-                          />
-                          <span>{{ item.title }}</span>
-                        </label>
+                        <app-rune-check
+                          class="item-check"
+                          [checked]="item.done"
+                          (click)="$event.stopPropagation()"
+                          (checkedChange)="toggleItemDone(list.id, item.id, item.done, $event)"
+                          >{{ item.title }}</app-rune-check
+                        >
                       </div>
                     }
                   </div>
