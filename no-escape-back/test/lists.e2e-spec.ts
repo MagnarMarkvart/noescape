@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -85,11 +85,11 @@ describe('ListsController (e2e)', () => {
     it('should return all lists', async () => {
       await request(app.getHttpServer())
         .post('/lists')
-        .send({ name: 'List 1', icon: '📝' });
+        .send({ name: 'List 1', icon: '📝', sortOrder: 0 });
 
       await request(app.getHttpServer())
         .post('/lists')
-        .send({ name: 'List 2', icon: '✅' });
+        .send({ name: 'List 2', icon: '✅', sortOrder: 1 });
 
       const response = await request(app.getHttpServer())
         .get('/lists')
@@ -353,7 +353,7 @@ describe('ListsController (e2e)', () => {
           listId,
           title: 'Milk',
           titleNormalized: 'milk',
-          useCount: 1,
+          useCount: 2,
           lastUsedAt: new Date(),
         },
       });
@@ -498,9 +498,9 @@ describe('ListsController (e2e)', () => {
 
       await prisma.listItemMemory.createMany({
         data: [
-          { listId, title: 'Milk', useCount: 1, lastUsedAt: new Date() },
-          { listId, title: 'Bread', useCount: 1, lastUsedAt: new Date() },
-          { listId, title: 'Eggs', useCount: 1, lastUsedAt: new Date() },
+          { listId, title: 'Milk', titleNormalized: 'milk', useCount: 1, lastUsedAt: new Date() },
+          { listId, title: 'Bread', titleNormalized: 'bread', useCount: 1, lastUsedAt: new Date() },
+          { listId, title: 'Eggs', titleNormalized: 'eggs', useCount: 1, lastUsedAt: new Date() },
         ],
       });
 
@@ -520,7 +520,7 @@ describe('ListsController (e2e)', () => {
       const listId = createRes.body.id;
 
       const memEntry = await prisma.listItemMemory.create({
-        data: { listId, title: 'Milk', useCount: 1, lastUsedAt: new Date() },
+        data: { listId, title: 'Milk', titleNormalized: 'milk', useCount: 1, lastUsedAt: new Date() },
       });
 
       await request(app.getHttpServer())
@@ -542,7 +542,7 @@ describe('ListsController (e2e)', () => {
       const listId = createRes.body.id;
 
       const memEntry = await prisma.listItemMemory.create({
-        data: { listId, title: 'Milk', useCount: 2, lastUsedAt: new Date() },
+        data: { listId, title: 'Milk', titleNormalized: 'milk', useCount: 2, lastUsedAt: new Date() },
       });
 
       const restoreRes = await request(app.getHttpServer())
@@ -568,7 +568,7 @@ describe('ListsController (e2e)', () => {
         .send({ title: 'Milk' });
 
       await prisma.listItemMemory.create({
-        data: { listId, title: 'Bread', useCount: 1, lastUsedAt: new Date() },
+        data: { listId, title: 'Bread', titleNormalized: 'bread', useCount: 1, lastUsedAt: new Date() },
       });
 
       await request(app.getHttpServer()).delete(`/lists/${listId}`).expect(200);
