@@ -7,15 +7,12 @@ import {
   signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { UiConfirm } from '../shared/ui/ui-confirm';
 import { DEFAULT_LIST_ICON, ListDetailView, ListView } from './lists.model';
 import { ListsService } from './lists.service';
 
-type ListConfirm = { kind: 'delete'; list: ListView };
-
 @Component({
   selector: 'app-lists-page',
-  imports: [RouterLink, UiConfirm],
+  imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './lists-page.html',
   styleUrl: './lists-page.css',
@@ -29,8 +26,6 @@ export class ListsPage implements OnInit {
   protected readonly lists = signal<ListView[]>([]);
   protected readonly expandedListId = signal<number | null>(null);
   protected readonly expandedListDetail = signal<ListDetailView | null>(null);
-  protected readonly confirm = signal<ListConfirm | null>(null);
-  protected readonly busyId = signal<number | null>(null);
   protected readonly DEFAULT_ICON = DEFAULT_LIST_ICON;
 
   protected readonly sortedLists = computed(() =>
@@ -127,61 +122,5 @@ export class ListsPage implements OnInit {
         this.error.set('Could not update item');
       },
     });
-  }
-
-  protected askDelete(list: ListView, event: Event): void {
-    event.stopPropagation();
-    this.confirm.set({ kind: 'delete', list });
-  }
-
-  protected cancelConfirm(): void {
-    if (this.busyId()) {
-      return;
-    }
-    this.confirm.set(null);
-  }
-
-  protected runConfirm(): void {
-    const pending = this.confirm();
-    if (!pending || this.busyId()) {
-      return;
-    }
-    this.deleteList(pending.list);
-  }
-
-  private deleteList(list: ListView): void {
-    this.busyId.set(list.id);
-    this.api.remove(list.id).subscribe({
-      next: () => {
-        this.busyId.set(null);
-        this.confirm.set(null);
-        if (this.expandedListId() === list.id) {
-          this.expandedListId.set(null);
-          this.expandedListDetail.set(null);
-        }
-        this.reload();
-      },
-      error: () => {
-        this.busyId.set(null);
-        this.confirm.set(null);
-        this.error.set('Could not delete list');
-      },
-    });
-  }
-
-  protected get confirmTitle(): string {
-    const pending = this.confirm();
-    if (pending && pending.kind === 'delete') {
-      return `Delete "${pending.list.name}"?`;
-    }
-    return '';
-  }
-
-  protected get confirmMessage(): string {
-    const pending = this.confirm();
-    if (pending && pending.kind === 'delete') {
-      return 'All items and memory will be permanently deleted';
-    }
-    return '';
   }
 }

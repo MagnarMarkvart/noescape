@@ -42,3 +42,9 @@ export interface ListUpsertPayload {
 }
 
 export const DEFAULT_LIST_ICON = '📝';
+
+export const LIST_ICON_CHOICES: readonly string[] = [
+  '🛒', '📚', '✅', '🎯', '🏋️', '🍳', '🎁', '✈️',
+  '🏠', '💼', '🎮', '🎵', '🎬', '💊', '🐾', '🌱',
+  '💡', '📝', '💰', '🧹', '🔧', '❤️', '⭐', '📦',
+];

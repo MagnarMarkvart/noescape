@@ -3,35 +3,72 @@
     <a routerLink="/lists" class="back-link">← Lists</a>
 
     @if (isEditing()) {
-      <div class="edit-form">
-        <input
-          type="text"
-          id="list-icon-input"
-          name="icon"
-          [(ngModel)]="editIcon"
-          placeholder="Icon"
-          class="input-icon"
-          maxlength="4"
-          autocomplete="off"
-        />
-        <input
-          type="text"
-          id="list-name-input"
-          name="name"
-          [(ngModel)]="editName"
-          placeholder="List name"
-          class="input-name"
-          maxlength="120"
-          autocomplete="off"
-          required
-        />
-        <label class="toggle-main">
-          <input type="checkbox" [(ngModel)]="editIsMain" />
-          <span>Main list</span>
-        </label>
-        <button class="btn-save" (click)="saveList()">Save</button>
-        <button class="btn-cancel" (click)="cancelEdit()">Cancel</button>
-      </div>
+      <form class="edit-form" (submit)="$event.preventDefault(); saveList()">
+        @if (isNew()) {
+          <h1 class="form-title">New List</h1>
+        }
+        <div class="edit-row">
+          <input
+            type="text"
+            id="list-icon-input"
+            name="icon"
+            [(ngModel)]="editIcon"
+            placeholder="Icon"
+            class="input-icon"
+            maxlength="8"
+            autocomplete="off"
+            aria-label="Custom icon"
+          />
+          <input
+            type="text"
+            id="list-name-input"
+            name="name"
+            [(ngModel)]="editName"
+            placeholder="List name"
+            class="input-name"
+            maxlength="120"
+            autocomplete="off"
+            required
+          />
+        </div>
+        <div class="icon-grid" role="radiogroup" aria-label="Choose an icon">
+          @for (icon of ICON_CHOICES; track icon) {
+            <button
+              type="button"
+              class="icon-choice"
+              role="radio"
+              [class.selected]="editIcon() === icon"
+              [attr.aria-checked]="editIcon() === icon"
+              [attr.aria-label]="'Icon ' + icon"
+              (click)="pickIcon(icon)"
+            >
+              {{ icon }}
+            </button>
+          }
+        </div>
+        <div class="edit-actions">
+          <label class="toggle-main">
+            <input type="checkbox" name="isMain" [(ngModel)]="editIsMain" />
+            <span>Main list</span>
+          </label>
+          <button type="submit" class="btn-save">
+            {{ isNew() ? 'Create' : 'Save' }}
+          </button>
+          <button type="button" class="btn-cancel" (click)="cancelEdit()">
+            Cancel
+          </button>
+          @if (!isNew() && list()) {
+            <button
+              type="button"
+              class="btn-delete-list"
+              [disabled]="deleting()"
+              (click)="deleteList()"
+            >
+              {{ deleting() ? 'Deleting…' : 'Delete list' }}
+            </button>
+          }
+        </div>
+      </form>
     } @else {
       @if (list(); as l) {
         <div class="list-header">
