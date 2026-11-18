@@ -452,6 +452,9 @@ export class AppSidebar implements OnInit {
     if (path.startsWith('/scriptorium')) {
       return 'SCRIPTORIUM';
     }
+    if (path.startsWith('/lists')) {
+      return 'LISTS';
+    }
     if (path.startsWith('/level-ups')) {
       return 'LEVEL UPS';
     }
