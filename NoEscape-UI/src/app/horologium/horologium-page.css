@@ -60,7 +60,6 @@
 @media (min-width: 900px) {
   .layout {
     grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
-    align-items: start;
   }
 }
 
