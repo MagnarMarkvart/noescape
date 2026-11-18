@@ -29,6 +29,7 @@ npm ci
 echo "🗄️ Running Prisma push..."
 npx prisma generate
 npx prisma db push
+npx prisma db execute --file scripts/repair-id-sequences.sql
 
 echo "🌱 Seeding catalog (skills, rewards, quests)..."
 npx prisma db seed
