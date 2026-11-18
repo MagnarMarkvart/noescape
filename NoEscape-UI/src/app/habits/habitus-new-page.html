@@ -1,75 +1,369 @@
-<section class="new-shell">
-  <header class="toolbar">
-    <div>
-      <p class="kicker">Habitus</p>
-      <h1>New habit</h1>
-      <p class="lede">Configure cadence and icon. Logs stay in Progression forever.</p>
-    </div>
-    <a routerLink="/habitus" class="back">← Habitus</a>
-  </header>
+<app-forge-shell
+  kicker="Habitus"
+  [title]="heading()"
+  lede="Cadence, skills and time for dailies. Tally is the optional clicker variant."
+  backHref="/habitus"
+  backLabel="Back to Habitus"
+  [toast]="toast()"
+>
+  <form class="create" (submit)="$event.preventDefault(); save()">
+    <fieldset>
+      <legend>Name</legend>
+      <input
+        type="text"
+        maxlength="80"
+        [value]="draft().name"
+        (input)="setName($any($event.target).value)"
+      />
+    </fieldset>
 
-  @if (toast()) {
-    <p class="toast" role="status">{{ toast() }}</p>
-  }
+    <app-icon-picker
+      [selected]="draft().icon"
+      (picked)="pickIcon($event)"
+    />
 
-  <form class="create" (submit)="$event.preventDefault(); create()">
-    <label>
-      Name
-      <input type="text" [formField]="createForm.name" />
-    </label>
-
-    <div class="icon-picker">
-      <div class="icon-picker-head">
-        <span>Icon</span>
-        <span class="icon-preview" aria-hidden="true">{{ createModel().icon }}</span>
-      </div>
-      <div class="icon-tabs" role="tablist" aria-label="Icon categories">
-        @for (group of iconGroups; track group.id) {
-          <button
-            type="button"
-            role="tab"
-            class="icon-tab"
-            [class.selected]="iconGroupId() === group.id"
-            (click)="setIconGroup(group.id)"
-          >
-            {{ group.label }}
-          </button>
+    <fieldset>
+      <legend>Group</legend>
+      <select
+        [value]="draft().groupId ?? 0"
+        (change)="setGroupId($any($event.target).value)"
+      >
+        <option [value]="0">The Cloister</option>
+        @for (g of groups(); track g.id) {
+          <option [value]="g.id">{{ g.name }}</option>
         }
-      </div>
-      <div class="icon-grid" role="listbox">
-        @for (opt of activeIconGroup().icons; track opt.glyph) {
-          <button
-            type="button"
-            role="option"
-            class="icon-tile"
-            [class.selected]="createModel().icon === opt.glyph"
-            [title]="opt.label"
-            (click)="pickIcon(opt.glyph)"
-          >
-            <span class="glyph" aria-hidden="true">{{ opt.glyph }}</span>
-            <span class="icon-label">{{ opt.label }}</span>
-          </button>
-        }
-      </div>
-    </div>
-
-    <label>
-      Cadence
-      <select [formField]="createForm.cadence">
-        <option value="DAILY">Daily</option>
-        <option value="EVERY_N_DAYS">Every N days</option>
       </select>
-    </label>
-    <label>
-      Every N days
-      <input type="number" [formField]="createForm.everyNDays" />
-    </label>
+      <div class="group-create">
+        <input
+          type="text"
+          maxlength="40"
+          placeholder="New group"
+          [value]="newGroupName()"
+          (input)="onNewGroupName($event)"
+        />
+        <button
+          type="button"
+          class="chip"
+          [disabled]="!newGroupName().trim()"
+          (click)="addGroup()"
+        >
+          Add
+        </button>
+      </div>
+      <p class="hint">Groups are made here. The catalog only shows them once they exist.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Variant</legend>
+      <div class="chip-row">
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="draft().kind === 'check'"
+          (click)="setKind('check')"
+        >
+          Check
+        </button>
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="draft().kind === 'tally'"
+          (click)="setKind('tally')"
+        >
+          Tally
+        </button>
+      </div>
+      <p class="hint">
+        Check is a streak day. Tally is a clicker with a normal band — never a daily.
+      </p>
+    </fieldset>
+
+    @if (draft().kind === 'check') {
+      <fieldset>
+        <legend>Cadence</legend>
+        <select
+          [value]="draft().cadence"
+          (change)="setCadence($any($event.target).value)"
+        >
+          <option value="DAILY">Daily</option>
+          <option value="EVERY_N_DAYS">Every N days</option>
+        </select>
+      </fieldset>
+      @if (draft().cadence === 'EVERY_N_DAYS') {
+        <fieldset>
+          <legend>Every N days</legend>
+          <app-number-field
+            ariaLabel="Every N days"
+            [min]="1"
+            [max]="365"
+            [value]="draft().everyNDays"
+            (valueChange)="setEveryNDays($event)"
+          />
+        </fieldset>
+      }
+    } @else {
+      <fieldset>
+        <legend>Window</legend>
+        <div class="chip-row">
+          @for (p of periods; track p.id) {
+            <button
+              type="button"
+              class="chip"
+              [class.selected]="draft().period === p.id"
+              (click)="setPeriod(p.id)"
+            >
+              {{ p.label }}
+            </button>
+          }
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Polarity</legend>
+        <div class="chip-row">
+          @for (p of polarities; track p.id) {
+            <button
+              type="button"
+              class="chip"
+              [class.selected]="draft().polarity === p.id"
+              (click)="setPolarity(p.id)"
+            >
+              {{ p.label }}
+            </button>
+          }
+        </div>
+        <p class="hint">{{ polarities.find((p) => p.id === draft().polarity)?.hint }}</p>
+      </fieldset>
+      <fieldset class="band">
+        <legend>Normal band</legend>
+        <div class="hm">
+          <label>
+            From
+            <app-number-field
+              ariaLabel="Normal minimum"
+              [min]="0"
+              [max]="9999"
+              [value]="draft().normMin"
+              (valueChange)="setNormMin($event)"
+            />
+          </label>
+          <label>
+            To
+            <app-number-field
+              ariaLabel="Normal maximum"
+              [min]="0"
+              [max]="9999"
+              [value]="draft().normMax"
+              (valueChange)="setNormMax($event)"
+            />
+          </label>
+          <label>
+            Click step
+            <app-number-field
+              ariaLabel="Click step"
+              [min]="1"
+              [max]="99"
+              [value]="draft().step"
+              (valueChange)="setStep($event)"
+            />
+          </label>
+        </div>
+      </fieldset>
+    }
+
+    @if (draft().kind === 'check') {
+      <fieldset>
+        <legend>Offer in Dailies</legend>
+        <div class="chip-row">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().allowInDailies"
+            (click)="setAllowInDailies(true)"
+          >
+            Yes
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="!draft().allowInDailies"
+            (click)="setAllowInDailies(false)"
+          >
+            No
+          </button>
+        </div>
+        <p class="hint">
+          Offered checks can be picked into a daily. Completing that daily marks the habit done without a second XP grant.
+        </p>
+      </fieldset>
+      @if (draft().allowInDailies) {
+        <app-duration-field
+          legend="Duration"
+          [presets]="durationPresets"
+          [minutes]="draft().durationMinutes"
+          [maxHours]="8"
+          (minutesChange)="setDuration($event)"
+        />
+      }
+    }
+
+    <app-effort-field
+      [value]="draft().effortLevel"
+      (valueChange)="setEffort($event)"
+    />
+
+    <fieldset class="picker-block">
+      <legend>Skills (optional)</legend>
+      <app-skill-weight-list
+        [shares]="weightShares()"
+        [remaining]="weightRemaining()"
+        [valid]="weightsValid()"
+        (bump)="bumpSkillWeight($event)"
+        (remove)="removeSkillWeight($event)"
+      />
+      <app-skill-tree-picker
+        [showLevel]="true"
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
+    </fieldset>
+
+    <fieldset>
+      <legend>Quest link (optional)</legend>
+      <select
+        [value]="draft().questId ?? 0"
+        (change)="setQuest($any($event.target).value)"
+      >
+        <option [value]="0">— none —</option>
+        @for (q of quests(); track q.id) {
+          <option [value]="q.id">{{ q.name }}</option>
+        }
+      </select>
+      @if (draft().questId) {
+        <div class="chip-row">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questTarget === 'JOURNEY'"
+            (click)="setQuestTarget('JOURNEY')"
+          >
+            Journey day
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questTarget === 'SUBTASK'"
+            (click)="setQuestTarget('SUBTASK')"
+          >
+            Subtask
+          </button>
+        </div>
+        @if (draft().questTarget === 'SUBTASK') {
+          <select
+            [value]="draft().questSubtaskId ?? 0"
+            (change)="setQuestSubtask($any($event.target).value)"
+          >
+            <option [value]="0">— pick a subtask —</option>
+            @for (s of questSubtasks(); track s.id) {
+              <option [value]="s.id">{{ s.title }}</option>
+            }
+          </select>
+        }
+        <p class="hint">Rule for marking the quest when this habit succeeds.</p>
+        <div class="chip-row">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questRule === 'COUNT'"
+            (click)="setQuestRule('COUNT')"
+          >
+            Count
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questRule === 'STREAK'"
+            (click)="setQuestRule('STREAK')"
+          >
+            Streak
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().questRule === 'WINDOW'"
+            (click)="setQuestRule('WINDOW')"
+          >
+            Window
+          </button>
+        </div>
+        <div class="hm">
+          <label>
+            Need
+            <app-number-field
+              ariaLabel="Required successes"
+              [min]="1"
+              [max]="365"
+              [value]="draft().questRequiredCount"
+              (valueChange)="setQuestRequiredCount($event)"
+            />
+          </label>
+          @if (draft().questRule === 'WINDOW') {
+            <label>
+              Days
+              <app-number-field
+                ariaLabel="Window days"
+                [min]="1"
+                [max]="365"
+                [value]="draft().questWindowDays"
+                (valueChange)="setQuestWindowDays($event)"
+              />
+            </label>
+          }
+        </div>
+      }
+    </fieldset>
+
+    @if (showWealth()) {
+      <fieldset>
+        <legend>Wealth gained ({{ currencyLabel() }})</legend>
+        <input
+          type="text"
+          inputmode="decimal"
+          [value]="draft().wealthAmount"
+          (input)="setWealthAmount($event)"
+          placeholder="0.00"
+        />
+      </fieldset>
+    }
 
     <div class="actions">
-      <button type="submit" [disabled]="creating()">
-        {{ creating() ? '…' : 'Create habit' }}
+      <button type="submit" [disabled]="saving() || !canSave()">
+        {{ saving() ? '…' : editId() ? 'Save habit' : 'Forge habit' }}
       </button>
       <a routerLink="/habitus">Cancel</a>
+      @if (editId()) {
+        <button type="button" class="ghost" (click)="confirmRemove.set(true)">
+          Remove
+        </button>
+      }
     </div>
   </form>
-</section>
+</app-forge-shell>
+
+@if (confirmRemove()) {
+  <app-ui-confirm
+    kicker="Habitus"
+    title="Archive this habit?"
+    body="Logs stay in the calendar ledger, but the habit leaves the active board and dailies."
+    cancelLabel="Keep"
+    confirmLabel="Archive"
+    tone="danger"
+    [busy]="removing()"
+    (dismiss)="confirmRemove.set(false)"
+    (secondary)="confirmRemove.set(false)"
+    (confirm)="remove()"
+  />
+}

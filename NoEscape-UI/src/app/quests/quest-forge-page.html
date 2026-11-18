@@ -1,43 +1,359 @@
-<section class="forge-shell">
-  <header class="toolbar">
-    <div>
-      <p class="kicker">Workshop</p>
-      <h1>Forge a quest</h1>
-      <p class="lede">Configure a custom IRL goal. It will appear in your catalogue.</p>
-    </div>
-    <a routerLink="/quests" class="back">← Catalogue</a>
-  </header>
-
-  @if (toast()) {
-    <p class="toast" role="status">{{ toast() }}</p>
-  }
-
-  <form class="forge-form" (submit)="$event.preventDefault(); createQuest()">
-    <label>
-      Name
-      <input type="text" [formField]="createForm.name" placeholder="Custodia Mentis" />
-    </label>
-    <label>
-      Summary
-      <input
-        type="text"
-        [formField]="createForm.summary"
-        placeholder="One-line pitch"
+<app-forge-shell
+  kicker="Workshop"
+  [title]="heading()"
+  [lede]="lede()"
+  [backHref]="backHref()"
+  [backQuery]="backQuery()"
+  backLabel="Back to catalogue"
+  [toast]="toast()"
+  layout="wide"
+>
+  <form class="forge-form" (submit)="$event.preventDefault(); saveQuest()">
+    <fieldset>
+      <legend>Identity</legend>
+      <label>
+        Name
+        <input type="text" [formField]="createForm.name" placeholder="Forge the deep-work habit" />
+      </label>
+      <label>
+        Summary
+        <input
+          type="text"
+          [formField]="createForm.summary"
+          placeholder="One-line pitch"
+        />
+      </label>
+      <label>
+        Cover image
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" (change)="onCover($event)" />
+      </label>
+      @if (coverPreview(); as src) {
+        <div class="cover-row">
+          <span class="cover-preview" [style.background-image]="'url(' + src + ')'" aria-hidden="true"></span>
+          <button type="button" class="ghost-btn" (click)="clearCover()">Remove cover</button>
+        </div>
+      }
+      <app-date-field
+        label="Deadline"
+        placeholder="None"
+        [value]="createModel().deadline"
+        (valueChange)="setDeadline($event)"
       />
-    </label>
-    <label>
-      Description
-      <textarea
-        [formField]="createForm.description"
-        rows="8"
-        placeholder="Rules, stakes, how to win…"
-      ></textarea>
-    </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Briefing</legend>
+      <label>
+        Rules
+        <textarea [formField]="createForm.rules" rows="3" placeholder="What is allowed, what is not…"></textarea>
+      </label>
+      <label>
+        Stakes
+        <textarea [formField]="createForm.stakes" rows="3" placeholder="Why this matters if you fail or succeed…"></textarea>
+      </label>
+      <label>
+        How to win
+        <textarea [formField]="createForm.howToWin" rows="3" placeholder="What “done” looks like in practice…"></textarea>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Prerequisites</legend>
+      <p class="hint">Level and quest gates before this can start.</p>
+      <div class="inline-add">
+        <label>
+          Skill
+          <select [value]="skillReqSlug()" (change)="setSkillReqSlug($event)">
+            <option value="">—</option>
+            @for (s of skills(); track s.slug) {
+              <option [value]="s.slug">{{ s.icon }} {{ s.name }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Level
+          <app-number-field
+            ariaLabel="Required level"
+            [min]="1"
+            [max]="99"
+            [value]="skillReqLevel()"
+            (valueChange)="setSkillReqLevel($event)"
+          />
+        </label>
+        <button type="button" class="ghost-btn" (click)="addSkillReq()">Add</button>
+      </div>
+      @if (skillReqs().length) {
+        <ul class="chip-list">
+          @for (r of skillReqs(); track r.slug) {
+            <li>
+              {{ skillName(r.slug) }} Lv {{ r.level }}
+              <button type="button" (click)="removeSkillReq(r.slug)" aria-label="Remove skill requirement">×</button>
+            </li>
+          }
+        </ul>
+      }
+      @if (catalogChoices().length) {
+        <p class="sublegend">Required quests</p>
+        <ul class="check-list">
+          @for (q of catalogChoices(); track q.id) {
+            <li>
+              <app-rune-check
+                [label]="q.name"
+                [checked]="questReqs().includes(q.slug)"
+                (checkedChange)="setQuestReq(q.slug, $event)"
+              />
+            </li>
+          }
+        </ul>
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Journey</legend>
+      <p class="hint">
+        Continuous work that moves you toward the destination. Logged on the days your commitment expects.
+        Bind it to a daily slice, a Habitus habit, or neither.
+      </p>
+      <label>
+        Continuous activity
+        <input
+          type="text"
+          [formField]="createForm.journeyLabel"
+          placeholder="1h deepwork arendust"
+        />
+      </label>
+      <label>
+        Journey notes
+        <textarea
+          [formField]="createForm.journeyNote"
+          rows="2"
+          placeholder="What “showing up” means on a given day…"
+        ></textarea>
+      </label>
+      <label>
+        Commitment
+        <input
+          type="range"
+          min="1"
+          max="7"
+          [value]="createModel().commitmentLevel"
+          (input)="setCommitment($event)"
+        />
+        <span class="commit-label">{{ commitmentLabel(createModel().commitmentLevel) }}</span>
+      </label>
+      <app-duration-field
+        legend="How long it takes"
+        [inset]="true"
+        [allowUnset]="true"
+        [presets]="journeyDurationPresets"
+        [minutes]="createModel().dailyWorkMinutes"
+        [maxHours]="24"
+        (minutesChange)="setDailyWorkMinutes($event)"
+      />
+      <p class="sublegend">Bind (optional)</p>
+      <div class="chip-row">
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="journeyBind() === 'none'"
+          (click)="setJourneyBind('none')"
+        >
+          None
+        </button>
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="journeyBind() === 'daily'"
+          (click)="setJourneyBind('daily')"
+        >
+          Daily work slice
+        </button>
+        @if (habits().length) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="journeyBind() === 'habitus'"
+            (click)="setJourneyBind('habitus')"
+          >
+            Habitus
+          </button>
+        }
+      </div>
+      @if (journeyBind() === 'daily') {
+        <p class="hint">
+          Add this journey to a daily. Horologium can track it as both a daily and a quest task.
+        </p>
+        <label>
+          Label on the daily
+          <input
+            type="text"
+            [value]="createModel().dailyWorkTitle"
+            (input)="setDailyWorkTitle($event)"
+            placeholder="Falls back to journey label / quest name"
+          />
+        </label>
+      }
+      @if (journeyBind() === 'habitus') {
+        <app-quest-habit-bind
+          [habits]="habits()"
+          [takenIds]="journeyTakenIds()"
+          [habitId]="linkedHabitId()"
+          [rule]="habitRule()"
+          [requiredCount]="habitRequiredCount()"
+          [windowDays]="habitWindowDays()"
+          (habitIdChange)="setLinkedHabit($event)"
+          (ruleChange)="setHabitRule($event)"
+          (requiredCountChange)="setHabitRequiredCount($event)"
+          (windowDaysChange)="setHabitWindowDays($event)"
+        />
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Subtasks</legend>
+      <p class="hint">
+        Each completed subtask fills the green progress bar. All of them = 90%.
+        Mark a subtask as a gate to lock the daily check-in until it is done.
+        A Habitus link uses the same count, streak, or window rule as the journey.
+      </p>
+      <app-forge-line
+        [title]="subtaskDraft()"
+        placeholder="Ship the first vertical slice"
+        [deadline]="subtaskDeadlineDraft() || null"
+        [estimateMinutes]="subtaskEstimateDraft()"
+        [gates]="gateDraft()"
+        action="commit"
+        (titleChange)="setSubtaskDraftText($event)"
+        (deadlineChange)="setSubtaskDeadlineDraft($event)"
+        (estimateChange)="setSubtaskEstimateDraft($event)"
+        (gatesChange)="setGateDraft($event)"
+        (commit)="addSubtask()"
+      />
+      @if (subtasks().length) {
+        <app-drop-group (dropped)="onSubtaskDrop($event)">
+        <ol
+          class="subtask-list"
+          appDropList
+          dropListId="subtasks"
+          dropMode="insert"
+        >
+          @for (t of subtasks(); track t.id ?? $index) {
+            <li [appDragItem]="$index">
+              <app-drag-grip />
+              <div class="drag-body">
+              <app-forge-line
+                [title]="t.title"
+                placeholder="Subtask"
+                [deadline]="t.deadline"
+                [estimateMinutes]="t.estimateMinutes"
+                [gates]="t.gatesJourney"
+                action="remove"
+                (titleChange)="setSubtaskTitle($index, $event)"
+                (deadlineChange)="setSubtaskDeadline($index, $event)"
+                (estimateChange)="setSubtaskEstimate($index, $event)"
+                (gatesChange)="setSubtaskGate($index, $event)"
+                (remove)="removeSubtask($index)"
+              />
+              @if (habits().length) {
+                <app-quest-habit-bind
+                  [habits]="habits()"
+                  [takenIds]="subtaskTakenIds($index)"
+                  [habitId]="t.habitId"
+                  [rule]="t.habitRule"
+                  [requiredCount]="t.habitRequiredCount"
+                  [windowDays]="t.habitWindowDays"
+                  (habitIdChange)="setSubtaskHabit($index, $event)"
+                  (ruleChange)="setSubtaskHabitRule($index, $event)"
+                  (requiredCountChange)="setSubtaskHabitRequiredCount($index, $event)"
+                  (windowDaysChange)="setSubtaskHabitWindowDays($index, $event)"
+                />
+              }
+              </div>
+            </li>
+          }
+        </ol>
+        </app-drop-group>
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>Destination</legend>
+      <p class="hint">What must be true to mark the quest complete (the last 10%).</p>
+      <label>
+        Destination
+        <textarea
+          [formField]="createForm.destination"
+          rows="3"
+          placeholder="Feature is live in production and used for a week."
+        ></textarea>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Skill integration</legend>
+      <p class="hint">
+        0, 1, or many skills. Weight is always {{ weightTotal }} points, split at creation.
+        10k XP with Cooking 7 and Order 3 → 7k Cooking, 3k Order.
+      </p>
+      <label>
+        Total completion XP
+        <app-number-field
+          ariaLabel="Total completion XP"
+          [min]="0"
+          [max]="1000000"
+          [value]="createModel().totalXp"
+          (valueChange)="setTotalXp($event)"
+        />
+      </label>
+      <app-skill-weight-list
+        [shares]="weightShares()"
+        [remaining]="weightRemaining()"
+        [valid]="weightsValid()"
+        (bump)="bumpWeight($event)"
+        (remove)="removeSkillShare($event)"
+      />
+      @if (skillWeights().length === 0) {
+        <p class="hint">No skills — completion awards no skill XP.</p>
+      }
+      <app-skill-tree-picker
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
+    </fieldset>
+
+    <fieldset>
+      <legend>Rewards</legend>
+      <label>
+        Title on completion
+        <input type="text" [formField]="createForm.titleReward" placeholder="Optional character title" />
+      </label>
+      @if (showWealth()) {
+        <label>
+          Wealth on completion ({{ currencyLabel() }})
+          <input
+            type="text"
+            inputmode="decimal"
+            [value]="createModel().wealthAmount"
+            (input)="setWealthAmount($event)"
+            placeholder="0.00"
+          />
+        </label>
+      }
+    </fieldset>
+
     <div class="actions">
-      <button type="submit" class="primary" [disabled]="creating()">
-        {{ creating() ? 'Forging…' : 'Forge quest' }}
+      <button type="submit" class="primary" [disabled]="saving() || loading() || !weightsValid()">
+        @if (saving()) {
+          {{ isEdit() ? 'Saving…' : 'Forging…' }}
+        } @else {
+          {{ isEdit() ? 'Save changes' : 'Forge quest' }}
+        }
       </button>
-      <a routerLink="/quests" class="ghost">Cancel</a>
+      <a [routerLink]="backHref()" [queryParams]="backQuery()" class="ghost">Cancel</a>
     </div>
   </form>
-</section>
+</app-forge-shell>

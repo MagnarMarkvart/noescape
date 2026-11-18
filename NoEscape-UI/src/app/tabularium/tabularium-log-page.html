@@ -1,0 +1,79 @@
+<app-history-log
+  kicker="Archive"
+  title="Tabularium Ledger"
+  [lede]="lede()"
+  backHref="/tabularium"
+  backLabel="Back to Tabularium"
+  [date]="selectedDate()"
+  [today]="todayIso()"
+  [marks]="calendarMarks()"
+  [loading]="loading()"
+  [empty]="!loading() && clicks().length === 0 && board().length === 0"
+  emptyText="No tallies yet."
+  [detailTitle]="detailTitle()"
+  [detailKicker]="detailKicker()"
+  detailTitleId="tabula-detail-title"
+  (dateChange)="onDateNav($event)"
+  (rangeChange)="loadCalendar($event)"
+  (close)="close()"
+>
+  @if (board().length) {
+    <section class="report" aria-label="Progress report">
+      <p class="kicker">Progress</p>
+      <ul class="report-list">
+        @for (row of board(); track row.id) {
+          <li>
+            <app-tabula-clicker
+              [row]="row"
+              [busy]="busyId() === row.id"
+              [readonly]="selectedDate() !== todayIso()"
+              (clicked)="click($event)"
+              (undone)="undo($event)"
+            />
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  <ul class="session-log">
+    @for (row of clicks(); track row.id) {
+      <li>
+        <button
+          type="button"
+          class="session-card"
+          (click)="open(row)"
+          [attr.aria-pressed]="selected()?.id === row.id"
+        >
+          <div class="log-top">
+            <strong>{{ clock(row.createdAt) }}</strong>
+            <span class="xp-chip">{{ signed(row.delta) }}</span>
+          </div>
+          <p class="log-meta">
+            <span aria-hidden="true">{{ row.tabulaIcon || '◆' }}</span>
+            {{ row.tabulaName }}
+          </p>
+        </button>
+      </li>
+    }
+  </ul>
+
+  <div scrollBody>
+    @if (selected(); as row) {
+      <dl class="facts">
+        <div>
+          <dt>Tabula</dt>
+          <dd>{{ row.tabulaName }}</dd>
+        </div>
+        <div>
+          <dt>Mark</dt>
+          <dd>{{ signed(row.delta) }}</dd>
+        </div>
+        <div>
+          <dt>When</dt>
+          <dd>{{ formatDate(row.date) }} · {{ clock(row.createdAt) }}</dd>
+        </div>
+      </dl>
+    }
+  </div>
+</app-history-log>

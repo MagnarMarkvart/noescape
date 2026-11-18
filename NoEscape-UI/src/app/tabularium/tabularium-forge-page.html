@@ -1,0 +1,141 @@
+<app-forge-shell
+  kicker="Tabularium"
+  [title]="heading()"
+  lede="Name the tally, pick a window, and set the band of normality. Polarity decides which side of that band glows green."
+  backHref="/tabularium"
+  backLabel="Back to Tabularium"
+  [toast]="toast()"
+>
+  <form class="create" (submit)="$event.preventDefault(); save()">
+    <fieldset>
+      <legend>Name</legend>
+      <input
+        type="text"
+        maxlength="80"
+        placeholder="Cigarettes"
+        [value]="draft().name"
+        (input)="setName($any($event.target).value)"
+      />
+    </fieldset>
+
+    <app-icon-picker
+      [selected]="draft().icon || '◆'"
+      (picked)="pickIcon($event)"
+    />
+
+    <fieldset>
+      <legend>Window</legend>
+      <div class="chip-row">
+        @for (p of periods; track p.id) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().period === p.id"
+            (click)="setPeriod(p.id)"
+          >
+            {{ p.label }}
+          </button>
+        }
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Polarity</legend>
+      <div class="chip-row">
+        @for (p of polarities; track p.id) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().polarity === p.id"
+            (click)="setPolarity(p.id)"
+          >
+            {{ p.label }}
+          </button>
+        }
+      </div>
+      <p class="hint">
+        @if (draft().polarity === 'virtue') {
+          Green when you are above the band. Yellow inside it. Red below.
+        } @else {
+          Green when you are below the band. Yellow inside it. Red above.
+        }
+      </p>
+    </fieldset>
+
+    <fieldset class="band">
+      <legend>Normal band</legend>
+      <div class="hm">
+        <label>
+          From
+          <app-number-field
+            ariaLabel="Normal minimum"
+            [min]="0"
+            [max]="9999"
+            [value]="draft().normMin"
+            (valueChange)="setNormMin($event)"
+          />
+        </label>
+        <label>
+          To
+          <app-number-field
+            ariaLabel="Normal maximum"
+            [min]="0"
+            [max]="9999"
+            [value]="draft().normMax"
+            (valueChange)="setNormMax($event)"
+          />
+        </label>
+        <label>
+          Click step
+          <app-number-field
+            ariaLabel="Click step"
+            [min]="1"
+            [max]="99"
+            [value]="draft().step"
+            (valueChange)="setStep($event)"
+          />
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Quest (optional)</legend>
+      <select
+        [value]="draft().questId ?? 0"
+        (change)="setQuest($any($event.target).value)"
+      >
+        <option [value]="0">— none —</option>
+        @for (q of questsList(); track q.id) {
+          <option [value]="q.id">{{ q.name }}</option>
+        }
+      </select>
+    </fieldset>
+
+    <div class="actions">
+      <button type="submit" [disabled]="saving() || !canSave()">
+        {{ saving() ? '…' : editId() ? 'Save tabula' : 'Forge tabula' }}
+      </button>
+      <a routerLink="/tabularium">Cancel</a>
+      @if (editId()) {
+        <button type="button" class="ghost" (click)="confirmRemove.set(true)">
+          Remove
+        </button>
+      }
+    </div>
+  </form>
+</app-forge-shell>
+
+@if (confirmRemove()) {
+  <app-ui-confirm
+    kicker="Tabularium"
+    title="Archive this tabula?"
+    body="Marks stay in the ledger, but the clicker leaves the board."
+    cancelLabel="Keep"
+    confirmLabel="Archive"
+    tone="danger"
+    [busy]="removing()"
+    (dismiss)="confirmRemove.set(false)"
+    (secondary)="confirmRemove.set(false)"
+    (confirm)="remove()"
+  />
+}

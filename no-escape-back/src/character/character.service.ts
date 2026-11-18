@@ -1,11 +1,30 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TimeService } from '../time/time.service';
+import {
+  DEFAULT_TZ,
+  clampDayStartHour,
+  isDateFormat,
+  isTimeFormat,
+  isValidTimeZone,
+  isWeekStart,
+} from '../time/zone';
+import {
+  DEFAULT_CURRENCY,
+  isCurrency,
+  parseMajorToCents,
+  type CurrencyId,
+} from '../wealth/money.util';
 
 export const FEATURE_HABITUS = 'feature:habitus';
+export const FEATURE_CONSUETUDO = 'feature:consuetudo';
 
 @Injectable()
 export class CharacterService implements OnModuleInit {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly time: TimeService,
+  ) {}
 
   async onModuleInit() {
     await this.prisma.character.upsert({
@@ -15,9 +34,15 @@ export class CharacterService implements OnModuleInit {
     });
     await this.prisma.featureUnlock.upsert({
       where: { key: FEATURE_HABITUS },
-      update: {},
-      create: { key: FEATURE_HABITUS, unlocked: false },
+      update: { unlocked: true },
+      create: { key: FEATURE_HABITUS, unlocked: true, unlockedAt: new Date() },
     });
+    await this.prisma.featureUnlock.upsert({
+      where: { key: FEATURE_CONSUETUDO },
+      update: {},
+      create: { key: FEATURE_CONSUETUDO, unlocked: false },
+    });
+    await this.time.reload();
   }
 
   async getProfile() {
@@ -48,6 +73,24 @@ export class CharacterService implements OnModuleInit {
     return {
       character,
       title: character.title,
+      nickname: character.nickname,
+      timezone: character.timezone || DEFAULT_TZ,
+      dateFormat: isDateFormat(character.dateFormat) ? character.dateFormat : 'DMY',
+      timeFormat: isTimeFormat(character.timeFormat) ? character.timeFormat : 'H24',
+      dayStartHour: clampDayStartHour(character.dayStartHour),
+      weekStartsOn: isWeekStart(character.weekStartsOn) ? character.weekStartsOn : 1,
+      menuAutoToggleMobile: character.menuAutoToggleMobile !== false,
+      menuAutoToggleDesktop: character.menuAutoToggleDesktop !== false,
+      pomodoroAutoContinue: character.pomodoroAutoContinue !== false,
+      consuetudoStartInScenery: character.consuetudoStartInScenery !== false,
+      vigiliaTrackQuests: character.vigiliaTrackQuests !== false,
+      vigiliaTrackDailies: character.vigiliaTrackDailies === true,
+      vigiliaTrackScriptorium: character.vigiliaTrackScriptorium === true,
+      vigiliaTrackCustom: character.vigiliaTrackCustom === true,
+      wealthCents: character.wealthCents ?? 0,
+      currency: isCurrency(character.currency)
+        ? character.currency
+        : DEFAULT_CURRENCY,
       features: Object.fromEntries(
         features.map((f) => [f.key, f.unlocked]),
       ) as Record<string, boolean>,
@@ -56,9 +99,124 @@ export class CharacterService implements OnModuleInit {
       skills,
       activeQuests,
       completedQuests,
-      habitusUnlocked:
-        features.find((f) => f.key === FEATURE_HABITUS)?.unlocked ?? false,
+      habitusUnlocked: true,
+      consuetudoUnlocked:
+        features.find((f) => f.key === FEATURE_CONSUETUDO)?.unlocked ?? false,
     };
+  }
+
+  async updateSettings(input: {
+    nickname?: string;
+    timezone?: string;
+    dateFormat?: string;
+    timeFormat?: string;
+    dayStartHour?: number;
+    weekStartsOn?: number;
+    menuAutoToggleMobile?: boolean;
+    menuAutoToggleDesktop?: boolean;
+    pomodoroAutoContinue?: boolean;
+    consuetudoStartInScenery?: boolean;
+    vigiliaTrackQuests?: boolean;
+    vigiliaTrackDailies?: boolean;
+    vigiliaTrackScriptorium?: boolean;
+    vigiliaTrackCustom?: boolean;
+    currency?: string;
+  }) {
+    const data: {
+      nickname?: string;
+      timezone?: string;
+      dateFormat?: string;
+      timeFormat?: string;
+      dayStartHour?: number;
+      weekStartsOn?: number;
+      menuAutoToggleMobile?: boolean;
+      menuAutoToggleDesktop?: boolean;
+      pomodoroAutoContinue?: boolean;
+      consuetudoStartInScenery?: boolean;
+      vigiliaTrackQuests?: boolean;
+      vigiliaTrackDailies?: boolean;
+      vigiliaTrackScriptorium?: boolean;
+      vigiliaTrackCustom?: boolean;
+      currency?: CurrencyId;
+    } = {};
+    if (input.nickname !== undefined) {
+      data.nickname = String(input.nickname).trim().slice(0, 40);
+    }
+    if (input.timezone !== undefined) {
+      const tz = String(input.timezone).trim();
+      if (!isValidTimeZone(tz)) {
+        throw new BadRequestException('Unknown timezone');
+      }
+      data.timezone = tz;
+    }
+    if (input.dateFormat !== undefined) {
+      const fmt = String(input.dateFormat).trim().toUpperCase();
+      if (!isDateFormat(fmt)) {
+        throw new BadRequestException('dateFormat must be DMY, MDY, or YMD');
+      }
+      data.dateFormat = fmt;
+    }
+    if (input.timeFormat !== undefined) {
+      const fmt = String(input.timeFormat).trim().toUpperCase();
+      if (!isTimeFormat(fmt)) {
+        throw new BadRequestException('timeFormat must be H24 or H12');
+      }
+      data.timeFormat = fmt;
+    }
+    if (input.dayStartHour !== undefined) {
+      const hour = Number(input.dayStartHour);
+      if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+        throw new BadRequestException('dayStartHour must be an integer from 0 to 23');
+      }
+      data.dayStartHour = hour;
+    }
+    if (input.weekStartsOn !== undefined) {
+      const start = Number(input.weekStartsOn);
+      if (!isWeekStart(start)) {
+        throw new BadRequestException('weekStartsOn must be 0 (Sunday) or 1 (Monday)');
+      }
+      data.weekStartsOn = start;
+    }
+    if (input.menuAutoToggleMobile !== undefined) {
+      data.menuAutoToggleMobile = Boolean(input.menuAutoToggleMobile);
+    }
+    if (input.menuAutoToggleDesktop !== undefined) {
+      data.menuAutoToggleDesktop = Boolean(input.menuAutoToggleDesktop);
+    }
+    if (input.pomodoroAutoContinue !== undefined) {
+      data.pomodoroAutoContinue = Boolean(input.pomodoroAutoContinue);
+    }
+    if (input.consuetudoStartInScenery !== undefined) {
+      data.consuetudoStartInScenery = Boolean(input.consuetudoStartInScenery);
+    }
+    if (input.vigiliaTrackQuests !== undefined) {
+      data.vigiliaTrackQuests = Boolean(input.vigiliaTrackQuests);
+    }
+    if (input.vigiliaTrackDailies !== undefined) {
+      data.vigiliaTrackDailies = Boolean(input.vigiliaTrackDailies);
+    }
+    if (input.vigiliaTrackScriptorium !== undefined) {
+      data.vigiliaTrackScriptorium = Boolean(input.vigiliaTrackScriptorium);
+    }
+    if (input.vigiliaTrackCustom !== undefined) {
+      data.vigiliaTrackCustom = Boolean(input.vigiliaTrackCustom);
+    }
+    if (input.currency !== undefined) {
+      const code = String(input.currency).trim().toUpperCase();
+      if (!isCurrency(code)) {
+        throw new BadRequestException('currency must be EUR, USD, or GBP');
+      }
+      data.currency = code;
+    }
+    if (Object.keys(data).length === 0) {
+      return this.getProfile();
+    }
+    await this.prisma.character.update({
+      where: { id: 1 },
+      data,
+    });
+    await this.time.reload();
+    return this.getProfile();
   }
 
   async setTitle(title: string) {
@@ -77,7 +235,93 @@ export class CharacterService implements OnModuleInit {
   }
 
   async isFeatureUnlocked(key: string): Promise<boolean> {
+    if (key === FEATURE_HABITUS) {
+      return true;
+    }
     const row = await this.prisma.featureUnlock.findUnique({ where: { key } });
     return row?.unlocked ?? false;
+  }
+
+  async getWealth(limit = 40) {
+    const character = await this.prisma.character.findUniqueOrThrow({
+      where: { id: 1 },
+    });
+    const take = Math.min(80, Math.max(1, Math.round(Number(limit) || 40)));
+    const entries = await this.prisma.wealthEntry.findMany({
+      orderBy: { createdAt: 'desc' },
+      take,
+    });
+    return {
+      wealthCents: character.wealthCents ?? 0,
+      currency: isCurrency(character.currency)
+        ? character.currency
+        : DEFAULT_CURRENCY,
+      entries,
+    };
+  }
+
+  /**
+   * Change the purse and append a ledger row. deltaCents may be negative
+   * (bills / undo). Zero is a no-op and returns the current balance.
+   */
+  async adjustWealth(input: {
+    deltaCents: number;
+    note?: string;
+    source?: string;
+    sourceId?: number;
+    date?: string;
+  }) {
+    const delta = Math.round(Number(input.deltaCents) || 0);
+    if (!Number.isFinite(delta) || delta === 0) {
+      return this.getWealth();
+    }
+    const note = input.note?.trim().slice(0, 160) || null;
+    const source = (input.source?.trim() || 'manual').slice(0, 24);
+    const date = input.date || this.time.today();
+    const sourceId =
+      input.sourceId != null && Number.isFinite(Number(input.sourceId))
+        ? Math.round(Number(input.sourceId))
+        : null;
+
+    await this.prisma.$transaction(async (tx) => {
+      const character = await tx.character.findUniqueOrThrow({
+        where: { id: 1 },
+      });
+      const next = character.wealthCents + delta;
+      await tx.character.update({
+        where: { id: 1 },
+        data: { wealthCents: next },
+      });
+      await tx.wealthEntry.create({
+        data: {
+          date,
+          deltaCents: delta,
+          balanceCents: next,
+          note,
+          source,
+          sourceId,
+        },
+      });
+    });
+
+    return this.getWealth();
+  }
+
+  async adjustFromAmount(input: {
+    amount?: unknown;
+    direction?: string;
+    note?: string;
+  }) {
+    const cents = parseMajorToCents(input.amount);
+    if (cents === 0) {
+      throw new BadRequestException('Enter an amount');
+    }
+    const remove =
+      String(input.direction || 'add').toLowerCase() === 'remove';
+    return this.adjustWealth({
+      deltaCents: remove ? -cents : cents,
+      note: input.note,
+      source: 'manual',
+    });
   }
 }

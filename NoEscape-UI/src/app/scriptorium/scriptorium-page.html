@@ -1,0 +1,165 @@
+<section class="script-shell">
+  <header class="toolbar">
+    <div>
+      <p class="kicker">The vault of works</p>
+      <h1>Scriptorium</h1>
+      <p class="lede">
+        Inscribe projects, tasks, and notions. Bind a due day only when the work has a season.
+      </p>
+    </div>
+    <a routerLink="/scriptorium/new" class="primary">Inscribe</a>
+  </header>
+
+  <div class="filters">
+    <label class="search">
+      <span class="sr-only">Search the Scriptorium</span>
+      <input
+        type="search"
+        placeholder="Search titles, notes, skills…"
+        [value]="query()"
+        (input)="setQuery($any($event.target).value)"
+      />
+    </label>
+    <label>
+      Sort
+      <select [value]="sortId()" (change)="setSort($any($event.target).value)">
+        @for (s of sorts; track s.id) {
+          <option [value]="s.id">{{ s.label }}</option>
+        }
+      </select>
+    </label>
+    <button
+      type="button"
+      class="ghost"
+      [class.selected]="showArchived()"
+      (click)="toggleArchived()"
+    >
+      {{ showArchived() ? 'Hide shelves' : 'Show shelves' }}
+    </button>
+  </div>
+
+  @if (error()) {
+    <p class="state error">{{ error() }}</p>
+  }
+
+  @if (loading() && works().length === 0) {
+    <p class="state">Unrolling the scrolls…</p>
+  } @else if (works().length || !error()) {
+    <div class="tiers">
+      @for (col of columns(); track col.id) {
+        <section class="tier" [attr.data-tier]="col.id" [attr.aria-label]="col.name">
+          <header class="tier-head">
+            <p class="kicker">{{ col.kicker }}</p>
+            <h2>{{ col.name }}</h2>
+            <p class="hint">{{ col.hint }}</p>
+            <span class="count">{{ col.works.length }}</span>
+          </header>
+          @if (col.works.length === 0) {
+            <p class="empty">Empty shelf.</p>
+          } @else {
+            <ul class="cards">
+              @for (w of col.works; track w.id) {
+                <li>
+                  <article
+                    class="card"
+                    [class.archived]="w.status === 'ARCHIVED'"
+                    [class.assigned]="workLocked(w)"
+                  >
+                    <a class="card-main" [routerLink]="['/scriptorium', w.id]">
+                      <span class="card-icon" aria-hidden="true">{{ w.icon || defaultIcon }}</span>
+                      <span class="card-body">
+                        <strong>{{ w.title }}</strong>
+                        <small
+                          [class.overdue]="dueTone(w.dueDate) === 'overdue'"
+                          [class.today]="dueTone(w.dueDate) === 'today'"
+                          [class.soon]="dueTone(w.dueDate) === 'soon'"
+                        >{{ dueLabel(w.dueDate) }}</small>
+                        @if (assignedLabel(w); as stamp) {
+                          <span class="assigned-stamp">{{ stamp }}</span>
+                        }
+                        <span class="meta">
+                          <span>Effort {{ w.effort }}</span>
+                          <span>{{ durationLabel(w.durationMinutes) }}</span>
+                          @if (w.subtaskTotal) {
+                            <span>{{ w.subtaskDone }}/{{ w.subtaskTotal }}</span>
+                          }
+                        </span>
+                        @if (w.skillShares.length) {
+                          <span class="skills">
+                            @for (s of w.skillShares; track s.slug) {
+                              <span>{{ s.icon || '◆' }} {{ s.name }}</span>
+                            }
+                          </span>
+                        }
+                      </span>
+                    </a>
+                    <div class="card-actions">
+                      @if (w.status !== 'ARCHIVED' && !workLocked(w)) {
+                        <app-ui-icon-btn
+                          icon="check"
+                          label="Complete"
+                          [disabled]="busyId() === w.id"
+                          (clicked)="askComplete(w)"
+                        />
+                        <app-ui-icon-btn
+                          icon="quest"
+                          label="Assign to quest"
+                          href="/quests/forge"
+                          [queryParams]="{ scriptorium: '' + w.id }"
+                        />
+                        <app-ui-icon-btn
+                          icon="calendar"
+                          label="Assign to daily"
+                          href="/dailies"
+                          [queryParams]="{ scriptorium: '' + w.id }"
+                        />
+                        <app-ui-icon-btn
+                          icon="shelf"
+                          label="Shelve"
+                          [disabled]="busyId() === w.id"
+                          (clicked)="archiveWork(w)"
+                        />
+                      }
+                      @if (w.status === 'ARCHIVED') {
+                        <app-ui-icon-btn
+                          icon="shelf"
+                          label="Restore"
+                          [disabled]="busyId() === w.id"
+                          (clicked)="archiveWork(w)"
+                        />
+                      }
+                      <app-ui-icon-btn
+                        icon="close"
+                        label="Erase"
+                        [disabled]="busyId() === w.id"
+                        (clicked)="askErase(w)"
+                      />
+                    </div>
+                  </article>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+      }
+    </div>
+  }
+</section>
+
+@if (confirm(); as pending) {
+  <app-ui-confirm
+    kicker="Scriptorium"
+    [title]="pending.kind === 'erase'
+      ? 'Erase “' + pending.work.title + '”?'
+      : 'Complete “' + pending.work.title + '”?'"
+    [body]="pending.kind === 'erase'
+      ? 'The folio is struck from the vault. Assigned dailies stay, but the link is cut.'
+      : 'Awards XP from complexity and volume, then shelves the folio. It remains on the shelves.'"
+    [confirmLabel]="pending.kind === 'erase' ? 'Erase' : 'Complete'"
+    [tone]="pending.kind === 'erase' ? 'danger' : 'accent'"
+    [busy]="busyId() === pending.work.id"
+    (dismiss)="cancelConfirm()"
+    (secondary)="cancelConfirm()"
+    (confirm)="runConfirm()"
+  />
+}

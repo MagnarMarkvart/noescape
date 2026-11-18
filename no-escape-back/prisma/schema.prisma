@@ -76,51 +76,110 @@ model DailyTask {
   skill           Skill?    @relation(fields: [skillId], references: [id], onDelete: SetNull)
   habitId         Int?
   habit           Habit?    @relation(fields: [habitId], references: [id], onDelete: SetNull)
-  /// When set, completion awards this XP instead of the importance formula.
+  /// Unused for new tasks; XP is always calculated from effort × duration.
   fixedXp         Int?
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10.
+  skillWeightsJson String?
+  /// Activity ids created on complete (for multi-skill undo).
+  activityIdsJson  String?
   effortLevel     Int       @default(5)
   durationMinutes Int       @default(45)
+  /// Work time from Horologium (rest and pause excluded).
+  elapsedMs       BigInt    @default(0)
   completed       Boolean   @default(false)
   xpAwarded       Int?
   activityId      Int?
   completedAt     DateTime?
+  /// Literal cash awarded on complete when Finance is among skill weights.
+  wealthCents     Int       @default(0)
+  wealthAwardedCents Int?
+  /// Quest this daily was added from. Null means it is not quest-linked.
+  questId         Int?
+  /// Active QuestRun at the time this daily was added.
+  questRunId      Int?
+  /// Set when bound to a specific subtask; null means the quest's daily-work slice.
+  questSubtaskId  Int?
+  /// subtask | daily_work
+  questBindKind   String?
+  /// Scriptorium folio this daily was assigned from.
+  scriptoriumWorkId Int?
+  scriptoriumWork   ScriptoriumWork? @relation(fields: [scriptoriumWorkId], references: [id], onDelete: SetNull)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@unique([date, importance, slotIndex])
   @@index([date])
   @@index([habitId])
+  @@index([questId])
+  @@index([questSubtaskId])
+  @@index([scriptoriumWorkId])
 }
 
-/// Reusable daily presets (not habits) — quick-fill for repetitive chores.
+/// Reusable daily presets — fill title, skill, effort, duration, optional habit.
 model DailyTaskTemplate {
   id              Int      @id @default(autoincrement())
   name            String
   icon            String?
   skillId         Int
   skill           Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  fixedXp         Int
+  habitId         Int?
+  habit           Habit?   @relation(fields: [habitId], references: [id], onDelete: SetNull)
+  /// Unused for new presets; XP is calculated from effort × duration.
+  fixedXp         Int      @default(0)
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10.
+  skillWeightsJson String?
   effortLevel     Int      @default(5)
   durationMinutes Int      @default(30)
+  /// Literal cash copied onto the daily when Finance is among skill weights.
+  wealthCents     Int      @default(0)
   sortOrder       Int      @default(0)
   createdByUser   Boolean  @default(false)
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
 
   @@index([skillId])
+  @@index([habitId])
   @@index([active])
+}
+
+/// One-off XP logs from Dashboard / Character (not daily slots).
+model QuickTaskLog {
+  id               Int      @id @default(autoincrement())
+  date             String
+  title            String
+  icon             String?
+  templateId       Int?
+  skillWeightsJson String
+  effortLevel      Int
+  durationMinutes  Int
+  xpAwarded        Int
+  activityIdsJson  String?
+  wealthCents      Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  @@index([date])
+  @@index([createdAt])
 }
 
 /// Immutable day archive — full board + skill tree at seal time.
 model DailyLog {
-  id             Int      @id @default(autoincrement())
-  date           String   @unique
-  sealedAt       DateTime @default(now())
-  filledCount    Int
-  completedCount Int
-  earnedXp       Int
-  projectedXp    Int
-  snapshotJson   String
+  id                  Int      @id @default(autoincrement())
+  date                String   @unique
+  sealedAt            DateTime @default(now())
+  filledCount         Int
+  completedCount      Int
+  earnedXp            Int
+  projectedXp         Int
+  snapshotJson        String
+  /// True after Carry Over copied leftover tasks off this sealed day.
+  incompletesCarried  Boolean  @default(false)
+  /// Frozen 0–100 verdict at seal time. Empty verdict string means not scored yet.
+  score               Int      @default(0)
+  /// poor | average | strong | peak
+  grade               String   @default("poor")
+  assignedMinutes     Int      @default(0)
+  trackedCount        Int      @default(0)
+  verdict             String   @default("")
 }
 
 /// Recorded whenever a skill gains one or more levels.
@@ -137,32 +196,181 @@ model LevelUpEvent {
   @@index([skillId])
 }
 
-/// Completed Horologium (deep-work) focus session — awards Focus XP.
+/// Horologium work log — Focus per block, Discipline on sessio complete.
 model HorologiumSession {
-  id              Int      @id @default(autoincrement())
-  date            String
-  workMinutes     Int
-  restMinutes     Int
-  iterations      Int
-  durationMinutes Int
-  presetId        String?
-  skillId         Int?
-  skill           Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
-  xpAwarded       Int
-  activityId      Int?
-  note            String?
-  completedAt     DateTime @default(now())
+  id                   Int      @id @default(autoincrement())
+  date                 String
+  workMinutes          Int
+  restMinutes          Int
+  iterations           Int
+  durationMinutes      Int
+  presetId             String?
+  skillId              Int?
+  skill                Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  xpAwarded            Int
+  activityId           Int?
+  note                 String?
+  completedAt          DateTime @default(now())
+  /// block | goal | abandon | task | task_early
+  outcome              String   @default("complete")
+  endedEarly           Boolean  @default(false)
+  elapsedMinutes       Int?
+  questRunId           Int?
+  taskLabel            String?
+  focusXpAwarded       Int      @default(0)
+  disciplineXpAwarded  Int      @default(0)
+  startedAt            DateTime?
+  watchName            String?
+  /// JSON array of { slug, name, icon, xp }
+  skillXpJson          String?
 
   @@index([date])
   @@index([completedAt])
+  @@index([questRunId])
+}
+
+/// Live timer SoT — one row per owner + kind. Clients render from endsAt.
+model LiveClock {
+  id            Int       @id @default(autoincrement())
+  ownerId       String
+  kind          String
+  status        String
+  phase         String
+  startedAt     DateTime?
+  endsAt        DateTime?
+  pausedAccumMs Int       @default(0)
+  remainingMs   Int       @default(0)
+  totalPhaseMs  Int       @default(0)
+  notes         String    @default("")
+  payloadJson   String    @default("{}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([ownerId, kind])
+  @@index([ownerId])
+  @@index([status])
+}
+
+/// Count-up project stopwatch — work time only, can span days.
+model HorologiumWatch {
+  id                Int              @id @default(autoincrement())
+  name              String
+  status            String           @default("ACTIVE")
+  elapsedMs         BigInt           @default(0)
+  running           Boolean          @default(false)
+  startedAt         DateTime         @default(now())
+  lastStartedAt     DateTime?
+  archivedAt        DateTime?
+  scriptoriumWorkId Int?
+  scriptoriumWork   ScriptoriumWork? @relation(fields: [scriptoriumWorkId], references: [id], onDelete: SetNull)
+  /// custom | quest | quest_daily_work | daily | subtask | scriptorium
+  bindKind          String           @default("custom")
+  questId           Int?
+  questRunId        Int?
+  questSubtaskId    Int?
+  dailyTaskId       Int?
+  /// Set when this Vigilia is marked done from the dial. Never ends a quest.
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([status])
+  @@index([scriptoriumWorkId])
+  @@index([questId])
+  @@index([questSubtaskId])
+  @@index([dailyTaskId])
+}
+
+/// Append-only projection log — every flushed slice of work time from a clock
+/// or Vigilia watch, with the target(s) it counts toward. Source of truth for
+/// "how much time was logged and when"; daily/subtask elapsedMs are running
+/// totals derived from these rows.
+model WorkInterval {
+  id                Int      @id @default(autoincrement())
+  /// sessio | track | vigilia
+  clockKind         String
+  watchId           Int?
+  dailyTaskId       Int?
+  questRunId        Int?
+  questSubtaskId    Int?
+  /// Set when the interval counts toward a quest's daily-work slice (no subtask).
+  questId           Int?
+  scriptoriumWorkId Int?
+  startedAt         DateTime
+  endedAt           DateTime
+  elapsedMs         Int
+  createdAt         DateTime @default(now())
+
+  @@index([dailyTaskId])
+  @@index([questSubtaskId])
+  @@index([questId])
+  @@index([watchId])
+  @@index([scriptoriumWorkId])
+}
+
+/// Saved Sessio (pomodoro) splits for Horologium.
+model HorologiumPreset {
+  id            Int      @id @default(autoincrement())
+  label         String
+  workMinutes   Int
+  restMinutes   Int
+  iterations    Int
+  restAfterLast Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 /// Singleton player profile (titles, informative status).
 model Character {
-  id        Int      @id @default(1)
-  title     String   @default("Peasant")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(1)
+  title        String   @default("Peasant")
+  nickname     String   @default("")
+  timezone     String   @default("Europe/Tallinn")
+  /// DMY 18.08.2026 · MDY 08/18/2026 · YMD 2026-08-18
+  dateFormat   String   @default("DMY")
+  /// H24 | H12
+  timeFormat   String   @default("H24")
+  /// Wall-clock hour (0–23) when the log day begins. 6 = 06:00 → next 06:00.
+  dayStartHour Int      @default(0)
+  /// 0 = Sunday, 1 = Monday
+  weekStartsOn Int      @default(1)
+  /// Close the sidebar after a menu click on compact viewports
+  menuAutoToggleMobile Boolean @default(true)
+  /// Close the sidebar after a menu click on desktop viewports
+  menuAutoToggleDesktop Boolean @default(true)
+  /// Horologium sessio/track: auto-start rest and the next lap
+  pomodoroAutoContinue Boolean @default(true)
+  /// Consuetudo catalog: open scenery (true) or the Horologium dial (false)
+  consuetudoStartInScenery Boolean @default(true)
+  /// Vigilia settings — which targets Horologium's count-up layer may track.
+  /// When all four are false, Vigilia is hidden from Horologium entirely.
+  vigiliaTrackQuests      Boolean @default(true)
+  vigiliaTrackDailies     Boolean @default(false)
+  vigiliaTrackScriptorium Boolean @default(false)
+  vigiliaTrackCustom      Boolean @default(false)
+  /// Purse balance in minor units (cents). Default 0.
+  wealthCents  Int      @default(0)
+  /// EUR | USD | GBP
+  currency     String   @default("EUR")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Purse ledger — every add/remove, including daily/habit/quest awards.
+model WealthEntry {
+  id           Int      @id @default(autoincrement())
+  date         String
+  deltaCents   Int
+  balanceCents Int
+  note         String?
+  /// manual | daily | habit | quest
+  source       String
+  sourceId     Int?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([date])
 }
 
 /// App feature gates (e.g. Habitus / streaks).
@@ -186,6 +394,20 @@ model Quest {
   skillSlug      String?
   durationDays   Int?
   kind           String     @default("GENERIC")
+  rules          String?
+  stakes         String?
+  howToWin       String?
+  destination    String?
+  journeyLabel   String?
+  journeyNote    String?
+  /// Days per week the journey check-in is expected (1–7).
+  commitmentLevel Int       @default(7)
+  /// Total XP awarded on completion, split by skillWeightsJson.
+  totalXp         Int       @default(0)
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10 when any skills are set.
+  skillWeightsJson String?
+  /// Literal cash awarded once on quest complete when Finance is among weights.
+  wealthCents      Int       @default(0)
   skillReqsJson  String?
   unlockReqsJson String?
   questReqsJson  String?
@@ -193,21 +415,57 @@ model Quest {
   xpPlanJson     String?
   createdByUser  Boolean    @default(false)
   sortOrder      Int        @default(0)
+  /// Optional calendar due day (YYYY-MM-DD) for IRL projects.
+  deadline       String?
+  /// Expected minutes for the main daily work slice (e.g. "4h of subtask work today"). Optional.
+  dailyWorkMinutes Int?
+  /// Label shown when adding the daily work slice to today's dailies. Falls back to journeyLabel / name.
+  dailyWorkTitle   String?
   createdAt      DateTime   @default(now())
   runs           QuestRun[]
+  subtasks       QuestSubtask[]
+  scriptoriumWorks ScriptoriumWork[]
+  tabulae        Tabula[]
+  habits         Habit[]
+  habitLinks     HabitQuestLink[]
+}
+
+model QuestSubtask {
+  id            Int                      @id @default(autoincrement())
+  questId       Int
+  quest         Quest                    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  title         String
+  sortOrder     Int                      @default(0)
+  /// When true, daily journey check-in stays locked until this subtask is done.
+  gatesJourney  Boolean                  @default(false)
+  /// Optional calendar due day (YYYY-MM-DD) for this slice of the work.
+  deadline      String?
+  /// Optional expected minutes for this subtask, copied onto dailies when added.
+  estimateMinutes Int?
+  completions   QuestSubtaskCompletion[]
+  habitLinks    HabitQuestLink[]
+
+  @@index([questId])
 }
 
 model QuestRun {
-  id          Int           @id @default(autoincrement())
-  questId     Int
-  quest       Quest         @relation(fields: [questId], references: [id], onDelete: Cascade)
-  status      String        @default("ACTIVE")
-  streakCount Int           @default(0)
-  bestStreak  Int           @default(0)
-  startedAt   DateTime      @default(now())
-  completedAt DateTime?
-  lastLogDate String?
-  logs        QuestDayLog[]
+  id               Int                      @id @default(autoincrement())
+  questId          Int
+  quest            Quest                    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  status           String                   @default("ACTIVE")
+  streakCount      Int                      @default(0)
+  bestStreak       Int                      @default(0)
+  startedAt        DateTime                 @default(now())
+  completedAt      DateTime?
+  lastLogDate      String?
+  destinationDone  Boolean                  @default(false)
+  /// Whole-quest Vigilia total (independent of subtask / daily-work slices).
+  elapsedMs        BigInt                   @default(0)
+  /// Daily-work / journey slice Vigilia total.
+  journeyElapsedMs BigInt                   @default(0)
+  logs             QuestDayLog[]
+  journeyLogs      QuestJourneyLog[]
+  subtaskCompletions QuestSubtaskCompletion[]
 
   @@index([status])
   @@index([questId])
@@ -227,6 +485,33 @@ model QuestDayLog {
   @@index([date])
 }
 
+model QuestJourneyLog {
+  id        Int      @id @default(autoincrement())
+  runId     Int
+  run       QuestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  date      String
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([runId, date])
+  @@index([date])
+}
+
+model QuestSubtaskCompletion {
+  id          Int          @id @default(autoincrement())
+  runId       Int
+  run         QuestRun     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  subtaskId   Int
+  subtask     QuestSubtask @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  completedAt DateTime     @default(now())
+  /// False while Horologium is still tracking this subtask.
+  done        Boolean      @default(true)
+  elapsedMs   BigInt       @default(0)
+
+  @@unique([runId, subtaskId])
+  @@index([runId])
+}
+
 model Habit {
   id          Int               @id @default(autoincrement())
   name        String
@@ -236,9 +521,87 @@ model Habit {
   cadence     String            @default("DAILY")
   everyNDays  Int               @default(1)
   active      Boolean           @default(true)
-  createdAt   DateTime          @default(now())
-  completions HabitCompletion[]
-  dailyTasks  DailyTask[]
+  /// Literal cash awarded on a manual complete when the linked skill is Finance.
+  wealthCents Int               @default(0)
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10 when set.
+  skillWeightsJson String?
+  effortLevel      Int      @default(5)
+  durationMinutes  Int      @default(30)
+  /// When false, the habit is hidden from daily pickers.
+  allowInDailies   Boolean  @default(true)
+  /// check = binary streak log · tally = Tabularium-style clicker
+  kind             String   @default("check")
+  /// day | week | month | year (tally window)
+  period           String   @default("day")
+  /// vice = less is better · virtue = more is better
+  polarity         String   @default("virtue")
+  normMin          Int      @default(0)
+  normMax          Int      @default(1)
+  step             Int      @default(1)
+  questId          Int?
+  quest            Quest?   @relation(fields: [questId], references: [id], onDelete: SetNull)
+  groupId          Int?
+  group            HabitGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  completions      HabitCompletion[]
+  clicks           HabitClick[]
+  dailyTasks       DailyTask[]
+  taskTemplates    DailyTaskTemplate[]
+  questLink        HabitQuestLink?
+  questEvents      HabitQuestEvent[]
+
+  @@index([kind])
+  @@index([questId])
+  @@index([groupId])
+}
+
+model HabitGroup {
+  id        Int      @id @default(autoincrement())
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  habits    Habit[]
+}
+
+/// One habit ↔ one quest target (journey day or a subtask) with a completion rule.
+model HabitQuestLink {
+  id            Int      @id @default(autoincrement())
+  habitId       Int      @unique
+  habit         Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  questId       Int
+  quest         Quest    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  /// JOURNEY | SUBTASK
+  target        String   @default("JOURNEY")
+  subtaskId     Int?
+  subtask       QuestSubtask? @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
+  /// COUNT | STREAK | WINDOW
+  rule          String   @default("COUNT")
+  requiredCount Int      @default(1)
+  windowDays    Int?
+  createdAt     DateTime @default(now())
+  events        HabitQuestEvent[]
+
+  @@index([questId])
+}
+
+/// Append-only journey of a habit–quest link. Resets never delete earlier rows.
+model HabitQuestEvent {
+  id          Int            @id @default(autoincrement())
+  linkId      Int
+  link        HabitQuestLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  habitId     Int
+  habit       Habit          @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date        String
+  success     Boolean
+  /// progress | reset | complete | miss
+  kind        String
+  tallyInBand Boolean        @default(false)
+  note        String?
+  createdAt   DateTime       @default(now())
+
+  @@index([linkId])
+  @@index([habitId, date])
 }
 
 model HabitCompletion {
@@ -248,8 +611,169 @@ model HabitCompletion {
   date        String
   source      String   @default("manual")
   dailyTaskId Int?
+  wealthAwardedCents Int @default(0)
+  xpAwarded   Int      @default(0)
+  xpActivityIdsJson String?
   createdAt   DateTime @default(now())
 
   @@unique([habitId, date])
+  @@index([date])
+}
+
+model HabitClick {
+  id        Int      @id @default(autoincrement())
+  habitId   Int
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      String
+  delta     Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@index([habitId, date])
+  @@index([date])
+}
+
+model Routine {
+  id               Int           @id @default(autoincrement())
+  name             String
+  icon             String?
+  effortLevel      Int           @default(5)
+  skillWeightsJson String?
+  sortOrder        Int           @default(0)
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  steps            RoutineStep[]
+  runs             RoutineRun[]
+}
+
+model RoutineStep {
+  id              Int               @id @default(autoincrement())
+  routineId       Int
+  routine         Routine           @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  title           String
+  icon            String?
+  durationMinutes Int
+  sortOrder       Int               @default(0)
+  logs            RoutineStepLog[]
+
+  @@index([routineId])
+}
+
+model RoutineRun {
+  id              Int              @id @default(autoincrement())
+  routineId       Int
+  routine         Routine          @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  date            String
+  startedAt       DateTime
+  completedAt     DateTime?
+  skippedCount    Int              @default(0)
+  completedCount  Int              @default(0)
+  plannedSeconds  Int              @default(0)
+  elapsedMs       BigInt           @default(0)
+  baseXp          Int              @default(0)
+  bonusXp         Int              @default(0)
+  xpAwarded       Int              @default(0)
+  activityIdsJson String?
+  notes           String           @default("")
+  steps           RoutineStepLog[]
+
+  @@index([routineId])
+  @@index([date])
+}
+
+model RoutineStepLog {
+  id             Int          @id @default(autoincrement())
+  runId          Int
+  run            RoutineRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepId         Int?
+  step           RoutineStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  title          String
+  icon           String?
+  plannedSeconds Int
+  elapsedMs      BigInt       @default(0)
+  outcome        String
+  deltaMs        Int          @default(0)
+  sortOrder      Int          @default(0)
+
+  @@index([runId])
+}
+
+/// Scriptorium — vault of works, notions, and dated projects.
+model ScriptoriumWork {
+  id               Int      @id @default(autoincrement())
+  title            String
+  notes            String   @default("")
+  icon             String?
+  /// IMMINENS | TEMPESTIVA | COGITATA
+  tier             String   @default("COGITATA")
+  /// YYYY-MM-DD, optional.
+  dueDate          String?
+  /// Planned volume in minutes. Null = unset.
+  durationMinutes  Int?
+  /// Complexity 1–10.
+  effort           Int      @default(5)
+  /// [{ "slug": "cook", "weight": 7 }, …] — weights must sum to 10 when any skills are set.
+  skillWeightsJson String?
+  /// OPEN | ARCHIVED
+  status           String   @default("OPEN")
+  questId          Int?
+  quest            Quest?   @relation(fields: [questId], references: [id], onDelete: SetNull)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  subtasks         ScriptoriumSubtask[]
+  watches          HorologiumWatch[]
+  dailyTasks       DailyTask[]
+
+  @@index([status])
+  @@index([tier])
+  @@index([dueDate])
+  @@index([questId])
+}
+
+model ScriptoriumSubtask {
+  id        Int             @id @default(autoincrement())
+  workId    Int
+  work      ScriptoriumWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+  title     String
+  done      Boolean         @default(false)
+  sortOrder Int             @default(0)
+
+  @@index([workId])
+}
+
+/// Clicker tally — vices, virtues, and other counts over a chosen window.
+model Tabula {
+  id        Int      @id @default(autoincrement())
+  name      String
+  icon      String?
+  /// day | week | month | year
+  period    String   @default("day")
+  /// vice = less is better · virtue = more is better
+  polarity  String   @default("vice")
+  normMin   Int      @default(0)
+  normMax   Int      @default(0)
+  step      Int      @default(1)
+  questId   Int?
+  quest     Quest?   @relation(fields: [questId], references: [id], onDelete: SetNull)
+  sortOrder Int      @default(0)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clicks    TabulaClick[]
+
+  @@index([archived])
+  @@index([questId])
+}
+
+model TabulaClick {
+  id        Int      @id @default(autoincrement())
+  tabulaId  Int
+  tabula    Tabula   @relation(fields: [tabulaId], references: [id], onDelete: Cascade)
+  date      String
+  delta     Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@index([tabulaId, date])
   @@index([date])
 }

@@ -1,0 +1,100 @@
+<app-forge-shell
+  kicker="Consuetudo"
+  [title]="heading()"
+  lede="Name the practice, pick effort and skills, then sequence the steps."
+  backHref="/consuetudo"
+  backLabel="Back to Consuetudo"
+  [toast]="toast()"
+>
+  <form class="create" (submit)="$event.preventDefault(); save()">
+    <fieldset>
+      <legend>Name</legend>
+      <input
+        type="text"
+        placeholder="Morning routine"
+        [formField]="createForm.name"
+      />
+    </fieldset>
+
+    <app-icon-picker
+      [selected]="createModel().icon"
+      (picked)="pickIcon($event)"
+    />
+
+    <app-effort-field
+      [value]="createModel().effortLevel"
+      (valueChange)="setEffort($event)"
+    >
+      <p class="xp-preview">
+        Full walk ~{{ previewXp().totalXp }} XP
+        ({{ previewXp().baseXp }} + {{ previewXp().bonusXp }} finish bonus)
+      </p>
+    </app-effort-field>
+
+    <fieldset class="picker-block">
+      <legend>Skills</legend>
+      <app-skill-weight-list
+        [shares]="weightShares()"
+        [remaining]="weightRemaining()"
+        [valid]="weightsValid()"
+        (bump)="bumpWeight($event)"
+        (remove)="removeWeight($event)"
+      />
+      <app-skill-tree-picker
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
+    </fieldset>
+
+    <fieldset class="steps-block">
+      <legend>Steps</legend>
+      <app-forge-table
+        [columns]="stepColumns"
+        addLabel="+ Add step"
+        (add)="addStep()"
+      >
+        @for (step of steps(); track step.id) {
+          <app-forge-row>
+            <app-icon-field
+              [value]="step.icon"
+              label="Step icon"
+              (valueChange)="setStepIcon(step.id, $event)"
+            />
+            <input
+              type="text"
+              [value]="step.title"
+              placeholder="Step name"
+              aria-label="Task"
+              (input)="setStepTitle(step.id, $any($event.target).value)"
+            />
+            <app-number-field
+              class="trail"
+              ariaLabel="Time in minutes"
+              [min]="1"
+              [max]="1440"
+              [value]="step.durationMinutes"
+              (valueChange)="setStepMinutes(step.id, $event)"
+            />
+            <app-ui-icon-btn
+              class="trail"
+              icon="close"
+              label="Remove step"
+              (clicked)="removeStep(step.id)"
+            />
+          </app-forge-row>
+        }
+      </app-forge-table>
+    </fieldset>
+
+    <div class="actions">
+      <button type="submit" [disabled]="creating() || (!editId() && !canCreate())">
+        {{ creating() ? '…' : editId() ? 'Save practice' : 'Forge Consuetudo' }}
+      </button>
+      <a routerLink="/consuetudo">Cancel</a>
+    </div>
+  </form>
+</app-forge-shell>

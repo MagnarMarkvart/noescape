@@ -7,56 +7,91 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { CharacterService } from '../character/character.service';
+import { CalendarMarks } from '../shared/rune-calendar';
+import { HistoryLog } from '../shared/ui/history-log';
 import { HorologiumApiService } from './horologium-api.service';
 import { HorologiumSessionRecord } from './horologium.model';
-
-const PAGE_SIZE = 15;
+import { HorologiumSessionSheet } from './horologium-session-sheet';
 
 @Component({
   selector: 'app-horologium-log-page',
-  imports: [RouterLink, DecimalPipe],
+  imports: [DecimalPipe, HistoryLog, HorologiumSessionSheet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './horologium-log-page.html',
   styleUrl: './horologium-log-page.css',
 })
 export class HorologiumLogPage implements OnInit {
   private readonly api = inject(HorologiumApiService);
+  private readonly character = inject(CharacterService);
 
   protected readonly items = signal<HorologiumSessionRecord[]>([]);
   protected readonly total = signal(0);
-  protected readonly page = signal(0);
   protected readonly loading = signal(true);
+  protected readonly selected = signal<HorologiumSessionRecord | null>(null);
+  protected readonly selectedDate = signal(this.character.todayIso());
+  protected readonly calendarMarks = signal<CalendarMarks>({});
 
-  protected readonly pageCount = computed(() =>
-    Math.max(1, Math.ceil(this.total() / PAGE_SIZE)),
-  );
+  protected readonly todayIso = computed(() => this.character.todayIso());
+  protected readonly lede = computed(() => {
+    const n = this.total();
+    return `${n} session${n === 1 ? '' : 's'} on ${this.formatDate(this.selectedDate())}`;
+  });
 
   ngOnInit(): void {
-    this.load(0);
+    this.loadDay(this.selectedDate());
   }
 
-  protected prev(): void {
-    if (this.page() <= 0) {
-      return;
+  protected onDateNav(iso: string): void {
+    this.selectedDate.set(iso);
+    this.loadDay(iso);
+  }
+
+  protected loadCalendar(range: { from: string; to: string }): void {
+    this.api.sessionCalendar(range.from, range.to).subscribe({
+      next: (rows) => {
+        const marks: CalendarMarks = {};
+        for (const row of rows) {
+          marks[row.date] = { stars: row.count };
+        }
+        this.calendarMarks.set(marks);
+      },
+    });
+  }
+
+  protected open(row: HorologiumSessionRecord): void {
+    this.selected.set(row);
+  }
+
+  protected close(): void {
+    this.selected.set(null);
+  }
+
+  protected startIso(row: HorologiumSessionRecord): string {
+    if (row.startedAt) {
+      return row.startedAt;
     }
-    this.load(this.page() - 1);
+    const mins = Math.max(0, row.elapsedMinutes ?? row.durationMinutes ?? 0);
+    return new Date(
+      new Date(row.completedAt).getTime() - mins * 60_000,
+    ).toISOString();
   }
 
-  protected next(): void {
-    if (this.page() + 1 >= this.pageCount()) {
-      return;
-    }
-    this.load(this.page() + 1);
+  protected formatDate(iso: string): string {
+    return this.character.formatDate(iso);
   }
 
-  private load(page: number): void {
+  protected clock(iso: string): string {
+    return this.character.formatTime(iso);
+  }
+
+  private loadDay(date: string): void {
     this.loading.set(true);
-    this.api.listSessions(PAGE_SIZE, page * PAGE_SIZE).subscribe({
+    this.selected.set(null);
+    this.api.listSessions(50, 0, date).subscribe({
       next: (res) => {
         this.items.set(res.items);
         this.total.set(res.total);
-        this.page.set(page);
         this.loading.set(false);
       },
       error: () => this.loading.set(false),

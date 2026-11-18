@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { inject, Injectable } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import { Observable, of, tap } from 'rxjs';
 import { shareReplay } from 'rxjs/operators';
 import { API_BASE_URL } from '../core/api.config';
@@ -19,6 +19,7 @@ export class SkillsService {
   private readonly rewardsUrl = `${API_BASE_URL}/rewards`;
   private treeCache: SkillTree | null = null;
   private tree$: Observable<SkillTree> | null = null;
+  readonly hasLevelUps = signal(false);
 
   /** Instant read of last successful tree (may be stale). */
   peekTree(): SkillTree | null {
@@ -63,9 +64,15 @@ export class SkillsService {
   }
 
   listLevelUps(page = 1, pageSize = 15) {
-    return this.http.get<LevelUpLogPage>(
-      `${this.baseUrl}/level-ups?page=${page}&pageSize=${pageSize}`,
-    );
+    return this.http
+      .get<LevelUpLogPage>(
+        `${this.baseUrl}/level-ups?page=${page}&pageSize=${pageSize}`,
+      )
+      .pipe(tap((result) => this.hasLevelUps.set(result.total > 0)));
+  }
+
+  noteLevelUp(): void {
+    this.hasLevelUps.set(true);
   }
 
   logActivity(

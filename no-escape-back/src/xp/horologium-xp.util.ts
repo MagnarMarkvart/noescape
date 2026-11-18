@@ -1,5 +1,8 @@
 /**
- * Horologium Focus XP.
+ * Horologium XP.
+ *
+ * Default (every finished work block): Focus.
+ * Completing a planned Sessio: Discipline (the goal bonus).
  *
  * Per completed work block (Track and Sessio use the same rate):
  *   XP = max(1, round(workMinutes × RATE × restMult × workLengthMult))
@@ -13,8 +16,11 @@
  *   - long rest cuts the bonus
  *   - growth uses (iterations - 1)^EXPONENT so 2 rounds stay modest
  * Aborting early → block XP only, never the goal bonus.
+ * Abandoned Sessio → extra 30% of each unfinished split's block XP is removed.
  */
 export const HOROLOGIUM_XP_PER_WORK_MINUTE = 1;
+/** Fraction of a split's XP stripped for each unfinished work block. */
+export const HOROLOGIUM_ABANDON_PENALTY_RATE = 0.3;
 /** Planned Sessio must commit to at least this many work blocks. */
 export const HOROLOGIUM_MIN_SESSIO_ITERATIONS = 2;
 /** Base factor for goal bonus before work/rest/iteration scales. */
@@ -30,6 +36,7 @@ export const HOROLOGIUM_GOAL_PEAK_WORK_MINUTES = 55;
 /** Scale at exactly MIN work minutes (peak work uses 1.0). */
 export const HOROLOGIUM_GOAL_MIN_WORK_SCALE = 0.22;
 export const FOCUS_SKILL_SLUG = 'focus';
+export const DISCIPLINE_SKILL_SLUG = 'discipline';
 
 export type HorologiumMode = 'adhoc' | 'planned';
 
@@ -169,6 +176,21 @@ export function calculateHorologiumGoalBonus(input: {
     workScale: round3(workScale),
     totalWorkMinutes: workMinutes * iterations,
   };
+}
+
+/** XP removed when a planned Sessio is stopped with unfinished splits. */
+export function calculateAbandonPenalty(
+  blockXp: number,
+  unfinishedSplits: number,
+): number {
+  const unfinished = Math.max(0, Math.round(unfinishedSplits));
+  if (unfinished <= 0 || blockXp <= 0) {
+    return 0;
+  }
+  return Math.max(
+    0,
+    Math.round(blockXp * HOROLOGIUM_ABANDON_PENALTY_RATE * unfinished),
+  );
 }
 
 function round3(n: number): number {

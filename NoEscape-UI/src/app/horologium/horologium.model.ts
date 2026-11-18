@@ -1,5 +1,9 @@
+import { formatElapsedMs as formatElapsedMsShared } from '../shared/time';
+
 export type TimerPhase = 'idle' | 'work' | 'rest' | 'complete';
 export type HorologiumMode = 'adhoc' | 'planned';
+/** Setup selector: Sessio / Track are pomodoro; Vigilia is count-up; Consuetudo is a practice. */
+export type HorologiumSetupKind = HorologiumMode | 'vigilia' | 'consuetudo';
 
 export interface HorologiumConfig {
   workMinutes: number;
@@ -71,6 +75,13 @@ export const DEFAULT_HOROLOGIUM_CONFIG: HorologiumConfig = {
 export const WORK_END_JINGLE = '/assets/jingles/Pomodoro.ogg';
 export const REST_END_JINGLE = '/assets/jingles/rest-timer-end.ogg';
 
+export interface HorologiumSkillXp {
+  slug: string;
+  name: string;
+  icon: string | null;
+  xp: number;
+}
+
 export interface HorologiumSessionRecord {
   id: number;
   date: string;
@@ -91,16 +102,176 @@ export interface HorologiumSessionRecord {
   activityId: number | null;
   note: string | null;
   completedAt: string;
+  outcome?: string;
+  endedEarly?: boolean;
+  elapsedMinutes?: number | null;
+  questRunId?: number | null;
+  taskLabel?: string | null;
+  focusXpAwarded?: number;
+  disciplineXpAwarded?: number;
+  startedAt?: string | null;
+  watchName?: string | null;
+  skillXp?: HorologiumSkillXp[];
+  restTotalMinutes?: number;
+  kind?: 'sessio' | 'consuetudo';
+  routineName?: string | null;
+  routineIcon?: string | null;
 }
 
 export interface HorologiumXpPreview {
   mode: HorologiumMode;
   blockXp: number;
   goalBonusXp: number;
+  disciplineXp?: number;
+  focusIfCompleted?: number;
+  disciplineIfCompleted?: number;
   totalIfCompleted: number;
+  /** 30% of one split — charged once per unfinished block on abandon. */
+  abandonPenaltyPerSplit: number;
   restMult: number;
   workLengthMult: number;
   modeMult: number;
   totalWorkMinutes: number;
   skillSlug: string;
+  disciplineSkillSlug?: string;
 }
+
+export type HorologiumBoundSource = 'quest' | 'daily' | 'subtask';
+
+export interface HorologiumBoundDaily {
+  source: HorologiumBoundSource;
+  /** Quest run id. 0 when source is a board daily. */
+  runId: number;
+  /** Board daily task id. Null when source is a quest daily/subtask. */
+  dailyTaskId: number | null;
+  subtaskId: number | null;
+  questId: number;
+  name: string;
+  journeyLabel: string | null;
+  kind: string;
+  totalXp: number;
+  durationDays: number | null;
+  elapsedMs: number;
+  subtaskCount?: number;
+  skillShares: Array<{
+    slug: string;
+    name: string;
+    weight: number;
+    xp: number;
+  }>;
+}
+
+export function horologiumBindKey(daily: HorologiumBoundDaily): string {
+  if (daily.source === 'daily') {
+    return `d:${daily.dailyTaskId}`;
+  }
+  if (daily.source === 'subtask') {
+    return `s:${daily.runId}:${daily.subtaskId}`;
+  }
+  return `q:${daily.runId}`;
+}
+
+export function formatElapsedMs(ms: number): string {
+  return formatElapsedMsShared(ms);
+}
+
+export type VigiliaBindKind =
+  | 'custom'
+  | 'quest'
+  | 'quest_daily_work'
+  | 'daily'
+  | 'subtask'
+  | 'scriptorium';
+
+export interface HorologiumWatchRecord {
+  id: number;
+  name: string;
+  status: string;
+  elapsedMs: number;
+  running: boolean;
+  startedAt: string;
+  lastStartedAt: string | null;
+  archivedAt: string | null;
+  scriptoriumWorkId?: number | null;
+  bindKind?: VigiliaBindKind;
+  questId?: number | null;
+  questRunId?: number | null;
+  questSubtaskId?: number | null;
+  dailyTaskId?: number | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VigiliaPickerOption {
+  value: string;
+  label: string;
+}
+
+export interface VigiliaPickerGroup {
+  id: string;
+  label: string;
+  options: VigiliaPickerOption[];
+}
+
+export function vigiliaPickerValue(
+  watch: HorologiumWatchRecord | null,
+): string {
+  if (!watch) {
+    return '';
+  }
+  if (watch.bindKind === 'quest' && watch.questId) {
+    return `q:${watch.questId}`;
+  }
+  if (watch.bindKind === 'quest_daily_work' && watch.questId) {
+    return `qd:${watch.questId}`;
+  }
+  if (watch.bindKind === 'subtask' && watch.questSubtaskId) {
+    return `s:${watch.questSubtaskId}`;
+  }
+  if (watch.bindKind === 'daily' && watch.dailyTaskId) {
+    return `d:${watch.dailyTaskId}`;
+  }
+  return `w:${watch.id}`;
+}
+
+export type VigiliaPickerBind =
+  | { bindKind: 'quest'; questId: number }
+  | { bindKind: 'quest_daily_work'; questId: number }
+  | { bindKind: 'subtask'; questSubtaskId: number }
+  | { bindKind: 'daily'; dailyTaskId: number }
+  | { watchId: number };
+
+export function parseVigiliaPickerValue(
+  raw: string,
+): VigiliaPickerBind | null {
+  const value = raw.trim();
+  if (!value) {
+    return null;
+  }
+  if (/^\d+$/.test(value)) {
+    return { watchId: Number(value) };
+  }
+  const [kind, idRaw] = value.split(':');
+  const id = Number(idRaw);
+  if (!Number.isFinite(id) || id <= 0) {
+    return null;
+  }
+  if (kind === 'q') {
+    return { bindKind: 'quest', questId: id };
+  }
+  if (kind === 'qd') {
+    return { bindKind: 'quest_daily_work', questId: id };
+  }
+  if (kind === 's') {
+    return { bindKind: 'subtask', questSubtaskId: id };
+  }
+  if (kind === 'd') {
+    return { bindKind: 'daily', dailyTaskId: id };
+  }
+  if (kind === 'w') {
+    return { watchId: id };
+  }
+  return null;
+}
+

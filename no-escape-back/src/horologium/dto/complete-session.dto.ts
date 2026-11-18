@@ -4,4 +4,6 @@ export class CompleteHorologiumSessionDto {
   iterations!: number;
   restAfterLast?: boolean;
   presetId?: string;
+  startedAt?: string;
+  watchName?: string;
 }

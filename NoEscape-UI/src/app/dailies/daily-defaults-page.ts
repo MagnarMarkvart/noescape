@@ -6,92 +6,82 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { form, FormField, min, required, submit } from '@angular/forms/signals';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { TimedToast } from '../shared/timed-toast';
-import { Skill, SkillTree } from '../skills/skill.model';
-import { SkillsService } from '../skills/skills.service';
-import { DailyTaskTemplate } from './daily.model';
+import {
+  DailyTaskTemplate,
+  dailySkillLine,
+  formatTaskDuration,
+} from './daily.model';
 import { DailiesService } from './dailies.service';
+import { DefaultsReturn } from './defaults-return';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
+import { formatMoney } from '../shared/money';
+import { CharacterService } from '../character/character.service';
 
 @Component({
   selector: 'app-daily-defaults-page',
-  imports: [RouterLink, FormField],
+  imports: [UiIconBtn],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './daily-defaults-page.html',
   styleUrl: './daily-defaults-page.css',
 })
 export class DailyDefaultsPage implements OnInit {
   private readonly dailies = inject(DailiesService);
-  private readonly skillsService = inject(SkillsService);
+  private readonly character = inject(CharacterService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly defaultsReturn = inject(DefaultsReturn);
   private readonly timed = new TimedToast();
 
   protected readonly toast = this.timed.value;
   protected readonly templates = signal<DailyTaskTemplate[]>([]);
-  protected readonly skillTree = signal<SkillTree | null>(null);
-  protected readonly creating = signal(false);
+  protected readonly query = signal('');
+  protected readonly backHref = signal('/dailies');
+  protected readonly backLabel = signal('Back to Dailies');
 
-  protected readonly createModel = signal({
-    name: '',
-    icon: '◆',
-    skillId: 0,
-    fixedXp: 50,
-  });
-  protected readonly createForm = form(this.createModel, (p) => {
-    required(p.name);
-    min(p.skillId, 1);
-    min(p.fixedXp, 1);
-  });
-
-  protected readonly allSkills = computed(() => {
-    const tree = this.skillTree();
-    if (!tree) {
-      return [] as Skill[];
+  protected readonly filtered = computed(() => {
+    const q = this.query().trim().toLowerCase();
+    const rows = this.templates();
+    if (!q) {
+      return rows;
     }
-    return tree.categories.flatMap((c) => c.skills);
+    return rows.filter((t) => {
+      const hay = [
+        t.name,
+        t.skill.name,
+        t.skill.category,
+        t.habit?.name ?? '',
+        ...(t.skillShares ?? []).map((s) => s.name),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
   });
 
   ngOnInit(): void {
+    this.defaultsReturn.remember(this.route.snapshot.queryParamMap.get('from'));
+    const origin = this.defaultsReturn.origin();
+    this.backHref.set(origin.href);
+    this.backLabel.set(origin.label);
     this.reload();
-    this.skillsService.getTree().subscribe({
-      next: (t) => this.skillTree.set(t),
-    });
   }
 
-  protected onSkillSelect(event: Event): void {
-    const id = Number((event.target as HTMLSelectElement).value) || 0;
-    this.createModel.update((m) => ({ ...m, skillId: id }));
+  protected onQuery(event: Event): void {
+    this.query.set((event.target as HTMLInputElement).value);
   }
 
-  protected create(): void {
-    void submit(this.createForm, async () => {
-      const m = this.createModel();
-      this.creating.set(true);
-      this.dailies
-        .createTemplate({
-          name: m.name.trim(),
-          icon: m.icon.trim() || '◆',
-          skillId: Number(m.skillId),
-          fixedXp: Number(m.fixedXp),
-        })
-        .subscribe({
-          next: () => {
-            this.creating.set(false);
-            this.createModel.set({
-              name: '',
-              icon: '◆',
-              skillId: 0,
-              fixedXp: 50,
-            });
-            this.timed.set('Default task created');
-            this.reload();
-          },
-          error: (err: { error?: { message?: string } }) => {
-            this.creating.set(false);
-            this.timed.set(err.error?.message ?? 'Create failed');
-          },
-        });
-    });
+  protected skillLine(t: DailyTaskTemplate): string {
+    return dailySkillLine(t);
+  }
+
+  protected formatDuration(minutes: number): string {
+    return formatTaskDuration(minutes);
+  }
+
+  protected formatWealth(cents: number | null | undefined): string {
+    const n = Math.round(Number(cents) || 0);
+    return n > 0 ? formatMoney(n, this.character.currency()) : '';
   }
 
   protected remove(t: DailyTaskTemplate): void {

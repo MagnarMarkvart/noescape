@@ -1,0 +1,105 @@
+@if (toast()) {
+  <p class="toast" role="status">{{ toast() }}</p>
+}
+
+@if (loading()) {
+  <p class="state">Loading…</p>
+} @else {
+  <form class="settings-form" (submit)="$event.preventDefault(); save()">
+    <label>
+      Nickname
+      <input
+        type="text"
+        maxlength="40"
+        [value]="nickname()"
+        (input)="setNickname($event)"
+        placeholder="Shown on Character"
+      />
+    </label>
+    <fieldset class="option-group">
+      <legend>Week starts on</legend>
+      <app-rune-check
+        label="Monday"
+        [checked]="weekStartsOn() === 1"
+        (checkedChange)="setWeekStart(1, $event)"
+      />
+      <app-rune-check
+        label="Sunday"
+        [checked]="weekStartsOn() === 0"
+        (checkedChange)="setWeekStart(0, $event)"
+      />
+    </fieldset>
+    <fieldset class="option-group">
+      <legend>Currency</legend>
+      @for (opt of currencies; track opt.id) {
+        <app-rune-check
+          [label]="opt.label"
+          [checked]="currency() === opt.id"
+          (checkedChange)="setCurrency(opt.id, $event)"
+        />
+      }
+      <p class="hint">
+        Used for the Wealth purse on Character and Dashboard.
+      </p>
+    </fieldset>
+    <fieldset class="option-group">
+      <legend>Menu Auto-Toggle</legend>
+      <app-rune-check
+        label="On mobile"
+        [checked]="menuAutoToggleMobile()"
+        (checkedChange)="setMenuAutoToggleMobile($event)"
+      />
+      <app-rune-check
+        label="On desktop"
+        [checked]="menuAutoToggleDesktop()"
+        (checkedChange)="setMenuAutoToggleDesktop($event)"
+      />
+      <p class="hint">
+        Close the sidebar after you pick a page. Choose both, one, or neither.
+      </p>
+    </fieldset>
+    <fieldset class="option-group">
+      <legend>Consuetudo start</legend>
+      <app-rune-check
+        label="Scenery view"
+        [checked]="consuetudoStartInScenery()"
+        (checkedChange)="setConsuetudoStartInScenery(true, $event)"
+      />
+      <app-rune-check
+        label="Horologium view"
+        [checked]="!consuetudoStartInScenery()"
+        (checkedChange)="setConsuetudoStartInScenery(false, $event)"
+      />
+      <p class="hint">
+        Opening a practice from the Consuetudo catalog lands here, ready to
+        start. Scenery is the default.
+      </p>
+    </fieldset>
+    <fieldset class="option-group">
+      <legend>Sound</legend>
+      <app-rune-check
+        label="Completion and level sounds"
+        [checked]="xpSoundsEnabled()"
+        (checkedChange)="setXpSoundsEnabled($event)"
+      />
+      <label class="vol" [class.off]="!xpSoundsEnabled()">
+        Volume {{ xpSoundVolume() }}%
+        <input
+          type="range"
+          min="0"
+          max="100"
+          [disabled]="!xpSoundsEnabled()"
+          [value]="xpSoundVolume()"
+          (input)="setXpSoundVolume($any($event.target).value)"
+        />
+      </label>
+      <p class="hint">
+        XP gain/loss, level-up / level-down, and Horologium chimes. Soundscape
+        volume stays independent in Scenery.
+      </p>
+    </fieldset>
+    <button type="submit" class="save" [disabled]="saving()">
+      {{ saving() ? 'Saving…' : 'Save' }}
+    </button>
+  </form>
+}

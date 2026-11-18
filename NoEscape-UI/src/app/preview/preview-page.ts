@@ -18,11 +18,23 @@ export class PreviewPage {
     this.xpFeedback.mockLevelUp();
   }
 
+  protected mockLevelUpUnlock(): void {
+    this.xpFeedback.mockLevelUpUnlock();
+  }
+
   protected mockXpLoss(): void {
     this.xpFeedback.mockXpLoss();
   }
 
   protected mockLevelDown(): void {
     this.xpFeedback.mockLevelDown();
+  }
+
+  protected mockQuestStarted(): void {
+    this.xpFeedback.mockQuestStarted();
+  }
+
+  protected mockQuestCompleted(): void {
+    this.xpFeedback.mockQuestCompleted();
   }
 }

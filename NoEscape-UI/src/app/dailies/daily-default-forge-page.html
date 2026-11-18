@@ -1,0 +1,82 @@
+<app-forge-shell
+  kicker="Dailies"
+  title="New default"
+  lede="Effort and duration set the XP. Load it later into a daily or log it as a one-off."
+  backHref="/dailies/defaults"
+  backLabel="Back to defaults"
+  [toast]="toast()"
+>
+  <form class="create" (submit)="$event.preventDefault(); create()">
+    <fieldset>
+      <legend>Title</legend>
+      <input type="text" [formField]="createForm.name" placeholder="Showering" />
+    </fieldset>
+
+    <app-effort-field
+      [value]="createModel().effortLevel"
+      (valueChange)="selectEffort($event)"
+    >
+      <p class="xp-preview">≈ {{ previewXp() | number }} XP as a Regular daily</p>
+    </app-effort-field>
+
+    <app-duration-field
+      legend="Duration"
+      [presets]="durationPresets"
+      [minutes]="createModel().durationMinutes"
+      [maxHours]="24"
+      (minutesChange)="setDuration($event)"
+    />
+
+    <fieldset class="picker-block">
+      <legend>Skills</legend>
+      <app-skill-weight-list
+        [shares]="weightShares()"
+        [remaining]="weightRemaining()"
+        [valid]="weightsValid()"
+        (bump)="bumpSkillWeight($event)"
+        (remove)="removeSkillWeight($event)"
+      />
+      <app-skill-tree-picker
+        [showLevel]="true"
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
+    </fieldset>
+
+    @if (habits().length) {
+      <fieldset>
+        <legend>Habit (optional)</legend>
+        <select [value]="createModel().habitId" (change)="onHabitSelect($event)">
+          <option [value]="0">— none —</option>
+          @for (h of habits(); track h.id) {
+            <option [value]="h.id">{{ h.icon }} {{ h.name }}</option>
+          }
+        </select>
+      </fieldset>
+    }
+
+    @if (showWealth()) {
+      <fieldset>
+        <legend>Wealth gained ({{ currencyLabel() }})</legend>
+        <input
+          type="text"
+          inputmode="decimal"
+          [value]="createModel().wealthAmount"
+          (input)="setWealthAmount($event)"
+          placeholder="0.00"
+        />
+      </fieldset>
+    }
+
+    <div class="actions">
+      <button type="submit" [disabled]="creating() || createForm().invalid() || !weightsValid()">
+        {{ creating() ? '…' : 'Save default' }}
+      </button>
+      <a routerLink="/dailies/defaults">Cancel</a>
+    </div>
+  </form>
+</app-forge-shell>

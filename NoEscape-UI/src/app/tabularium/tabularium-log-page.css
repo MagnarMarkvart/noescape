@@ -1,0 +1,117 @@
+:host {
+  --rs-bg: #2b2518;
+  --rs-border: #8a7340;
+  --rs-border-bright: #c6a85a;
+  --rs-text: #f0e6c8;
+  --rs-muted: #b8a878;
+  --rs-accent: #d4a84b;
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
+  --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: block;
+  color: var(--rs-text);
+  font-family: var(--font-body);
+}
+
+.report {
+  margin: 0 0 1.15rem;
+}
+
+.report .kicker {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.report-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.session-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+
+.session-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--rs-border);
+  background:
+    linear-gradient(180deg, rgba(74, 61, 40, 0.42), rgba(30, 24, 14, 0.78));
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.session-card:hover,
+.session-card:focus-visible {
+  border-color: var(--rs-border-bright);
+  outline: none;
+}
+
+.log-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+}
+
+.xp-chip {
+  color: var(--rs-accent);
+  font-size: 0.85rem;
+}
+
+.log-meta {
+  margin: 0.4rem 0 0;
+  color: var(--rs-muted);
+  font-size: 0.9rem;
+}
+
+.facts {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.facts div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+dt {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+@media (min-width: 720px) {
+  .session-log,
+  .report-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .session-log {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

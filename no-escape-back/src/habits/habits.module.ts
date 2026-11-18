@@ -1,10 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CharacterModule } from '../character/character.module';
 import { HabitsController } from './habits.controller';
 import { HabitsService } from './habits.service';
+import { QuestsModule } from '../quests/quests.module';
+import { SkillsModule } from '../skills/skills.module';
 
 @Module({
-  imports: [CharacterModule],
+  imports: [CharacterModule, SkillsModule, forwardRef(() => QuestsModule)],
   controllers: [HabitsController],
   providers: [HabitsService],
   exports: [HabitsService],

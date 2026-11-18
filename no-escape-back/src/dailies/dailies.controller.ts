@@ -5,18 +5,34 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Put,
   Query,
 } from '@nestjs/common';
 import { CopyIncompleteDto } from './dto/copy-incomplete.dto';
+import {
+  CreateDailyTemplateDto,
+  UpdateDailyTemplateDto,
+} from './dto/daily-template.dto';
 import { PostponeDailyDto } from './dto/postpone-daily.dto';
+import { LogQuickTaskDto } from './dto/log-quick-task.dto';
 import { DailiesService } from './dailies.service';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
+
+function optionalElapsedMs(raw: unknown): number | undefined {
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
 
 @Controller('dailies')
 export class DailiesController {
   constructor(private readonly dailiesService: DailiesService) {}
+
+  @Get('calendar')
+  calendar(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.dailiesService.calendar(from ?? '', to ?? '');
+  }
 
   @Get()
   getBoard(@Query('date') date?: string) {
@@ -38,6 +54,11 @@ export class DailiesController {
     return this.dailiesService.sealDay(body?.date);
   }
 
+  @Post('unseal')
+  unsealDay(@Body() body: { date?: string }) {
+    return this.dailiesService.unsealDay(body?.date);
+  }
+
   @Post('copy-incomplete')
   copyIncomplete(@Body() dto: CopyIncompleteDto) {
     return this.dailiesService.copyIncomplete(dto ?? {});
@@ -53,24 +74,71 @@ export class DailiesController {
     return this.dailiesService.upsertSlot(dto);
   }
 
+  @Post('slots/reorder')
+  reorderSlots(
+    @Body()
+    body: {
+      date?: string;
+      from: { importance: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR'; slotIndex: number };
+      to: { importance: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR'; slotIndex: number };
+    },
+  ) {
+    return this.dailiesService.reorderSlot(body);
+  }
+
+  @Post('from-quest')
+  fromQuest(
+    @Body()
+    body: {
+      date?: string;
+      questId: number;
+      questSubtaskId?: number | null;
+      importance?: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR';
+      slotIndex?: number;
+    },
+  ) {
+    return this.dailiesService.fromQuest(body);
+  }
+
+  @Post('from-scriptorium')
+  fromScriptorium(
+    @Body()
+    body: {
+      date?: string;
+      workId: number;
+      importance?: 'MOST_IMPORTANT' | 'IMPORTANT' | 'REGULAR';
+      slotIndex?: number;
+    },
+  ) {
+    return this.dailiesService.fromScriptorium(body);
+  }
+
   @Get('templates')
   listTemplates() {
     return this.dailiesService.listTemplates();
   }
 
+  @Get('quick')
+  listQuick(@Query('limit') limit?: string) {
+    return this.dailiesService.listQuick(Number(limit) || 12);
+  }
+
+  @Post('quick')
+  logQuick(@Body() body: LogQuickTaskDto) {
+    return this.dailiesService.logQuick(body ?? {});
+  }
+
   @Post('templates')
-  createTemplate(
-    @Body()
-    body: {
-      name: string;
-      icon?: string;
-      skillId: number;
-      fixedXp: number;
-      effortLevel?: number;
-      durationMinutes?: number;
-    },
-  ) {
+  createTemplate(@Body() body: CreateDailyTemplateDto) {
     return this.dailiesService.createTemplate(body);
+  }
+
+  @Patch('templates/:id')
+  updateTemplate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdateDailyTemplateDto,
+  ) {
+    return this.dailiesService.updateTemplate(id, body);
   }
 
   @Delete('templates/:id')
@@ -79,13 +147,26 @@ export class DailiesController {
   }
 
   @Post(':id/complete')
-  complete(@Param('id', ParseIntPipe) id: number) {
-    return this.dailiesService.complete(id);
+  complete(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { elapsedMs?: number },
+  ) {
+    return this.dailiesService.complete(id, {
+      elapsedMs: optionalElapsedMs(body?.elapsedMs),
+    });
   }
 
   @Post(':id/uncomplete')
   uncomplete(@Param('id', ParseIntPipe) id: number) {
     return this.dailiesService.uncomplete(id);
+  }
+
+  @Patch(':id/elapsed')
+  setElapsed(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { elapsedMs?: number },
+  ) {
+    return this.dailiesService.setElapsed(id, Number(body?.elapsedMs) || 0);
   }
 
   @Post(':id/postpone')

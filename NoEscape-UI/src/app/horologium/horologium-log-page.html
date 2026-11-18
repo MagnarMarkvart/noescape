@@ -1,42 +1,56 @@
-<section class="log-shell">
-  <header class="toolbar">
-    <div>
-      <p class="kicker">Archive</p>
-      <h1>Horo Log</h1>
-      <p class="lede">{{ total() }} sessions · page {{ page() + 1 }} / {{ pageCount() }}</p>
-    </div>
-    <a routerLink="/horologium" class="back">← Horologium</a>
-  </header>
-
-  @if (loading()) {
-    <p class="muted">Loading…</p>
-  } @else if (items().length === 0) {
-    <p class="muted">No sessions yet.</p>
-  } @else {
-    <ul class="session-log">
-      @for (row of items(); track row.id) {
-        <li>
+<app-history-log
+  kicker="Archive"
+  title="Horo Log"
+  [lede]="lede()"
+  backHref="/horologium"
+  backLabel="Back to Horologium"
+  [date]="selectedDate()"
+  [today]="todayIso()"
+  [marks]="calendarMarks()"
+  [loading]="loading()"
+  [empty]="!loading() && items().length === 0"
+  emptyText="No sessions on this day."
+  (dateChange)="onDateNav($event)"
+  (rangeChange)="loadCalendar($event)"
+>
+  <ul class="session-log">
+    @for (row of items(); track (row.kind || 'session') + ':' + row.id) {
+      <li>
+        <button
+          type="button"
+          class="session-card"
+          (click)="open(row)"
+          [attr.aria-pressed]="
+            selected()?.id === row.id &&
+            (selected()?.kind || 'session') === (row.kind || 'session')
+          "
+        >
           <div class="log-top">
-            <strong>{{ row.date }}</strong>
-            <span class="xp-chip">+{{ row.xpAwarded | number }} XP</span>
+            <strong>{{ clock(startIso(row)) }} – {{ clock(row.completedAt) }}</strong>
+            <span class="xp-chip" [class.loss]="row.xpAwarded < 0">
+              {{ row.xpAwarded >= 0 ? '+' : '−' }}{{ (row.xpAwarded < 0 ? -row.xpAwarded : row.xpAwarded) | number }} XP
+            </span>
           </div>
-          <p class="log-meta">
-            <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
-            {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
-          </p>
-        </li>
-      }
-    </ul>
+          @if (row.kind === 'consuetudo') {
+            <p class="log-meta">
+              <span aria-hidden="true">{{ row.routineIcon || '◆' }}</span>
+              Consuetudo · {{ row.routineName || row.taskLabel || 'Practice' }}
+            </p>
+          } @else {
+            @if (row.endedEarly) {
+              <p class="early-tag">Ended early · task done{{ row.elapsedMinutes != null ? ' · ' + row.elapsedMinutes + 'm elapsed' : '' }}</p>
+            }
+            <p class="log-meta">
+              <span aria-hidden="true">{{ row.skill?.icon || '🧠' }}</span>
+              {{ row.note || (row.iterations + '×' + row.workMinutes + 'm') }}
+            </p>
+          }
+        </button>
+      </li>
+    }
+  </ul>
+</app-history-log>
 
-    <div class="pager">
-      <button type="button" [disabled]="page() === 0" (click)="prev()">‹ Prev</button>
-      <button
-        type="button"
-        [disabled]="page() + 1 >= pageCount()"
-        (click)="next()"
-      >
-        Next ›
-      </button>
-    </div>
-  }
-</section>
+@if (selected(); as row) {
+  <app-horologium-session-sheet [session]="row" (closed)="close()" />
+}

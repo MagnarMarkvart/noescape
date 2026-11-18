@@ -6,11 +6,16 @@ import { API_BASE_URL } from '../core/api.config';
 import { LogActivityResponse, XpReversalResponse } from '../skills/skill.model';
 import {
   DailyBoard,
+  DailyCalendarDay,
   DailyLogDetail,
   DailyLogSummary,
   DailyTaskSlot,
   DailyTaskTemplate,
+  LogQuickTaskPayload,
+  QuickTaskLog,
   UpsertDailyTaskPayload,
+  UpsertDailyTemplatePayload,
+  TaskImportance,
 } from './daily.model';
 
 @Injectable({ providedIn: 'root' })
@@ -63,16 +68,6 @@ export class DailiesService {
     this.board$.clear();
   }
 
-  listLogs() {
-    return this.http.get<DailyLogSummary[]>(`${this.baseUrl}/logs`);
-  }
-
-  getLog(date: string) {
-    return this.http.get<DailyLogDetail>(
-      `${this.baseUrl}/logs/${encodeURIComponent(date)}`,
-    );
-  }
-
   sealDay(date?: string) {
     return this.http
       .post<DailyLogDetail>(`${this.baseUrl}/seal`, { date })
@@ -101,12 +96,50 @@ export class DailiesService {
       .pipe(tap((slot) => this.invalidateBoard(slot.date)));
   }
 
-  complete(id: number) {
+  reorderSlots(
+    date: string,
+    from: { importance: TaskImportance; slotIndex: number },
+    to: { importance: TaskImportance; slotIndex: number },
+  ) {
+    return this.http
+      .post<DailyBoard>(`${this.baseUrl}/slots/reorder`, { date, from, to })
+      .pipe(
+        tap((board) => {
+          this.boardCache.set(board.date, board);
+          this.board$.delete(board.date);
+        }),
+      );
+  }
+
+  patchElapsed(id: number, elapsedMs: number) {
+    return this.http
+      .patch<DailyTaskSlot>(`${this.baseUrl}/${id}/elapsed`, { elapsedMs })
+      .pipe(tap((slot) => this.patchCachedElapsed(slot)));
+  }
+
+  private patchCachedElapsed(slot: DailyTaskSlot): void {
+    const board = this.boardCache.get(slot.date);
+    if (!board) {
+      return;
+    }
+    for (const tier of board.tiers) {
+      const index = tier.slots.findIndex((s) => s.id === slot.id);
+      if (index >= 0) {
+        tier.slots[index] = { ...tier.slots[index], elapsedMs: slot.elapsedMs };
+      }
+    }
+  }
+
+  complete(id: number, elapsedMs?: number) {
     return this.http
       .post<{
         task: DailyTaskSlot;
-        award: LogActivityResponse;
-      }>(`${this.baseUrl}/${id}/complete`, {})
+        award: LogActivityResponse | null;
+        awards: LogActivityResponse[];
+      }>(
+        `${this.baseUrl}/${id}/complete`,
+        elapsedMs != null && elapsedMs > 0 ? { elapsedMs } : {},
+      )
       .pipe(
         tap((result) => {
           this.invalidateBoard(result.task.date);
@@ -119,10 +152,40 @@ export class DailiesService {
       .post<{
         task: DailyTaskSlot;
         reversal: XpReversalResponse | null;
+        reversals: XpReversalResponse[];
       }>(`${this.baseUrl}/${id}/uncomplete`, {})
       .pipe(
         tap((result) => {
           this.invalidateBoard(result.task.date);
+        }),
+      );
+  }
+
+  /**
+   * Add a quest subtask (or the quest's daily-work slice when
+   * questSubtaskId is omitted) to today's board. Server copies title,
+   * skill weights, and duration from the quest.
+   */
+  fromQuest(payload: {
+    date?: string;
+    questId: number;
+    questSubtaskId?: number | null;
+  }) {
+    return this.http.post<DailyBoard>(`${this.baseUrl}/from-quest`, payload).pipe(
+      tap((board) => {
+        this.boardCache.set(board.date, board);
+        this.board$.delete(board.date);
+      }),
+    );
+  }
+
+  fromScriptorium(payload: { date?: string; workId: number }) {
+    return this.http
+      .post<DailyBoard>(`${this.baseUrl}/from-scriptorium`, payload)
+      .pipe(
+        tap((board) => {
+          this.boardCache.set(board.date, board);
+          this.board$.delete(board.date);
         }),
       );
   }
@@ -164,16 +227,27 @@ export class DailiesService {
     return this.http.get<DailyTaskTemplate[]>(`${this.baseUrl}/templates`);
   }
 
-  createTemplate(body: {
-    name: string;
-    icon?: string;
-    skillId: number;
-    fixedXp: number;
-    effortLevel?: number;
-    durationMinutes?: number;
-  }) {
-    return this.http.post<DailyTaskTemplate>(
-      `${this.baseUrl}/templates`,
+  listQuick(limit = 12) {
+    return this.http.get<QuickTaskLog[]>(
+      `${this.baseUrl}/quick?limit=${Math.max(1, Math.round(limit))}`,
+    );
+  }
+
+  logQuick(body: LogQuickTaskPayload) {
+    return this.http.post<{
+      log: QuickTaskLog;
+      award: LogActivityResponse | null;
+      awards: LogActivityResponse[];
+    }>(`${this.baseUrl}/quick`, body);
+  }
+
+  createTemplate(body: UpsertDailyTemplatePayload) {
+    return this.http.post<DailyTaskTemplate>(`${this.baseUrl}/templates`, body);
+  }
+
+  updateTemplate(id: number, body: UpsertDailyTemplatePayload) {
+    return this.http.patch<DailyTaskTemplate>(
+      `${this.baseUrl}/templates/${id}`,
       body,
     );
   }
@@ -182,6 +256,33 @@ export class DailiesService {
     return this.http.delete<{ deleted: boolean; id: number }>(
       `${this.baseUrl}/templates/${id}`,
     );
+  }
+
+  calendar(from: string, to: string) {
+    return this.http.get<DailyCalendarDay[]>(
+      `${this.baseUrl}/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    );
+  }
+
+  listLogs() {
+    return this.http.get<DailyLogSummary[]>(`${this.baseUrl}/logs`);
+  }
+
+  getLog(date: string) {
+    return this.http.get<DailyLogDetail>(
+      `${this.baseUrl}/logs/${encodeURIComponent(date)}`,
+    );
+  }
+
+  unsealDay(date?: string) {
+    return this.http
+      .post<DailyBoard>(`${this.baseUrl}/unseal`, { date })
+      .pipe(
+        tap((board) => {
+          this.boardCache.set(board.date, board);
+          this.board$.delete(board.date);
+        }),
+      );
   }
 
   private boardKey(date?: string): string {

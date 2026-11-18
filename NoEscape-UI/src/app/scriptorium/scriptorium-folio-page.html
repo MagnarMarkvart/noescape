@@ -1,0 +1,240 @@
+<app-forge-shell
+  kicker="Scriptorium"
+  [title]="heading()"
+  lede="Inscribe a work, pick a shelf, and bind a due day only when it has a season."
+  backHref="/scriptorium"
+  backLabel="Back to Scriptorium"
+  [toast]="toast()"
+>
+  <form class="create" (submit)="$event.preventDefault(); save()">
+    @if (assignedStamp(); as stamp) {
+      <p class="lock-banner">{{ stamp }} Editing is sealed until the assignment ends.</p>
+    }
+    <fieldset class="folio-lock" [disabled]="locked()">
+    <fieldset>
+      <legend>Title</legend>
+      <input
+        type="text"
+        maxlength="120"
+        placeholder="Name the work"
+        [value]="draft().title"
+        (input)="setDraftTitle($any($event.target).value)"
+      />
+    </fieldset>
+
+    <app-icon-picker
+      [selected]="draft().icon"
+      (picked)="pickIcon($event)"
+    />
+
+    <fieldset>
+      <legend>Shelf</legend>
+      <div class="chip-row">
+        @for (t of tiers; track t.id) {
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="draft().tier === t.id"
+            (click)="setDraftTier(t.id)"
+          >
+            {{ t.name }}
+          </button>
+        }
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Due day</legend>
+      <app-date-field
+        label=""
+        placeholder="None"
+        [value]="draft().dueDate"
+        (valueChange)="setDraftDue($event)"
+      />
+    </fieldset>
+
+    <app-effort-field
+      legend="Complexity"
+      [value]="draft().effort"
+      (valueChange)="setEffort($event)"
+    />
+
+    <app-duration-field
+      legend="Volume"
+      [allowUnset]="true"
+      [presets]="durationPresets"
+      [minutes]="draft().durationMinutes"
+      (minutesChange)="setDuration($event)"
+    />
+
+    <fieldset>
+      <legend>Notes</legend>
+      <textarea
+        rows="4"
+        maxlength="4000"
+        [value]="draft().notes"
+        (input)="setDraftNotes($any($event.target).value)"
+      ></textarea>
+    </fieldset>
+
+    <fieldset>
+      <legend>Skills</legend>
+      <app-skill-weight-list
+        [shares]="shares()"
+        [remaining]="remainingWeights()"
+        [valid]="weightsOk()"
+        (bump)="bumpWeight($event.slug, $event.delta)"
+        (remove)="removeSkill($event)"
+      />
+      <app-skill-tree-picker
+        [categories]="categories()"
+        [skills]="subskills()"
+        [selectedCategory]="selectedCategory()"
+        [selectedSlugs]="selectedSlugs()"
+        (categoryChange)="selectCategory($event)"
+        (skillPick)="pickSkill($event)"
+      />
+    </fieldset>
+
+    <fieldset>
+      <legend>Subtasks</legend>
+      <p class="hint">Optional. Break the work into smaller steps.</p>
+      @if ((work()?.subtasks?.length ?? 0) > 0 || pendingSubtasks().length) {
+        <app-drop-group (dropped)="onSubtaskDrop($event)">
+        @if (work()?.subtasks?.length) {
+          <ul
+            class="subtasks"
+            appDropList
+            dropListId="saved"
+            dropMode="insert"
+          >
+          @for (s of work()?.subtasks ?? []; track s.id) {
+            <li [appDragItem]="$index">
+              <app-drag-grip />
+              <app-rune-check
+                [checked]="s.done"
+                [disabled]="busyKey() === 'sub:' + s.id"
+                [label]="s.title"
+                (checkedChange)="toggleSubtask(s.id, $event)"
+              />
+              <button
+                type="button"
+                class="ghost tiny"
+                (click)="removeSubtask(s.id)"
+                aria-label="Remove subtask"
+              >
+                ×
+              </button>
+            </li>
+          }
+          </ul>
+        }
+        @if (pendingSubtasks().length) {
+          <ul
+            class="subtasks"
+            appDropList
+            dropListId="pending"
+            dropMode="insert"
+          >
+          @for (title of pendingSubtasks(); track $index) {
+            <li [appDragItem]="$index">
+              <app-drag-grip />
+              <span>{{ title }}</span>
+              <button
+                type="button"
+                class="ghost tiny"
+                (click)="removePendingSubtask($index)"
+                aria-label="Remove subtask"
+              >
+                ×
+              </button>
+            </li>
+          }
+          </ul>
+        }
+        </app-drop-group>
+      }
+      <div class="inline-add">
+        <input
+          type="text"
+          maxlength="160"
+          placeholder="Add a subtask"
+          [value]="subtaskDraft()"
+          (input)="setSubtaskDraft($any($event.target).value)"
+          (keydown.enter)="$event.preventDefault(); addSubtask()"
+        />
+        <button
+          type="button"
+          class="ghost"
+          [disabled]="!subtaskDraft().trim()"
+          (click)="addSubtask()"
+        >
+          Add
+        </button>
+      </div>
+    </fieldset>
+    </fieldset>
+
+    <div class="actions">
+      @if (!locked()) {
+        <button type="submit" [disabled]="saving()">
+          {{ saving() ? 'Sealing…' : editId() ? 'Seal' : 'Inscribe' }}
+        </button>
+      }
+      <a routerLink="/scriptorium">Cancel</a>
+      @if (work(); as current) {
+        @if (!locked() && current.status !== 'ARCHIVED') {
+          <button type="button" class="ghost" (click)="askComplete()">
+            Complete
+          </button>
+          <button type="button" class="ghost" (click)="forgeQuest()">
+            Assign to quest
+          </button>
+          <button type="button" class="ghost" (click)="assignDaily()">
+            Assign to daily
+          </button>
+        }
+        <button type="button" class="ghost" (click)="openVigilia()">
+          Open in Vigilia
+        </button>
+        @if (vigiliaLogVisible()) {
+          <app-work-interval-log [target]="{ scriptoriumWorkId: current.id }" />
+        }
+        @if (current.questId; as qid) {
+          <a class="ghost" [routerLink]="['/quests', qid]">Open quest →</a>
+        }
+        @if (current.assignedDailyDate) {
+          <a class="ghost" [routerLink]="['/dailies']" [queryParams]="{ date: current.assignedDailyDate }">
+            Open daily →
+          </a>
+        }
+        @if (!locked() || current.status === 'ARCHIVED') {
+          <button type="button" class="ghost" (click)="archive()">
+            {{ current.status === 'ARCHIVED' ? 'Restore' : 'Shelve' }}
+          </button>
+        }
+        <button type="button" class="ghost danger" (click)="destroy()">
+          Erase
+        </button>
+      }
+    </div>
+  </form>
+</app-forge-shell>
+
+@if (pendingConfirm(); as kind) {
+  <app-ui-confirm
+    kicker="Scriptorium"
+    [title]="kind === 'erase'
+      ? 'Erase “' + (work()?.title ?? 'this folio') + '”?'
+      : 'Complete “' + (work()?.title ?? 'this folio') + '”?'"
+    [body]="kind === 'erase'
+      ? 'The folio is struck from the vault. Assigned dailies stay, but the link is cut.'
+      : 'Awards XP from complexity and volume, then shelves the folio. It remains on the shelves.'"
+    [confirmLabel]="kind === 'erase' ? 'Erase' : 'Complete'"
+    [tone]="kind === 'erase' ? 'danger' : 'accent'"
+    [busy]="saving()"
+    (dismiss)="cancelConfirm()"
+    (secondary)="cancelConfirm()"
+    (confirm)="runConfirm()"
+  />
+}

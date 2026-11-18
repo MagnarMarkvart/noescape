@@ -85,10 +85,22 @@
   border-color: #c6a85a;
 }
 
+.btn.unlock {
+  border-color: #8fbc7a;
+}
+
 .btn.loss {
   border-color: #8a5048;
 }
 
 .btn.down {
   border-color: #c45c4a;
+}
+
+.btn.quest-start {
+  border-color: #c6a85a;
+}
+
+.btn.quest-done {
+  border-color: #8fbc7a;
 }

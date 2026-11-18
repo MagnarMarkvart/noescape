@@ -1,13 +1,16 @@
 <section class="habitus-shell">
   <header class="toolbar">
     <div>
-      <p class="kicker">Streaks</p>
+      <p class="kicker">{{ demo() ? 'Unlockable · Demo' : 'Practice' }}</p>
       <h1>Habitus</h1>
+      <p class="lede">
+        Cards for the daily board. Open the calendar when you want the ledger.
+      </p>
     </div>
     <nav class="toolbar-links">
-      <a routerLink="/habitus/new">New habit</a>
-      <a routerLink="/habitus/progression">Progression →</a>
-      <a routerLink="/character" class="back">← Character</a>
+      @if (!demo()) {
+        <app-ui-icon-btn icon="wrench" label="New habit" href="/habitus/new" />
+      }
     </nav>
   </header>
 
@@ -17,128 +20,451 @@
 
   @if (error()) {
     <p class="state error">{{ error() }}</p>
-    <p class="hint">
-      Dev mode can open Habitus early. Complete
-      <a routerLink="/quests">Custodia Mentis</a> to unlock for real.
-    </p>
   } @else {
-    <div class="layout">
-      <aside class="habit-list">
-        <h2>Active habits</h2>
-        <ul>
+    <div class="view-bar">
+      <div class="chips" role="tablist" aria-label="Habitus view">
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="view() === 'cards'"
+          (click)="setView('cards')"
+        >
+          Cards
+        </button>
+        <button
+          type="button"
+          class="chip"
+          [class.selected]="view() === 'calendar'"
+          (click)="setView('calendar')"
+        >
+          Calendar
+        </button>
+      </div>
+      @if (view() === 'cards') {
+        <label class="search">
+          Search
+          <input
+            type="search"
+            placeholder="Name, skill, quest"
+            [value]="query()"
+            (input)="onQuery($event)"
+          />
+        </label>
+      }
+    </div>
+
+    @if (view() === 'cards') {
+      <div class="board-bar">
+        <div class="chips" role="tablist" aria-label="Due filter">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="dueFilter() === 'today'"
+            (click)="setDueFilter('today')"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="dueFilter() === 'all'"
+            (click)="setDueFilter('all')"
+          >
+            All
+          </button>
+        </div>
+        @if (dueFilter() === 'today') {
+          <app-rune-check
+            class="board-check"
+            label="Show completed"
+            [compact]="true"
+            [checked]="showCompleted()"
+            (checkedChange)="setShowCompleted($event)"
+          />
+        }
+        <app-rune-check
+          class="board-check"
+          label="Drag"
+          [compact]="true"
+          [checked]="dragMode()"
+          [disabled]="demo()"
+          (checkedChange)="setDragMode($event)"
+        />
+      </div>
+
+      @if (skillChips().length) {
+        <div class="chips skill-chips" aria-label="Skill filter">
+          <button
+            type="button"
+            class="chip"
+            [class.selected]="skillFilter() === null"
+            (click)="setSkillFilter(null)"
+          >
+            All skills
+          </button>
+          @for (s of skillChips(); track s.slug) {
+            <button
+              type="button"
+              class="chip"
+              [class.selected]="skillFilter() === s.slug"
+              (click)="setSkillFilter(s.slug)"
+            >
+              @if (s.icon) {
+                <span aria-hidden="true">{{ s.icon }}</span>
+              }
+              {{ s.name }}
+            </button>
+          }
+        </div>
+      }
+
+      @if (openCards().length === 0 && doneCards().length === 0) {
+        <p class="state">
+          @if (query().trim() || skillFilter() || dueFilter() === 'today') {
+            Nothing due in this view.
+          } @else {
+            No active habits.
+            @if (!demo()) {
+              <a routerLink="/habitus/new">Forge one</a>
+            }
+          }
+        </p>
+      }
+
+      <div class="group-board">
+        @for (g of grouped().groups; track g.id) {
+          <fieldset
+            class="group-box"
+            [class.droppable]="dragMode()"
+            (dragover)="allowDrop($event)"
+            (drop)="onDrop(g.id, $event)"
+          >
+            <legend>{{ g.name }}</legend>
+            @if (g.habits.length === 0) {
+              <p class="empty-bin">{{ dragMode() ? 'Drop a card here.' : 'Empty.' }}</p>
+            } @else {
+              <ul class="card-grid">
+                @for (h of g.habits; track h.id) {
+                  <li>
+                    <app-habit-card
+                      [habit]="h"
+                      [busy]="busyId() === h.id"
+                      [readonly]="demo()"
+                      [draggable]="dragMode() && !demo()"
+                      (plus)="plus($event)"
+                      (minus)="minus($event)"
+                    />
+                  </li>
+                }
+              </ul>
+            }
+          </fieldset>
+        }
+
+        <fieldset
+          class="group-box"
+          [class.droppable]="dragMode()"
+          (dragover)="allowDrop($event)"
+          (drop)="onDrop(null, $event)"
+        >
+          <legend>The Cloister</legend>
+          @if (grouped().cloister.length === 0) {
+            <p class="empty-bin">{{ dragMode() ? 'Drop a card here.' : 'Ungrouped habits live here.' }}</p>
+          } @else {
+            <ul class="card-grid">
+              @for (h of grouped().cloister; track h.id) {
+                <li>
+                  <app-habit-card
+                    [habit]="h"
+                    [busy]="busyId() === h.id"
+                    [readonly]="demo()"
+                    [draggable]="dragMode() && !demo()"
+                    (plus)="plus($event)"
+                    (minus)="minus($event)"
+                  />
+                </li>
+              }
+            </ul>
+          }
+        </fieldset>
+      </div>
+
+      @if (doneCards().length) {
+        <fieldset class="group-box done-pile">
+          <legend>Done</legend>
+          <ul class="card-grid">
+            @for (h of doneCards(); track h.id) {
+              <li>
+                <app-habit-card
+                  [habit]="h"
+                  [busy]="busyId() === h.id"
+                  [readonly]="demo()"
+                  (plus)="plus($event)"
+                  (minus)="minus($event)"
+                />
+              </li>
+            }
+          </ul>
+        </fieldset>
+      }
+    } @else {
+      <div class="calendar-layout">
+        <aside class="filters">
+          <p class="kicker">Show</p>
+          <button
+            type="button"
+            class="filter"
+            [class.selected]="selectedIds().length === 0"
+            (click)="selectAllHabits()"
+          >
+            All
+          </button>
           @for (h of habits(); track h.id) {
-            <li>
+            <button
+              type="button"
+              class="filter"
+              [class.selected]="selectedIds().includes(h.id)"
+              (click)="toggleHabitFilter(h.id)"
+            >
+              <span aria-hidden="true">{{ h.icon || '◆' }}</span>
+              {{ h.name }}
+            </button>
+          }
+        </aside>
+
+        <section class="calendar-main">
+          <div class="mini-dash">
+            <div>
+              <p class="kicker">Points</p>
+              <p class="stat">{{ stats()?.points ?? 0 }}</p>
+            </div>
+            <div>
+              <p class="kicker">Checks</p>
+              <p class="stat">{{ stats()?.completions ?? 0 }}</p>
+            </div>
+            <div>
+              <p class="kicker">Tallies</p>
+              <p class="stat">{{ stats()?.clicks ?? 0 }}</p>
+            </div>
+            <svg
+              class="spark"
+              viewBox="0 0 100 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              @if (sparkPoints()) {
+                <polyline [attr.points]="sparkPoints()" />
+              }
+            </svg>
+          </div>
+
+          <div class="chips">
+            @for (g of ['day', 'week', 'month', 'year', 'all']; track g) {
               <button
                 type="button"
-                class="habit-btn"
-                [class.selected]="selected()?.id === h.id"
-                (click)="select(h)"
+                class="chip"
+                [class.selected]="grain() === g"
+                (click)="setGrain($any(g))"
               >
-                <span aria-hidden="true">{{ h.icon || '◆' }}</span>
-                <span>
-                  <strong>{{ h.name }}</strong>
-                  <small>
-                    🔥 {{ h.currentStreak }} · best {{ h.bestStreak }}
-                  </small>
-                </span>
+                {{ g === 'all' ? 'All time' : g }}
               </button>
-            </li>
-          }
-        </ul>
-        @if (habits().length === 0) {
-          <p class="state">No active habits.</p>
-        }
-        <a routerLink="/habitus/new" class="new-link">+ New habit</a>
-      </aside>
-
-      <section class="calendar-panel">
-        @if (selected(); as h) {
-          <div class="cal-head">
-            <h2>
-              <span aria-hidden="true">{{ h.icon }}</span>
-              {{ h.name }}
-            </h2>
-            <p class="meta">
-              {{ h.cadence === 'DAILY' ? 'Daily' : 'Every ' + h.everyNDays + ' days' }}
-              · {{ h.totalCompletions }} logs · best streak {{ h.bestStreak }}
-            </p>
-
-            <div class="view-tabs" role="tablist">
-              @for (mode of ['day', 'week', 'month']; track mode) {
-                <button
-                  type="button"
-                  class="chip"
-                  [class.selected]="viewMode() === mode"
-                  (click)="setView($any(mode))"
-                >
-                  {{ mode }}
-                </button>
-              }
-            </div>
-
-            <div class="cal-nav">
-              <button type="button" (click)="shift(-1)" aria-label="Previous">‹</button>
-              <span>{{ periodLabel() }}</span>
-              <button type="button" (click)="shift(1)" aria-label="Next">›</button>
-              <button type="button" class="now-btn" (click)="jumpToNow()">
-                {{ nowButtonLabel() }}
-              </button>
-            </div>
+            }
           </div>
 
-          @if (period(); as p) {
-            <div
-              class="month-grid"
-              [class.day-view]="viewMode() === 'day'"
-              [class.week-view]="viewMode() === 'week'"
-              role="grid"
-              [attr.aria-label]="periodLabel()"
+          <div class="cal-nav">
+            <button
+              type="button"
+              [disabled]="grain() === 'all'"
+              (click)="shift(-1)"
+              aria-label="Previous"
             >
-              @for (day of p.days; track day.date) {
-                <button
-                  type="button"
-                  class="day"
-                  [class.done]="day.completed"
-                  [class.today]="day.date === todayIso"
-                  [class.future]="!canToggle(day.date)"
-                  [disabled]="!canToggle(day.date) || busyDate() === day.date"
-                  [attr.title]="
-                    canToggle(day.date)
-                      ? (day.completed ? 'Clear ' : 'Log ') + day.date
-                      : day.date + ' (future)'
-                  "
-                  (click)="toggleDay(day.date, day.completed)"
-                >
-                  @if (viewMode() === 'day') {
-                    <span class="day-big">{{ day.date.slice(-2) }}</span>
-                    <span class="day-status">{{ day.completed ? 'Done' : 'Open' }}</span>
-                  } @else {
-                    {{ day.date.slice(-2) }}
-                  }
-                </button>
-              }
-            </div>
-            <p class="month-count">{{ p.completedCount }} logged in this view</p>
+              ‹
+            </button>
+            <span>{{ periodLabel() }}</span>
+            <button
+              type="button"
+              [disabled]="grain() === 'all'"
+              (click)="shift(1)"
+              aria-label="Next"
+            >
+              ›
+            </button>
+            @if (grain() !== 'all') {
+              <button type="button" class="now" (click)="jumpToNow()">
+                Now
+              </button>
+            }
+          </div>
+
+          @if (stats(); as s) {
+            @if (grain() === 'month') {
+              <div class="month-grid" role="grid" [attr.aria-label]="periodLabel()">
+                @for (wd of weekdays(); track wd) {
+                  <span class="wd">{{ wd }}</span>
+                }
+                @for (pad of leadPads(); track pad) {
+                  <span class="day pad" aria-hidden="true"></span>
+                }
+                @for (day of s.days; track day.date) {
+                  <span
+                    class="day"
+                    [class.full]="dayTone(day) === 'full'"
+                    [class.mixed]="dayTone(day) === 'mixed'"
+                    [class.miss]="dayTone(day) === 'miss'"
+                    [class.today]="day.date === todayIso()"
+                    [attr.title]="day.date"
+                    [attr.aria-label]="day.date"
+                  >
+                    @for (m of dayIcons(day); track m.id) {
+                      <span class="glyph" aria-hidden="true">{{ m.icon || '◆' }}</span>
+                      <span class="dot" aria-hidden="true"></span>
+                    }
+                  </span>
+                }
+              </div>
+            } @else {
+              <ul class="series">
+                @for (row of s.series; track row.key) {
+                  <li>
+                    <span>{{ row.label }}</span>
+                    <span class="bar">
+                      <span
+                        [style.width.%]="
+                          s.points > 0 ? (row.value / s.points) * 100 : 0
+                        "
+                      ></span>
+                    </span>
+                    <strong>{{ row.value }}</strong>
+                  </li>
+                }
+              </ul>
+            }
           }
 
-          <div class="actions">
-            <button type="button" class="primary" (click)="markToday()">
-              Mark today complete
-            </button>
-            <button type="button" class="ghost" (click)="archiveSelected()">
-              Archive
-            </button>
-            <button type="button" class="danger" (click)="deleteSelected()">
-              Delete
-            </button>
-          </div>
-        } @else {
-          <p class="state">
-            No habit selected.
-            <a routerLink="/habitus/new">Create one</a>
-          </p>
-        }
-      </section>
-    </div>
+          <section class="ledger">
+            <header class="ledger-head">
+              <div>
+                <p class="kicker">Ledger</p>
+                <h2>Every habit</h2>
+                <p class="sub">
+                  {{ activeCount() }} active · {{ archivedCount() }} archived
+                </p>
+              </div>
+            </header>
+
+            @if (ledgerHabits().length === 0) {
+              <p class="state">No habits recorded yet.</p>
+            } @else {
+              <div class="ledger-layout">
+                <ul class="habit-cards">
+                  @for (h of ledgerHabits(); track h.id) {
+                    <li>
+                      <button
+                        type="button"
+                        class="ledger-card"
+                        [class.selected]="selectedLedger()?.id === h.id"
+                        [class.archived]="h.archived"
+                        (click)="selectLedger(h)"
+                      >
+                        <span class="icon" aria-hidden="true">{{ h.icon || '◆' }}</span>
+                        <span class="body">
+                          <strong>{{ h.name }}</strong>
+                          <small>
+                            @if (h.archived) {
+                              Archived
+                            } @else {
+                              Active
+                            }
+                            · {{ h.totalCompletions }} logs · best {{ h.bestStreak }}
+                          </small>
+                          <small class="range">
+                            @if (h.firstLog) {
+                              {{ formatDate(h.firstLog) }} → {{ formatDate(h.lastLog) }}
+                            } @else {
+                              No logs yet
+                            }
+                          </small>
+                        </span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+
+                <div class="ledger-detail">
+                  @if (selectedLedger(); as h) {
+                    <div class="detail-head">
+                      <h3>
+                        <span aria-hidden="true">{{ h.icon }}</span>
+                        {{ h.name }}
+                      </h3>
+                      <dl class="stats-grid">
+                        <div>
+                          <dt>Total logs</dt>
+                          <dd>{{ h.totalCompletions }}</dd>
+                        </div>
+                        <div>
+                          <dt>Best streak</dt>
+                          <dd>{{ h.bestStreak }}</dd>
+                        </div>
+                        <div>
+                          <dt>Current</dt>
+                          <dd>{{ h.archived ? '—' : h.currentStreak }}</dd>
+                        </div>
+                        <div>
+                          <dt>Cadence</dt>
+                          <dd>
+                            {{
+                              h.cadence === 'DAILY'
+                                ? 'Daily'
+                                : 'Every ' + h.everyNDays + 'd'
+                            }}
+                          </dd>
+                        </div>
+                      </dl>
+                      @if (h.questLink; as link) {
+                        <p class="quest-progress">
+                          Quest · {{ link.questName }}
+                          · {{ link.rule }} {{ link.progress }}/{{ link.requiredCount }}
+                          @if (link.completed) {
+                            · complete
+                          }
+                        </p>
+                        @if (link.events.length) {
+                          <ol class="quest-log">
+                            @for (ev of link.events; track $index) {
+                              <li>
+                                {{ formatDate(ev.date) }}
+                                · {{ ev.kind }}
+                                @if (!ev.success) {
+                                  · miss
+                                }
+                                @if (ev.note) {
+                                  · {{ ev.note }}
+                                }
+                              </li>
+                            }
+                          </ol>
+                        }
+                      }
+                      @if (h.archived) {
+                        <button type="button" class="restore" (click)="unarchive(h)">
+                          Restore to Habitus
+                        </button>
+                      }
+                    </div>
+
+                    @if (month(); as m) {
+                      <p class="month-count">{{ m.completedCount }} days this month</p>
+                    }
+                  } @else {
+                    <p class="state">Select a habit to inspect its history.</p>
+                  }
+                </div>
+              </div>
+            }
+          </section>
+        </section>
+      </div>
+    }
   }
 </section>

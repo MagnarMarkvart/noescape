@@ -1,0 +1,28 @@
+<app-history-log
+  kicker="Archive"
+  title="Daily Log"
+  [lede]="lede()"
+  backHref="/dailies"
+  backLabel="Back to Dailies"
+  [date]="selectedDate()"
+  [today]="todayIso()"
+  [marks]="calendarMarks()"
+  [loading]="loading()"
+  [empty]="!loading() && !log()"
+  emptyText="This day is not sealed."
+  (dateChange)="onDateNav($event)"
+  (rangeChange)="loadCalendar($event)"
+>
+  @if (log(); as row) {
+    @if (verdict(); as verdict) {
+      <app-daily-day-card
+        [verdict]="verdict"
+        [tasks]="tasks()"
+        [earnedXp]="row.earnedXp"
+        [date]="row.date"
+        [showBoardLink]="true"
+        [kicker]="formatDate(row.date)"
+      />
+    }
+  }
+</app-history-log>

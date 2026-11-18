@@ -1,23 +1,17 @@
-import { DatePipe } from '@angular/common';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  inject,
-  OnInit,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { SkillsService } from '../skills/skills.service';
+import { CharacterService } from '../character/character.service';
 import { LevelUpLogPage } from './level-ups.model';
 
 @Component({
   selector: 'app-level-ups-page',
-  imports: [DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './level-ups-page.html',
   styleUrl: './level-ups-page.css',
 })
 export class LevelUpsPage implements OnInit {
   private readonly skillsService = inject(SkillsService);
+  private readonly character = inject(CharacterService);
 
   protected readonly page = signal(1);
   protected readonly data = signal<LevelUpLogPage | null>(null);
@@ -42,6 +36,10 @@ export class LevelUpsPage implements OnInit {
       return;
     }
     this.load(current.page + 1);
+  }
+
+  protected formatWhen(iso: string): string {
+    return this.character.formatDateTime(iso);
   }
 
   private load(page: number): void {

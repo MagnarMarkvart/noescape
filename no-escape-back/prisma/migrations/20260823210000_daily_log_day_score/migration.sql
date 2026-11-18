@@ -1,0 +1,7 @@
+-- Frozen day verdict stored at seal time.
+
+ALTER TABLE "DailyLog" ADD COLUMN "score" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "DailyLog" ADD COLUMN "grade" TEXT NOT NULL DEFAULT 'poor';
+ALTER TABLE "DailyLog" ADD COLUMN "assignedMinutes" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "DailyLog" ADD COLUMN "trackedCount" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "DailyLog" ADD COLUMN "verdict" TEXT NOT NULL DEFAULT '';

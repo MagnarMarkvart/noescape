@@ -207,6 +207,14 @@ export class SkillsService implements OnModuleInit {
     const newUnlocks = leveledUp
       ? await this.rewardsService.checkUnlocks(skillId, newLevel)
       : [];
+    const newlyMetQuestReqs = leveledUp
+      ? await this.newlyMetQuestSkillReqs(
+          skill.slug,
+          skill.name,
+          previousLevel,
+          newLevel,
+        )
+      : [];
 
     return {
       activity: result.activity,
@@ -218,6 +226,7 @@ export class SkillsService implements OnModuleInit {
       previousProgress,
       levelUpEvent: result.levelUpEvent,
       newUnlocks,
+      newlyMetQuestReqs,
     };
   }
 
@@ -303,5 +312,42 @@ export class SkillsService implements OnModuleInit {
       previousXp,
       previousProgress,
     };
+  }
+
+  private async newlyMetQuestSkillReqs(
+    slug: string,
+    skillName: string,
+    previousLevel: number,
+    newLevel: number,
+  ): Promise<Array<{ questName: string; label: string }>> {
+    const quests = await this.prisma.quest.findMany({
+      select: { name: true, skillReqsJson: true },
+    });
+    const hits: Array<{ questName: string; label: string }> = [];
+    for (const quest of quests) {
+      let reqs: Array<{ slug?: string; level?: number }> = [];
+      try {
+        reqs = JSON.parse(quest.skillReqsJson || '[]');
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(reqs)) {
+        continue;
+      }
+      for (const req of reqs) {
+        const level = Number(req.level) || 0;
+        if (
+          req.slug === slug &&
+          level > previousLevel &&
+          level <= newLevel
+        ) {
+          hits.push({
+            questName: quest.name,
+            label: `${skillName} Lv ${level}`,
+          });
+        }
+      }
+    }
+    return hits;
   }
 }

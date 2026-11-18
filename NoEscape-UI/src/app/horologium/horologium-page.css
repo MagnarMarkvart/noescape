@@ -11,6 +11,8 @@
   --rs-rest: #6ea8d8;
   --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
   --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --font-clock: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', 'Liberation Mono',
+    Menlo, monospace;
 
   display: block;
   min-height: 100dvh;
@@ -35,6 +37,37 @@
   margin-bottom: 1rem;
 }
 
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.scenery-pick {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.scenery-select {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  color: var(--rs-text);
+  background: rgba(20, 16, 10, 0.55);
+  border: 1px solid var(--rs-border);
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  color-scheme: dark;
+}
+
+.scenery-select:hover,
+.scenery-select:focus-visible {
+  border-color: var(--rs-accent);
+  outline: none;
+}
+
 .kicker {
   margin: 0;
   font-size: 0.72rem;
@@ -57,6 +90,13 @@
   gap: 1rem;
 }
 
+.timer-stack,
+.side-stack {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
 @media (min-width: 900px) {
   .layout {
     grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
@@ -75,12 +115,16 @@
 .ring-wrap {
   display: grid;
   place-items: center;
-  padding: 1rem 0 1.25rem;
+  justify-items: center;
+  width: 100%;
+  padding: 1.15rem 0 0.35rem;
 }
 
 .ring {
   position: relative;
   width: min(18rem, 78vw);
+  max-width: 100%;
+  margin-inline: auto;
   aspect-ratio: 1;
   border-radius: 50%;
   border: 1px solid var(--rs-border-bright);
@@ -134,13 +178,26 @@
   opacity: 0.55;
 }
 
+.ring.overtime .ring-progress {
+  stroke: #c45c4a;
+}
+
+.ring[data-phase='consuetudo'] .ring-progress {
+  stroke: var(--rs-accent);
+}
+
 .ring-core {
   position: absolute;
-  inset: 9%;
+  inset: 12%;
   border-radius: 50%;
-  display: grid;
-  place-content: center;
-  gap: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.85rem 0.7rem;
+  min-width: 0;
+  overflow: hidden;
   text-align: center;
   background:
     radial-gradient(circle at 50% 35%, rgba(212, 168, 75, 0.12), transparent 55%),
@@ -148,13 +205,151 @@
   border: 1px solid #5a4a2c;
 }
 
+.ring-core > * {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.practice-step {
+  display: grid;
+  justify-items: center;
+  gap: 0.12rem;
+  margin: 0.15rem 0 0;
+  color: var(--rs-accent);
+  font-family: var(--font-display);
+  width: 100%;
+  min-width: 0;
+}
+
+.practice-step .step-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.practice-step .step-title,
+.task-line {
+  margin: 0;
+  color: var(--rs-accent);
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.task-line {
+  margin: 0.15rem 0 0;
+}
+
+.ring-core .task-line,
+.ring-core .step-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.dial-task {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  width: min(22rem, 100%);
+  margin: 1.05rem auto 1.15rem;
+  padding: 0.85rem 1rem 0.95rem;
+  box-sizing: border-box;
+  text-align: center;
+  border: 1px solid var(--rs-border);
+  background: rgba(22, 18, 10, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+
+.dial-task .routine-name {
+  margin: 0;
+  color: var(--rs-muted);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.dial-task .routine-name:has(+ .practice-step)::after {
+  content: '◆';
+  display: grid;
+  place-items: center;
+  width: min(12.5rem, 78%);
+  height: 0.95rem;
+  margin: 0.55rem auto 0.2rem;
+  color: #d4a84b;
+  font-size: 0.5rem;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(198, 168, 90, 0.2) 10%,
+      #c6a85a 50%,
+      rgba(198, 168, 90, 0.2) 90%,
+      transparent 100%
+    )
+      center 32% / 100% 1px no-repeat,
+    linear-gradient(
+      90deg,
+      transparent 4%,
+      rgba(138, 115, 64, 0.75) 16%,
+      #8a7340 50%,
+      rgba(138, 115, 64, 0.75) 84%,
+      transparent 96%
+    )
+      center 68% / 100% 1px no-repeat;
+}
+
+.dial-task .practice-step {
+  margin: 0;
+}
+
+.dial-task .task-line {
+  margin: 0;
+}
+
+button.task-line {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+button.task-line:hover,
+button.task-line:focus-visible {
+  color: #e0c06a;
+  outline: none;
+}
+
+.clock.overtime {
+  color: #c45c4a;
+}
+
 .phase-tag {
   margin: 0;
   font-family: var(--font-display);
   letter-spacing: 0.16em;
+  padding: 0;
   text-transform: uppercase;
   font-size: 0.78rem;
   color: var(--rs-muted);
+  text-align: center;
 }
 
 .horologium-shell[data-phase='work'] .phase-tag {
@@ -209,14 +404,13 @@
   color: #8fbc7a;
 }
 
+.xp-preview .xp-value.penalty {
+  color: #c45c4a;
+}
+
 .xp-preview .xp-value.muted {
   color: var(--rs-muted);
   font-size: 0.82rem;
-}
-
-.side-stack {
-  display: grid;
-  gap: 1rem;
 }
 
 .log-panel {
@@ -237,14 +431,31 @@
   padding: 0;
   display: grid;
   gap: 0.55rem;
-  max-height: 18rem;
-  overflow: auto;
 }
 
 .session-log li {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.session-card {
+  display: block;
+  width: 100%;
+  text-align: left;
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--rs-border);
   background: rgba(20, 16, 10, 0.45);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.session-card:hover,
+.session-card:focus-visible,
+.session-card[aria-pressed='true'] {
+  border-color: var(--rs-border-bright);
+  outline: none;
 }
 
 .log-top {
@@ -258,6 +469,10 @@
 .xp-chip {
   color: #8fbc7a;
   font-size: 0.85rem;
+}
+
+.xp-chip.loss {
+  color: #c45c4a;
 }
 
 .log-meta {
@@ -274,12 +489,19 @@
 }
 
 .clock {
-  margin: 0;
-  font-family: var(--font-display);
+  margin: 0 auto;
+  width: 100%;
+  font-family: var(--font-clock);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
   font-size: clamp(2.6rem, 8vw, 3.4rem);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
+  text-indent: 0.08em;
+  padding: 0;
   color: var(--rs-text);
   line-height: 1;
+  text-align: center;
+  white-space: nowrap;
   transition: opacity 0.15s ease;
 }
 
@@ -287,6 +509,12 @@
   margin: 0.15rem 0 0;
   color: var(--rs-muted);
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.session-meta.carry {
+  color: var(--rs-rest);
 }
 
 .controls {
@@ -294,6 +522,71 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: center;
+  padding-top: 0.15rem;
+}
+
+.notes-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 0.75rem 0 0;
+}
+
+.live-notes {
+  box-sizing: border-box;
+  width: 100%;
+  height: 9.5rem;
+  resize: none;
+  overflow: auto;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--rs-border);
+  border-radius: 0.4rem;
+  background: rgba(18, 14, 8, 0.55);
+  color: var(--rs-text);
+  font: inherit;
+  line-height: 1.4;
+  overscroll-behavior: contain;
+}
+
+.dial-board {
+  display: grid;
+  justify-items: stretch;
+  min-width: 0;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.notes-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.notes-head {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.notes-head p {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.dial-panel.notes-open {
+  position: relative;
 }
 
 .live-stats {
@@ -390,6 +683,21 @@
   gap: 0.45rem;
 }
 
+.preset-manage {
+  display: inline-block;
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--rs-muted);
+  text-decoration: none;
+  font-family: var(--font-display);
+}
+
+.preset-manage:hover,
+.preset-manage:focus-visible {
+  color: var(--rs-accent);
+  outline: none;
+}
+
 .pick-tile {
   display: grid;
   gap: 0.2rem;
@@ -452,10 +760,26 @@
 
 .duration-fields input {
   width: 100%;
-  padding: 0.55rem 0.6rem;
+  min-height: 2.55rem;
+  padding: 0.5rem 0.65rem;
   color: var(--rs-text);
-  background: var(--rs-xp-track);
+  background: rgba(20, 16, 10, 0.55);
   border: 1px solid var(--rs-border);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  appearance: textfield;
+}
+
+.duration-fields input::-webkit-outer-spin-button,
+.duration-fields input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.duration-fields input:hover,
+.duration-fields input:focus-visible {
+  border-color: var(--rs-border-bright);
 }
 
 .duration-fields input:focus-visible,
@@ -525,8 +849,360 @@ button.ghost {
   border-color: var(--rs-border);
 }
 
+.task-bind {
+  margin: 0.85rem 0 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.task-bind + .task-bind {
+  margin-top: 1.85rem;
+  padding-top: 0.35rem;
+}
+
+.task-bind legend {
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.task-bind select {
+  width: 100%;
+  padding: 0.5rem 0.55rem;
+  color: var(--rs-text);
+  background: rgba(20, 16, 10, 0.55);
+  border: 1px solid var(--rs-border);
+  font-family: var(--font-body);
+}
+
+.task-bind .muted,
+.early-tag {
+  margin: 0;
+  color: var(--rs-muted);
+  font-size: 0.78rem;
+}
+
+.early-tag {
+  margin: 0.3rem 0 0;
+  color: #c6a85a;
+  letter-spacing: 0.04em;
+}
+
+.watch-live {
+  font-variant-numeric: tabular-nums;
+  color: var(--rs-accent);
+  font-size: 0.9rem;
+}
+
+.watch-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.3rem;
+  margin: 0.45rem 0 0;
+  align-items: center;
+}
+
+.watch-create input {
+  width: 100%;
+  min-height: 2.4rem;
+  padding: 0.5rem 0.55rem;
+  color: var(--rs-text);
+  background: rgba(20, 16, 10, 0.55);
+  border: 1px solid var(--rs-border);
+  font-family: var(--font-body);
+}
+
+.watch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0;
+  align-items: center;
+}
+
+.extra-vigilias {
+  margin: 0.75rem 0 0;
+  padding: 0.55rem 0 0;
+  border-top: 1px dashed var(--rs-border);
+}
+
+.extra-watch-list {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.extra-watch-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid rgba(138, 115, 64, 0.45);
+}
+
+.extra-watch-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-display);
+  overflow-wrap: anywhere;
+}
+
+.extra-watch-elapsed {
+  color: var(--rs-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.extra-watch-list li app-work-interval-log {
+  flex: 1 1 100%;
+}
+
+.muted.small {
+  font-size: 0.78rem;
+}
+
+.watch-widget {
+  margin: 0.85rem 0 0;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--rs-border);
+  background: rgba(20, 16, 10, 0.45);
+}
+
+.watch-widget .kicker {
+  margin: 0;
+}
+
+.watch-widget-name {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+}
+
+.watch-widget .watch-live {
+  font-size: 1.15rem;
+}
+
+.widget-show {
+  margin: 0.75rem auto 0;
+  display: block;
+}
+
 @media (max-width: 640px) {
   .duration-fields {
     grid-template-columns: 1fr;
+  }
+
+  .horologium-shell.focus .toolbar {
+    gap: 0.35rem;
+  }
+
+  .horologium-shell.focus .brand-block h1 {
+    font-size: 1.2rem;
+  }
+
+  .horologium-shell.focus .clock {
+    font-size: clamp(2rem, 11vw, 2.6rem);
+  }
+
+  .horologium-shell.focus .live-stats {
+    gap: 0.35rem;
+  }
+
+  .horologium-shell.focus .live-stats > div {
+    padding: 0.4rem 0.25rem;
+  }
+
+  .horologium-shell.focus .watch-widget {
+    flex-wrap: wrap;
+    padding: 0.5rem 0.55rem;
+  }
+
+  .horologium-shell.focus button.primary {
+    min-width: 0;
+  }
+}
+
+.horologium-shell.focus {
+  box-sizing: border-box;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 0.7rem 1rem 0.85rem;
+  overflow: hidden;
+}
+
+.horologium-shell.focus .toolbar {
+  margin-bottom: 0.45rem;
+}
+
+.horologium-shell.focus .layout,
+.horologium-shell.focus .timer-stack,
+.horologium-shell.focus .dial-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+.horologium-shell.focus .layout,
+.horologium-shell.focus .timer-stack {
+  gap: 0;
+}
+
+.horologium-shell.focus .dial-panel,
+.horologium-shell.focus .dial-panel.notes-open {
+  position: relative;
+  align-items: stretch;
+  justify-content: stretch;
+  width: 100%;
+  gap: 0;
+  overflow: hidden;
+  padding: 0.75rem 1rem 1rem;
+}
+
+.horologium-shell.focus .stage {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+}
+
+.horologium-shell.focus .dial-board {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(22rem, calc(100% - 2rem));
+  flex: none;
+  z-index: 1;
+}
+
+.horologium-shell.focus .notes-dock {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: calc(50% + 12.25rem);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  width: min(18rem, calc(50% - 13.25rem));
+  height: min(24rem, 62dvh);
+  max-height: calc(100% - 1.5rem);
+}
+
+.horologium-shell.focus .live-notes {
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+}
+
+.horologium-shell.focus .focus-props {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 0.7rem;
+  transform: translateX(-50%);
+  width: min(22rem, calc(100% - 2rem));
+}
+
+.horologium-shell.focus .ring-wrap {
+  padding: 0.55rem 0 1.15rem;
+}
+
+.horologium-shell.focus .ring {
+  width: min(20rem, 100%, calc(100dvh - 18rem));
+  max-width: 100%;
+}
+
+.horologium-shell.focus .dial-task {
+  margin: 0 auto 1.2rem;
+}
+
+.horologium-shell.focus .live-stats,
+.horologium-shell.focus .watch-widget {
+  width: min(28rem, 100%);
+  margin: 0.15rem auto 0;
+}
+
+@media (min-width: 900px) {
+  .horologium-shell.focus .dial-panel,
+  .horologium-shell.focus .dial-panel.notes-open {
+    border: 0;
+    background: none;
+    box-shadow: none;
+    padding: 0.75rem 1.5rem 1rem;
+  }
+
+  .horologium-shell.focus .ring-wrap {
+    padding: 0.35rem 0 1.35rem;
+  }
+
+  .horologium-shell.focus .ring {
+    width: min(20rem, 100%, calc(100dvh - 17rem));
+    max-width: 100%;
+  }
+
+  .horologium-shell.focus .clock {
+    font-size: clamp(2.4rem, 4vw, 3.4rem);
+  }
+
+  .horologium-shell.focus .live-stats,
+  .horologium-shell.focus .watch-widget {
+    width: 100%;
+    margin: 0;
+  }
+
+  .horologium-shell.focus .live-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Notes stay out of flow so the clock never shifts. Side panel when there
+   is room to the right of the 22rem board; otherwise a bottom sheet with
+   its own close so the overlay cannot trap the toggle. */
+@media (max-width: 959px) {
+  .horologium-shell.focus.notes-open .notes-toggle {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .horologium-shell.focus .notes-dock {
+    left: 50%;
+    top: auto;
+    bottom: max(0.7rem, env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 8;
+    width: min(22rem, calc(100% - 1.5rem));
+    height: min(38dvh, 14rem);
+    max-height: calc(100% - 5.5rem);
+    padding: 0.45rem 0.5rem 0.55rem;
+    border: 1px solid var(--rs-border);
+    border-radius: 0.45rem;
+    background: rgba(14, 11, 7, 0.94);
+  }
+
+  .horologium-shell.focus .notes-head {
+    display: flex;
+  }
+
+  .horologium-shell.focus .dial-panel.notes-open .focus-props {
+    display: none;
   }
 }

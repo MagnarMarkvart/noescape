@@ -1,0 +1,9 @@
+:host {
+  display: block;
+  color: #f0e6c8;
+}
+
+app-daily-day-card {
+  display: block;
+  max-width: 44rem;
+}

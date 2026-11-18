@@ -2,23 +2,42 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   isDevMode,
   OnInit,
   signal,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { CharacterService } from '../character/character.service';
 import { QuestsService } from '../quests/quests.service';
+import { SkillsService } from '../skills/skills.service';
+import { AppShellService } from './app-shell.service';
 
 @Component({
   selector: 'app-sidebar',
   imports: [RouterLink, RouterLinkActive],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(document:keydown.escape)': 'onEscape()',
+  },
   template: `
-    <aside class="sidebar" [class.collapsed]="collapsed()" aria-label="App">
+    @if (drawerOpen()) {
+      <button
+        type="button"
+        class="nav-veil"
+        (click)="shell.collapse()"
+        aria-label="Close navigation"
+      ></button>
+    }
+    <aside
+      class="sidebar"
+      [class.collapsed]="collapsed()"
+      [class.drawer]="drawerOpen()"
+      aria-label="App"
+    >
       <button
         type="button"
         class="toggle"
@@ -33,13 +52,13 @@ import { QuestsService } from '../quests/quests.service';
         <p class="collapsed-label" aria-hidden="true">{{ viewLabel() }}</p>
         <span class="sr-only">{{ viewLabel() }}</span>
       } @else {
-        <nav class="nav">
+        <nav class="nav" (click)="onNavClick($event)">
           <a
             routerLink="/status"
             routerLinkActive="active"
             [routerLinkActiveOptions]="{ exact: true }"
           >
-            Status
+            Dashboard
           </a>
           <a routerLink="/character" routerLinkActive="active">Character</a>
           <a routerLink="/quests" routerLinkActive="active">Quests</a>
@@ -49,25 +68,41 @@ import { QuestsService } from '../quests/quests.service';
               <a
                 class="sub goal"
                 [routerLink]="['/quests', q.questId, 'run']"
+                routerLinkActive="active"
               >
                 {{ q.name }}
-                @if (q.durationDays) {
-                  <span class="streak">{{ q.streakCount }}/{{ q.durationDays }}</span>
-                }
+                <span class="streak">{{ q.progressPercent }}%</span>
               </a>
             }
           }
-          @if (showHabitus()) {
+          <a
+            routerLink="/habitus"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            Habitus
+          </a>
+          @if (showConsuetudo()) {
             <a
-              routerLink="/habitus"
+              routerLink="/consuetudo"
               routerLinkActive="active"
               [routerLinkActiveOptions]="{ exact: true }"
             >
-              Habitus
+              Consuetudo
             </a>
-            <a routerLink="/habitus/progression" routerLinkActive="active" class="sub">
-              Progression
-            </a>
+          }
+          @if (unlockables().length) {
+            <p class="group-label">Unlockables</p>
+            @for (item of unlockables(); track item.id) {
+              <a
+                class="goal"
+                [routerLink]="item.path"
+                routerLinkActive="active"
+              >
+                {{ item.label }}
+                <span class="streak">Demo</span>
+              </a>
+            }
           }
           <a
             routerLink="/dailies"
@@ -76,24 +111,19 @@ import { QuestsService } from '../quests/quests.service';
           >
             Dailies
           </a>
-          <a routerLink="/dailies/logs" routerLinkActive="active" class="sub">
-            Quest Logs
+          <a routerLink="/scriptorium" routerLinkActive="active">
+            Scriptorium
           </a>
-          <a routerLink="/dailies/defaults" routerLinkActive="active" class="sub">
-            Defaults
-          </a>
-          <a
-            routerLink="/horologium"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: true }"
-          >
+          <a routerLink="/horologium" routerLinkActive="active">
             Horologium
           </a>
-          <a routerLink="/horologium/log" routerLinkActive="active" class="sub">
-            Horo Log
-          </a>
-          <a routerLink="/level-ups" routerLinkActive="active">Level Ups</a>
-          <a routerLink="/preview" routerLinkActive="active">Preview</a>
+          @if (hasLevelUps()) {
+            <a routerLink="/level-ups" routerLinkActive="active">Level Ups</a>
+          }
+          @if (isDev()) {
+            <a routerLink="/preview" routerLinkActive="active">Preview</a>
+          }
+          <a routerLink="/settings" routerLinkActive="active">Settings</a>
         </nav>
       }
     </aside>
@@ -101,6 +131,10 @@ import { QuestsService } from '../quests/quests.service';
   styles: `
     :host {
       display: contents;
+    }
+
+    .nav-veil {
+      display: none;
     }
 
     .sidebar {
@@ -123,6 +157,43 @@ import { QuestsService } from '../quests/quests.service';
       width: 2.75rem;
       align-items: center;
       padding-inline: 0.35rem;
+    }
+
+    @media (max-width: 899px) {
+      :host {
+        display: block;
+        width: 2.75rem;
+        min-height: 100dvh;
+      }
+
+      .nav-veil {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 139;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: rgba(8, 6, 3, 0.62);
+        cursor: pointer;
+      }
+
+      .sidebar {
+        width: 2.75rem;
+        z-index: 2;
+      }
+
+      .sidebar.drawer {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 140;
+        width: min(18rem, 86vw);
+        align-items: stretch;
+        padding: 0.75rem 0.65rem;
+        box-shadow: 12px 0 36px rgba(0, 0, 0, 0.55);
+        overscroll-behavior: contain;
+      }
     }
 
     .toggle {
@@ -225,14 +296,40 @@ export class AppSidebar implements OnInit {
   private readonly router = inject(Router);
   private readonly questsService = inject(QuestsService);
   private readonly characterService = inject(CharacterService);
+  private readonly skillsService = inject(SkillsService);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly shell = inject(AppShellService);
 
-  protected readonly collapsed = signal(false);
+  protected readonly collapsed = this.shell.collapsed;
+  protected readonly drawerOpen = this.shell.drawerOpen;
   protected readonly habitusUnlocked = signal(false);
+  protected readonly consuetudoUnlocked = signal(false);
   protected readonly activeQuests = this.questsService.activeQuests;
+  protected readonly hasLevelUps = this.skillsService.hasLevelUps;
+  protected readonly isDev = isDevMode;
 
-  protected readonly showHabitus = computed(
-    () => isDevMode() || this.habitusUnlocked(),
+  protected readonly consuetudoQuestActive = computed(() =>
+    this.activeQuests().some((q) => q.slug === 'ordo-diei'),
   );
+
+  protected readonly showConsuetudo = computed(
+    () =>
+      isDevMode() ||
+      this.consuetudoUnlocked() ||
+      this.consuetudoQuestActive(),
+  );
+
+  protected readonly unlockables = computed(() => {
+    const items: Array<{ id: string; label: string; path: string }> = [];
+    if (isDevMode() || !this.consuetudoUnlocked()) {
+      items.push({
+        id: 'consuetudo',
+        label: 'Consuetudo',
+        path: '/consuetudo/demo',
+      });
+    }
+    return items;
+  });
 
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -244,11 +341,53 @@ export class AppSidebar implements OnInit {
   );
 
   ngOnInit(): void {
+    this.shell.bindViewport((teardown) => this.destroyRef.onDestroy(teardown));
     void this.questsService.refreshActive().subscribe();
+    void this.skillsService.listLevelUps(1, 1).subscribe();
+    this.refreshUnlocks();
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        this.refreshUnlocks();
+      });
+  }
+
+  private refreshUnlocks(): void {
     this.characterService.getProfile().subscribe({
-      next: (p) => this.habitusUnlocked.set(p.habitusUnlocked),
-      error: () => this.habitusUnlocked.set(false),
+      next: (p) => {
+        this.habitusUnlocked.set(p.habitusUnlocked);
+        this.consuetudoUnlocked.set(Boolean(p.consuetudoUnlocked));
+      },
+      error: () => {
+        this.habitusUnlocked.set(false);
+        this.consuetudoUnlocked.set(false);
+      },
     });
+  }
+
+  protected onEscape(): void {
+    if (this.shell.drawerOpen()) {
+      this.shell.collapse();
+    }
+  }
+
+  protected onNavClick(event: Event): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('a')) {
+      return;
+    }
+    if (this.shell.isCompact()) {
+      if (this.characterService.menuAutoToggleMobile()) {
+        this.shell.collapse();
+      }
+      return;
+    }
+    if (this.characterService.menuAutoToggleDesktop()) {
+      this.shell.collapse();
+    }
   }
 
   protected readonly viewLabel = computed(() => {
@@ -259,14 +398,20 @@ export class AppSidebar implements OnInit {
     if (path.startsWith('/character')) {
       return 'CHARACTER';
     }
+    if (path.startsWith('/wealth')) {
+      return 'WEALTH';
+    }
     if (path.startsWith('/quests')) {
       return 'QUESTS';
+    }
+    if (path.startsWith('/tabularium')) {
+      return 'TABULARIUM';
     }
     if (path.startsWith('/habitus')) {
       return 'HABITUS';
     }
-    if (path.startsWith('/dailies/logs')) {
-      return 'LOGS';
+    if (path.startsWith('/consuetudo')) {
+      return 'CONSUETUDO';
     }
     if (path.startsWith('/dailies')) {
       return 'DAILIES';
@@ -274,12 +419,18 @@ export class AppSidebar implements OnInit {
     if (path.startsWith('/horologium') || path.startsWith('/quest-timer')) {
       return 'HOROLOGIUM';
     }
+    if (path.startsWith('/scriptorium')) {
+      return 'SCRIPTORIUM';
+    }
     if (path.startsWith('/level-ups')) {
       return 'LEVEL UPS';
     }
     if (path.startsWith('/preview')) {
       return 'PREVIEW';
     }
-    return 'STATUS';
+    if (path.startsWith('/settings')) {
+      return 'SETTINGS';
+    }
+    return 'DASHBOARD';
   });
 }

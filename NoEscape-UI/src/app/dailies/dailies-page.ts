@@ -10,12 +10,13 @@ import {
 import {
   form,
   FormField,
+  max,
   maxLength,
   min,
   required,
   submit,
 } from '@angular/forms/signals';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Skill, SkillTree } from '../skills/skill.model';
 import { SkillsService } from '../skills/skills.service';
 import {
@@ -23,20 +24,78 @@ import {
   DailyTaskSlot,
   DailyTaskTemplate,
   DailyTier,
+  DURATION_PRESETS,
   SlotFormModel,
   TaskImportance,
+  dailySkillLine,
+  dailySkillWeights,
+  formatTaskDuration,
 } from './daily.model';
 import { HabitsService, HabitView } from '../habits/habits.service';
+import { RuneCheck } from '../shared/rune-check';
+import { DateNav } from '../shared/date-nav';
+import { CalendarMarks } from '../shared/rune-calendar';
+import { SkillWeightList } from '../shared/skill-weight-list';
+import { DurationField } from '../shared/ui/duration-field';
+import { EffortField } from '../shared/ui/effort-field';
+import { SkillTreePicker } from '../shared/ui/skill-tree-picker';
+import {
+  addSkillWeight,
+  boostsWealth,
+  bumpSkillWeight,
+  primarySkillSlug,
+  removeSkillWeight,
+  skillWeightRemaining,
+  skillWeightsValid,
+} from '../shared/skill-weights';
+import { centsToInput, formatMoney, parseMoneyToCents } from '../shared/money';
 import { TimedToast } from '../shared/timed-toast';
+import { UiIconBtn } from '../shared/ui/ui-icon-btn';
+import { WorkIntervalLog } from '../shared/work-interval-log';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
+import { CharacterService } from '../character/character.service';
+import { formatElapsedShort, monthRange } from '../shared/time';
 import { DailiesService } from './dailies.service';
-
-export const DURATION_PRESETS = Array.from({ length: 16 }, (_, i) => 15 * (i + 1));
-export const EFFORT_LEVELS = Array.from({ length: 10 }, (_, i) => i + 1);
+import { DefaultTaskPicker } from './default-task-picker';
+import { QuestTaskPicker, QuestTaskPick } from './quest-task-picker';
+import { DailyDayCard } from './daily-day-card';
+import { filledSlotsFromBoard, scoreFromSlots } from './day-score';
+import { calculateDailyTaskXp } from './daily-xp';
+import { splitQuestXp } from '../quests/quest.model';
+import { HorologiumTimerService } from '../horologium/horologium-timer.service';
+import { HorologiumWatchService } from '../horologium/horologium-watch.service';
+import { ElapsedComplete } from '../shared/ui/elapsed-complete';
+import {
+  DragGrip,
+  DragItem,
+  DragSortDrop,
+  DropGroup,
+  DropList,
+} from '../shared/ui/drag-sort';
 
 @Component({
   selector: 'app-dailies-page',
-  imports: [DecimalPipe, FormField, RouterLink],
+  imports: [
+    DecimalPipe,
+    FormField,
+    RuneCheck,
+    RouterLink,
+    DateNav,
+    SkillWeightList,
+    SkillTreePicker,
+    DurationField,
+    EffortField,
+    DefaultTaskPicker,
+    QuestTaskPicker,
+    UiIconBtn,
+    DailyDayCard,
+    WorkIntervalLog,
+    ElapsedComplete,
+    DropGroup,
+    DropList,
+    DragItem,
+    DragGrip,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dailies-page.html',
   styleUrl: './dailies-page.css',
@@ -46,13 +105,17 @@ export class DailiesPage implements OnInit {
   private readonly skillsService = inject(SkillsService);
   private readonly habitsService = inject(HabitsService);
   private readonly xpFeedback = inject(XpFeedbackService);
+  private readonly character = inject(CharacterService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly timer = inject(HorologiumTimerService);
+  private readonly watches = inject(HorologiumWatchService);
 
   protected readonly habits = signal<HabitView[]>([]);
   protected readonly templates = signal<DailyTaskTemplate[]>([]);
   private readonly timed = new TimedToast();
 
   protected readonly durationPresets = DURATION_PRESETS;
-  protected readonly effortLevels = EFFORT_LEVELS;
 
   protected readonly board = signal<DailyBoard | null>(null);
   protected readonly skillTree = signal<SkillTree | null>(null);
@@ -63,6 +126,8 @@ export class DailiesPage implements OnInit {
   protected readonly editingKey = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly completingId = signal<number | null>(null);
+  protected readonly pendingElapsedId = signal<number | null>(null);
+  protected readonly pendingMinutes = signal<number | null>(null);
   protected readonly uncompletingId = signal<number | null>(null);
   protected readonly postponingId = signal<number | null>(null);
   protected readonly postponePickerOpen = signal(false);
@@ -70,8 +135,12 @@ export class DailiesPage implements OnInit {
   protected readonly selectedCategory = signal<string>('');
   protected readonly editingSlot = signal<DailyTaskSlot | null>(null);
   protected readonly setupOpen = signal(true);
+  /** Past days stay read-only until Edit is pressed. */
+  protected readonly historyUnlocked = signal(false);
   /** When true, skip auto-hide after the base 1/3/5 board is filled. */
   private setupPinned = false;
+  private pendingScriptoriumId: number | null = null;
+  protected readonly calendarMarks = signal<CalendarMarks>({});
 
   protected readonly slotModel = signal<SlotFormModel>(this.blankModel());
   protected readonly slotForm = form(this.slotModel, (p) => {
@@ -80,7 +149,7 @@ export class DailiesPage implements OnInit {
     min(p.skillId, 1, { message: 'Pick a skill' });
     min(p.effortLevel, 1);
     min(p.durationMinutes, 1);
-    min(p.customDurationMinutes, 1);
+    max(p.durationMinutes, 24 * 60);
   });
 
   protected readonly categories = computed(
@@ -104,10 +173,71 @@ export class DailiesPage implements OnInit {
     () => this.selectedDate() === this.offsetIso(1, this.todayIso()),
   );
 
+  protected readonly isPast = computed(
+    () => this.selectedDate() < this.todayIso(),
+  );
+
+  protected readonly canMutate = computed(() => {
+    const board = this.board();
+    if (!board || board.isSealed || !board.isEditable) {
+      return false;
+    }
+    if (board.sealRequired) {
+      return true;
+    }
+    return !this.isPast() || this.historyUnlocked();
+  });
+
   protected readonly canPostponeEdit = computed(() => {
     const slot = this.editingSlot();
     return Boolean(slot?.id && slot.isFilled && !slot.completed);
   });
+
+  protected readonly previewXp = computed(() => {
+    const slot = this.editingSlot();
+    const model = this.slotModel();
+    if (!slot) {
+      return 0;
+    }
+    const duration = model.durationMinutes;
+    return calculateDailyTaskXp({
+      importance: slot.importance,
+      effortLevel: model.effortLevel,
+      durationMinutes: duration > 0 ? duration : 1,
+    });
+  });
+
+  protected readonly weightShares = computed(() => {
+    const weights = this.slotModel().skillWeights;
+    const xp = this.previewXp();
+    return splitQuestXp(xp, weights).map((share) => ({
+      ...share,
+      name: this.skillName(share.slug),
+      icon: this.findSkillBySlug(share.slug)?.icon,
+    }));
+  });
+
+  protected readonly weightRemaining = computed(() =>
+    skillWeightRemaining(this.slotModel().skillWeights),
+  );
+
+  protected readonly weightsValid = computed(() =>
+    skillWeightsValid(this.slotModel().skillWeights),
+  );
+
+  protected readonly showWealth = computed(() =>
+    boostsWealth(this.slotModel().skillWeights) ||
+    parseMoneyToCents(this.slotModel().wealthAmount) > 0,
+  );
+
+  protected readonly currencyLabel = computed(() => this.character.currency());
+
+  protected readonly allSkills = computed(() =>
+    this.categories().flatMap((c) => c.skills),
+  );
+  protected readonly selectedSlugs = computed(() =>
+    this.slotModel().skillWeights.map((row) => row.slug),
+  );
 
   protected readonly filledSlots = computed(() => {
     const current = this.board();
@@ -121,7 +251,28 @@ export class DailiesPage implements OnInit {
     );
   });
 
+  protected readonly filledTasks = computed(() =>
+    this.board() ? filledSlotsFromBoard(this.board()!) : [],
+  );
+
+  protected readonly dayVerdict = computed(() => {
+    const board = this.board();
+    if (!board) {
+      return null;
+    }
+    return board.verdict ?? scoreFromSlots(this.filledTasks());
+  });
+
   ngOnInit(): void {
+    const queryDate = this.route.snapshot.queryParamMap.get('date');
+    if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+      this.selectedDate.set(queryDate);
+    }
+    const scriptoriumRaw = this.route.snapshot.queryParamMap.get('scriptorium');
+    const scriptoriumId = scriptoriumRaw ? Number(scriptoriumRaw) : NaN;
+    if (Number.isFinite(scriptoriumId) && scriptoriumId > 0) {
+      this.pendingScriptoriumId = scriptoriumId;
+    }
     const cachedTree = this.skillsService.peekTree();
     if (cachedTree) {
       this.skillTree.set(cachedTree);
@@ -135,7 +286,10 @@ export class DailiesPage implements OnInit {
       },
     });
     this.habitsService.list().subscribe({
-      next: (rows) => this.habits.set(rows),
+      next: (rows) =>
+        this.habits.set(
+          rows.filter((h) => h.allowInDailies !== false && h.kind !== 'tally'),
+        ),
       error: () => this.habits.set([]),
     });
     this.dailiesService.listTemplates().subscribe({
@@ -162,7 +316,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected toggleSetup(force?: boolean): void {
-    if (this.board()?.readOnly) {
+    if (!this.canMutate()) {
       return;
     }
     const next = force ?? !this.setupOpen();
@@ -173,46 +327,51 @@ export class DailiesPage implements OnInit {
     }
   }
 
-  protected shiftDate(delta: number): void {
-    const next = new Date(`${this.selectedDate()}T12:00:00`);
-    next.setDate(next.getDate() + delta);
-    const yyyy = next.getFullYear();
-    const mm = String(next.getMonth() + 1).padStart(2, '0');
-    const dd = String(next.getDate()).padStart(2, '0');
-    this.setDate(`${yyyy}-${mm}-${dd}`);
+  protected onDateNav(iso: string): void {
+    this.setDate(iso);
+  }
+
+  protected loadCalendar(range: { from: string; to: string }): void {
+    this.dailiesService.calendar(range.from, range.to).subscribe({
+      next: (rows) => {
+        const marks: CalendarMarks = {};
+        for (const row of rows) {
+          marks[row.date] = row.grade
+            ? { grade: row.grade }
+            : { status: row.status };
+        }
+        this.calendarMarks.set(marks);
+      },
+    });
+  }
+
+  private refreshCalendar(): void {
+    this.loadCalendar(monthRange(this.selectedDate()));
   }
 
   protected goToday(): void {
     this.setDate(this.todayIso());
   }
 
-  protected goTomorrow(): void {
-    this.setDate(this.offsetIso(1, this.todayIso()));
-  }
-
-  protected onDatePicked(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    if (value) {
-      this.setDate(value);
-    }
-  }
-
   protected startEdit(slot: DailyTaskSlot): void {
-    if (slot.completed || this.board()?.readOnly) {
+    if (slot.completed || !this.canMutate() || slot.scriptoriumWorkId) {
       return;
     }
+    this.cancelElapsedComplete();
     this.setupOpen.set(true);
     this.setupPinned = true;
-    const custom = !DURATION_PRESETS.includes(slot.durationMinutes);
     this.slotModel.set({
       title: slot.title,
       skillId: slot.skillId ?? 0,
+      skillWeights: dailySkillWeights(slot),
       habitId: slot.habitId ?? 0,
-      fixedXp: slot.fixedXp ?? null,
       effortLevel: slot.effortLevel,
-      durationMinutes: custom ? 45 : slot.durationMinutes,
-      customDuration: custom,
-      customDurationMinutes: slot.durationMinutes || 45,
+      durationMinutes: slot.durationMinutes || 45,
+      saveAsDefault: false,
+      loadedTemplateId: 0,
+      wealthAmount: centsToInput(slot.wealthCents),
+      questId: slot.questId ?? 0,
+      questSubtaskId: slot.questSubtaskId ?? 0,
     });
     this.selectedCategory.set(slot.skill?.category ?? '');
     this.editingSlot.set(slot);
@@ -232,48 +391,74 @@ export class DailiesPage implements OnInit {
 
   protected selectCategory(category: string): void {
     this.selectedCategory.set(category);
-    const currentSkill = this.slotModel().skillId;
-    const stillValid = this.subskills().some((s) => s.id === currentSkill);
-    if (!stillValid) {
-      this.slotForm.skillId().value.set(0);
-    }
   }
 
-  protected selectSkill(skillId: number): void {
-    this.slotForm.skillId().value.set(skillId);
-    this.slotModel.update((m) => ({ ...m, fixedXp: null }));
+  protected pickSkill(skill: Skill): void {
+    this.setSkillWeights(addSkillWeight(this.slotModel().skillWeights, skill.slug));
   }
 
-  protected applyTemplate(templateId: number): void {
-    const t = this.templates().find((row) => row.id === templateId);
-    if (!t) {
-      return;
-    }
+  protected bumpSkillWeight(event: { slug: string; delta: number }): void {
+    this.setSkillWeights(
+      bumpSkillWeight(this.slotModel().skillWeights, event.slug, event.delta),
+    );
+  }
+
+  protected removeSkillWeight(slug: string): void {
+    this.setSkillWeights(removeSkillWeight(this.slotModel().skillWeights, slug));
+  }
+
+  protected skillLine(input: {
+    skillShares?: Array<{ name: string }> | null;
+    skill?: { name: string } | null;
+  } | null | undefined): string {
+    return dailySkillLine(input);
+  }
+
+  protected applyTemplate(t: DailyTaskTemplate): void {
+    const habitStillActive =
+      t.habitId != null && this.habits().some((h) => h.id === t.habitId);
     this.slotModel.update((m) => ({
       ...m,
       title: t.name,
       skillId: t.skillId,
-      fixedXp: t.fixedXp,
+      skillWeights: dailySkillWeights(t),
+      habitId: habitStillActive ? (t.habitId ?? 0) : 0,
       effortLevel: t.effortLevel,
       durationMinutes: t.durationMinutes,
-      customDuration: !DURATION_PRESETS.includes(t.durationMinutes),
-      customDurationMinutes: t.durationMinutes,
+      loadedTemplateId: t.id,
+      wealthAmount: centsToInput(t.wealthCents),
+      questId: 0,
+      questSubtaskId: 0,
     }));
     this.selectedCategory.set(t.skill.category);
+  }
+
+  protected applyQuestTask(pick: QuestTaskPick): void {
+    const slug = pick.skillWeights[0]?.slug;
+    const skill = slug
+      ? this.allSkills().find((s) => s.slug === slug)
+      : undefined;
+    this.slotModel.set({
+      ...this.blankModel(),
+      title: pick.title,
+      skillId: skill?.id ?? 0,
+      skillWeights: pick.skillWeights,
+      effortLevel: pick.effortLevel,
+      durationMinutes: pick.durationMinutes,
+      questId: pick.questId,
+      questSubtaskId: pick.questSubtaskId ?? 0,
+    });
+    if (skill) {
+      this.selectedCategory.set(skill.category);
+    }
   }
 
   protected selectEffort(level: number): void {
     this.slotForm.effortLevel().value.set(level);
   }
 
-  protected selectDurationPreset(minutes: number): void {
-    this.slotForm.customDuration().value.set(false);
-    this.slotForm.durationMinutes().value.set(minutes);
-    this.slotForm.customDurationMinutes().value.set(minutes);
-  }
-
-  protected enableCustomDuration(): void {
-    this.slotForm.customDuration().value.set(true);
+  protected setDuration(minutes: number | null): void {
+    this.slotForm.durationMinutes().value.set(Math.max(1, minutes ?? 45));
   }
 
   protected saveSlot(): void {
@@ -284,12 +469,10 @@ export class DailiesPage implements OnInit {
 
     void submit(this.slotForm, async () => {
       const model = this.slotModel();
-      const duration = model.customDuration
-        ? model.customDurationMinutes
-        : model.durationMinutes;
+      const duration = model.durationMinutes;
 
-      if (!model.title.trim() || model.skillId < 1) {
-        this.timed.set('Title and skill are required.');
+      if (!model.title.trim() || !skillWeightsValid(model.skillWeights)) {
+        this.timed.set('Title and a full 10-point skill split are required.');
         return;
       }
 
@@ -301,18 +484,26 @@ export class DailiesPage implements OnInit {
           slotIndex: slot.slotIndex,
           title: model.title.trim(),
           skillId: model.skillId,
+          skillWeights: model.skillWeights,
           habitId: model.habitId > 0 ? model.habitId : null,
-          fixedXp: model.fixedXp,
           effortLevel: model.effortLevel,
           durationMinutes: duration,
+          wealthCents: boostsWealth(model.skillWeights)
+            ? parseMoneyToCents(model.wealthAmount)
+            : 0,
+          questId: model.questId > 0 ? model.questId : null,
+          questSubtaskId: model.questSubtaskId > 0 ? model.questSubtaskId : null,
         })
         .subscribe({
           next: () => {
             this.saving.set(false);
-            this.cancelEdit();
-            this.setupPinned = false;
-            this.timed.set('Task saved.');
-            this.loadBoard(this.selectedDate(), false);
+            if (model.saveAsDefault) {
+              this.persistDefault(model, duration);
+            } else {
+              this.cancelEdit();
+              this.timed.set('Task saved.');
+              this.loadBoard(this.selectedDate(), false);
+            }
           },
           error: (err: { error?: { message?: string | string[] } }) => {
             this.saving.set(false);
@@ -323,7 +514,7 @@ export class DailiesPage implements OnInit {
   }
 
   protected clearSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || slot.completed || this.board()?.readOnly) {
+    if (!slot.id || slot.completed || !this.canMutate()) {
       return;
     }
     this.dailiesService.clearSlot(slot.id).subscribe({
@@ -341,16 +532,64 @@ export class DailiesPage implements OnInit {
   }
 
   protected completeSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || slot.completed || this.board()?.readOnly) {
+    if (!slot.id || slot.completed || !this.canMutate()) {
+      return;
+    }
+    if (this.isSlotTracked(slot)) {
+      this.submitComplete(slot);
+      return;
+    }
+    this.pendingElapsedId.set(slot.id);
+    this.pendingMinutes.set(null);
+  }
+
+  protected confirmElapsedComplete(): void {
+    const id = this.pendingElapsedId();
+    const slot = this.board()
+      ?.tiers.flatMap((tier) => tier.slots)
+      .find((row) => row.id === id);
+    if (!slot) {
+      return;
+    }
+    this.submitComplete(slot, this.pendingMinutes());
+  }
+
+  protected cancelElapsedComplete(): void {
+    this.pendingElapsedId.set(null);
+    this.pendingMinutes.set(null);
+  }
+
+  protected isSlotTracked(slot: DailyTaskSlot): boolean {
+    if ((slot.elapsedMs ?? 0) > 0) {
+      return true;
+    }
+    if (!slot.id) {
+      return false;
+    }
+    if (this.watches.elapsedForDaily(slot.id) > 0) {
+      return true;
+    }
+    const bound = this.timer.boundDaily();
+    return Boolean(this.timer.running() && bound?.dailyTaskId === slot.id);
+  }
+
+  private submitComplete(slot: DailyTaskSlot, minutes?: number | null): void {
+    if (!slot.id || slot.completed || !this.canMutate()) {
       return;
     }
     this.completingId.set(slot.id);
-    this.dailiesService.complete(slot.id).subscribe({
+    const elapsedMs =
+      minutes != null && minutes > 0 ? minutes * 60_000 : undefined;
+    this.dailiesService.complete(slot.id, elapsedMs).subscribe({
       next: (result) => {
         this.completingId.set(null);
+        this.cancelElapsedComplete();
         this.skillsService.invalidateTree();
-        this.xpFeedback.publishAward(result.award);
+        for (const award of result.awards ?? (result.award ? [result.award] : [])) {
+          this.xpFeedback.publishAward(award);
+        }
         this.loadBoard(this.selectedDate(), false, true);
+        void this.character.getProfile().subscribe();
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.completingId.set(null);
@@ -360,18 +599,23 @@ export class DailiesPage implements OnInit {
   }
 
   protected uncompleteSlot(slot: DailyTaskSlot): void {
-    if (!slot.id || !slot.completed || this.board()?.readOnly) {
+    if (!slot.id || !slot.completed || !this.canMutate()) {
       return;
     }
     this.uncompletingId.set(slot.id);
     this.dailiesService.uncomplete(slot.id).subscribe({
       next: (result) => {
         this.uncompletingId.set(null);
-        if (result.reversal) {
+        const reversals =
+          result.reversals ?? (result.reversal ? [result.reversal] : []);
+        if (reversals.length) {
           this.skillsService.invalidateTree();
-          this.xpFeedback.publishReversal(result.reversal);
+          for (const reversal of reversals) {
+            this.xpFeedback.publishReversal(reversal);
+          }
         }
         this.loadBoard(this.selectedDate(), false, true);
+        void this.character.getProfile().subscribe();
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.uncompletingId.set(null);
@@ -398,7 +642,7 @@ export class DailiesPage implements OnInit {
 
   private postponeTo(targetDate: string): void {
     const slot = this.editingSlot();
-    if (!slot?.id || slot.completed || this.board()?.readOnly) {
+    if (!slot?.id || slot.completed || !this.canMutate()) {
       return;
     }
     this.postponingId.set(slot.id);
@@ -416,6 +660,17 @@ export class DailiesPage implements OnInit {
         this.timed.set(this.readError(err, 'Postpone failed'));
       },
     });
+  }
+
+  protected unlockHistory(): void {
+    this.historyUnlocked.set(true);
+  }
+
+  protected lockHistory(): void {
+    this.historyUnlocked.set(false);
+    this.setupOpen.set(false);
+    this.setupPinned = false;
+    this.cancelEdit();
   }
 
   protected addRegularSlot(): void {
@@ -438,6 +693,44 @@ export class DailiesPage implements OnInit {
     });
   }
 
+  protected onDailyDrop(event: DragSortDrop): void {
+    if (!this.canMutate()) {
+      return;
+    }
+    const board = this.board();
+    if (!board) {
+      return;
+    }
+    const fromImportance = event.fromList as TaskImportance;
+    const toImportance = event.toList as TaskImportance;
+    let toIndex = event.toIndex;
+    if (toIndex < 0) {
+      const empty = board.tiers
+        .find((tier) => tier.importance === toImportance)
+        ?.slots.find((slot) => slot.isEmpty);
+      if (!empty) {
+        return;
+      }
+      toIndex = empty.slotIndex;
+    }
+    if (fromImportance === toImportance && event.fromIndex === toIndex) {
+      return;
+    }
+    this.cancelEdit();
+    this.dailiesService
+      .reorderSlots(
+        board.date,
+        { importance: fromImportance, slotIndex: event.fromIndex },
+        { importance: toImportance, slotIndex: toIndex },
+      )
+      .subscribe({
+        next: (next) => this.applyBoard(next),
+        error: (err: { error?: { message?: string | string[] } }) => {
+          this.timed.set(this.readError(err, 'Could not reorder'));
+        },
+      });
+  }
+
   protected copyIncomplete(): void {
     this.dailiesService.copyIncomplete(this.selectedDate()).subscribe({
       next: (result) => {
@@ -445,6 +738,7 @@ export class DailiesPage implements OnInit {
         this.timed.set(
           `Copied ${result.copied} incomplete dailies from ${result.sourceDate}.`,
         );
+        this.refreshCalendar();
       },
       error: (err: { error?: { message?: string | string[] } }) => {
         this.timed.set(this.readError(err, 'Copy failed'));
@@ -470,18 +764,32 @@ export class DailiesPage implements OnInit {
     });
   }
 
+  protected unsealDay(): void {
+    const day = this.selectedDate();
+    this.dailiesService.unsealDay(day).subscribe({
+      next: (board) => {
+        if (this.isPast()) {
+          this.historyUnlocked.set(true);
+        }
+        this.applyBoard(board);
+        this.timed.set(`Unsealed ${day}.`);
+        this.refreshCalendar();
+      },
+      error: (err: { error?: { message?: string | string[] } }) => {
+        this.timed.set(this.readError(err, 'Unseal failed'));
+      },
+    });
+  }
+
   protected formatDuration(minutes: number): string {
-    if (minutes < 60) {
-      return `${minutes}m`;
-    }
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+    return formatTaskDuration(minutes);
   }
 
   private setDate(date: string): void {
     this.cancelEdit();
+    this.cancelElapsedComplete();
     this.setupPinned = false;
+    this.historyUnlocked.set(false);
     this.selectedDate.set(date);
     const cached = this.dailiesService.peekBoard(date);
     if (cached) {
@@ -506,6 +814,8 @@ export class DailiesPage implements OnInit {
         this.applyBoard(board);
         this.loading.set(false);
         this.error.set(null);
+        this.refreshCalendar();
+        this.consumeScriptoriumBind();
       },
       error: () => {
         this.loading.set(false);
@@ -518,9 +828,31 @@ export class DailiesPage implements OnInit {
     });
   }
 
+  private consumeScriptoriumBind(): void {
+    const workId = this.pendingScriptoriumId;
+    if (!workId) {
+      return;
+    }
+    this.pendingScriptoriumId = null;
+    const date = this.selectedDate();
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { date: date === this.todayIso() ? null : date },
+      replaceUrl: true,
+    });
+    this.dailiesService.fromScriptorium({ date, workId }).subscribe({
+      next: (board) => {
+        this.applyBoard(board);
+        this.timed.set('Bound to a daily.');
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.timed.set(err.error?.message ?? 'Could not bind the folio.');
+      },
+    });
+  }
+
   private applyBoard(raw: DailyBoard): void {
-    const isEditable =
-      raw.isEditable ?? (!raw.isSealed && !raw.sealRequired);
+    const isEditable = raw.isEditable !== false;
     const board: DailyBoard = {
       ...raw,
       isEditable,
@@ -529,15 +861,18 @@ export class DailiesPage implements OnInit {
     this.board.set(board);
     this.selectedDate.set(board.date);
 
-    // Past / non-today days always land on Tasks (history is read-only).
     if (!this.isTodaySelected(board.date)) {
-      this.setupOpen.set(false);
-      this.setupPinned = false;
-      this.cancelEdit();
+      if (!this.historyUnlocked()) {
+        this.setupOpen.set(false);
+        this.setupPinned = false;
+        this.cancelEdit();
+      } else if (!this.setupPinned && !this.editingKey()) {
+        this.setupOpen.set(false);
+      }
       return;
     }
 
-    if (board.readOnly) {
+    if (!this.canMutate()) {
       this.setupOpen.set(false);
       this.setupPinned = false;
       this.cancelEdit();
@@ -564,13 +899,13 @@ export class DailiesPage implements OnInit {
     this.applyHabit(Number(raw) || 0);
   }
 
-  protected onTemplateSelect(event: Event): void {
-    const raw = (event.target as HTMLSelectElement).value;
-    if (!raw) {
-      return;
-    }
-    this.applyTemplate(Number(raw));
-    (event.target as HTMLSelectElement).value = '';
+  protected setSaveAsDefault(checked: boolean): void {
+    this.slotModel.update((m) => ({ ...m, saveAsDefault: checked }));
+  }
+
+  protected setWealthAmount(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.slotModel.update((m) => ({ ...m, wealthAmount: value }));
   }
 
   protected applyHabit(habitId: number): void {
@@ -582,8 +917,15 @@ export class DailiesPage implements OnInit {
     if (!this.slotModel().title.trim()) {
       this.slotForm.title().value.set(habit.name);
     }
-    if (habit.skillId) {
-      this.slotForm.skillId().value.set(habit.skillId);
+    if (habit.skillWeights?.length) {
+      this.setSkillWeights(habit.skillWeights);
+    } else if (habit.skillId) {
+      const skill = this.findSkillById(habit.skillId);
+      if (skill) {
+        this.setSkillWeights(
+          addSkillWeight(this.slotModel().skillWeights, skill.slug),
+        );
+      }
       const cat = this.skillTree()?.categories.find((c) =>
         c.skills.some((s) => s.id === habit.skillId),
       );
@@ -591,27 +933,113 @@ export class DailiesPage implements OnInit {
         this.selectedCategory.set(cat.category);
       }
     }
+    if (habit.wealthCents > 0) {
+      this.slotModel.update((m) => ({
+        ...m,
+        wealthAmount: centsToInput(habit.wealthCents),
+      }));
+    }
+    this.slotForm.effortLevel().value.set(habit.effortLevel || 5);
+    this.slotForm.durationMinutes().value.set(
+      Math.max(1, habit.durationMinutes || 45),
+    );
+  }
+
+  private persistDefault(model: SlotFormModel, duration: number): void {
+    const primary =
+      this.findSkillBySlug(primarySkillSlug(model.skillWeights)) ??
+      this.findSkillById(model.skillId);
+    const payload = {
+      name: model.title.trim(),
+      icon: primary?.icon ?? '◆',
+      skillId: primary?.id ?? model.skillId,
+      skillWeights: model.skillWeights,
+      habitId: model.habitId > 0 ? model.habitId : null,
+      effortLevel: model.effortLevel,
+      durationMinutes: duration,
+      wealthCents: boostsWealth(model.skillWeights)
+        ? parseMoneyToCents(model.wealthAmount)
+        : 0,
+    };
+    const req =
+      model.loadedTemplateId > 0
+        ? this.dailiesService.updateTemplate(model.loadedTemplateId, payload)
+        : this.dailiesService.createTemplate(payload);
+    req.subscribe({
+      next: () => {
+        this.reloadTemplates();
+        this.cancelEdit();
+        this.timed.set('Task saved and stored as a default.');
+        this.loadBoard(this.selectedDate(), false);
+      },
+      error: (err: { error?: { message?: string | string[] } }) => {
+        this.cancelEdit();
+        this.loadBoard(this.selectedDate(), false);
+        this.timed.set(
+          `Task saved, but the default was not: ${this.readError(err, 'save failed')}`,
+        );
+      },
+    });
+  }
+
+  private reloadTemplates(): void {
+    this.dailiesService.listTemplates().subscribe({
+      next: (rows) => this.templates.set(rows),
+    });
+  }
+
+  private setSkillWeights(rows: Array<{ slug: string; weight: number }>): void {
+    const primary = this.findSkillBySlug(primarySkillSlug(rows));
+    this.slotModel.update((model) => ({
+      ...model,
+      skillWeights: rows,
+      skillId: primary?.id ?? 0,
+    }));
+  }
+
+  private findSkillById(id: number): Skill | undefined {
+    return this.allSkills().find((skill) => skill.id === id);
+  }
+
+  private findSkillBySlug(slug: string | null): Skill | undefined {
+    if (!slug) {
+      return undefined;
+    }
+    return this.allSkills().find((skill) => skill.slug === slug);
+  }
+
+  private skillName(slug: string): string {
+    return this.findSkillBySlug(slug)?.name ?? slug;
   }
 
   private blankModel(): SlotFormModel {
     return {
       title: '',
       skillId: 0,
+      skillWeights: [],
       habitId: 0,
-      fixedXp: null,
       effortLevel: 5,
       durationMinutes: 45,
-      customDuration: false,
-      customDurationMinutes: 45,
+      saveAsDefault: false,
+      loadedTemplateId: 0,
+      wealthAmount: '',
+      questId: 0,
+      questSubtaskId: 0,
     };
   }
 
-  private todayIso(): string {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+  protected formatWealth(cents: number | null | undefined): string {
+    const n = Math.round(Number(cents) || 0);
+    return n > 0 ? formatMoney(n, this.character.currency()) : '';
+  }
+
+  protected formatElapsed(ms: number | null | undefined): string {
+    const n = ms ?? 0;
+    return n > 0 ? formatElapsedShort(n) : '—';
+  }
+
+  protected todayIso(): string {
+    return this.character.todayIso();
   }
 
   private offsetIso(days: number, from = this.selectedDate()): string {

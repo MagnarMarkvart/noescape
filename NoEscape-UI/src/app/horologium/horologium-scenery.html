@@ -1,0 +1,501 @@
+<div class="scenery" role="dialog" aria-label="Scenery view" aria-modal="true" [class.notes-open]="notesOpen()">
+  <video
+    #loop
+    class="loop"
+    [src]="src"
+    autoplay
+    muted
+    loop
+    playsinline
+    (loadeddata)="playLoop()"
+    [attr.aria-label]="name"
+  ></video>
+  <div class="veil" aria-hidden="true"></div>
+  @if (audioUrl()) {
+    <audio
+      #ambience
+      [src]="audioUrl()"
+      loop
+      autoplay
+      [muted]="ambienceMuted()"
+      (loadeddata)="playAmbience()"
+    ></audio>
+  }
+
+  <div class="stage" [class.notes-open]="notesOpen()">
+  <section class="session">
+    <p class="kicker">
+      @if (setupKind === 'vigilia') {
+        Vigilia
+      } @else if (setupKind === 'consuetudo') {
+        Consuetudo
+      } @else if (mode() === 'adhoc') {
+        Track
+      } @else {
+        Sessio
+      }
+    </p>
+    @if (setupKind === 'vigilia') {
+      <p class="phase">{{ watchRunning() ? 'Running' : 'Paused' }}</p>
+      <p class="clock" aria-live="polite">{{ watchElapsedLabel() }}</p>
+      <p class="meta">{{ selectedWatch()?.name || 'No project' }}</p>
+    } @else if (setupKind === 'consuetudo') {
+      <p class="phase">{{ consuetudoOvertime() ? 'Over' : consuetudoRunning() ? 'Practice' : 'Paused' }}</p>
+      @if (consuetudoStep(); as step) {
+        <p class="practice-step">
+          <span class="step-icon" aria-hidden="true">{{ step.icon || '◆' }}</span>
+          <span class="step-title">{{ step.title }}</span>
+        </p>
+      }
+      <p
+        class="clock"
+        [class.overtime]="consuetudoOvertime()"
+        aria-live="polite"
+      >{{ consuetudoLabel() }}</p>
+      @if (routineName(); as name) {
+        <p class="routine-name">{{ name }}</p>
+      }
+      <p class="meta">{{ consuetudoMeta() }}</p>
+    } @else {
+      <p class="phase">{{ statusLine() }}</p>
+      <button
+        type="button"
+        class="task-line"
+        (click)="openTaskFocus()"
+      >
+        {{ taskLabel || 'Focus a task' }}{{ taskLabel && !canCompleteTask ? ' · done' : '' }}
+      </button>
+      <p class="clock" aria-live="polite">{{ remainingLabel() }}</p>
+      <p class="meta">{{ sessionLabel() }}</p>
+      @if (restCarryMs() > 0) {
+        <p class="meta carry">Next rest {{ nextRestLabel() }}</p>
+      }
+      <dl>
+        <div>
+          <dt>Work</dt>
+          <dd>{{ config().workMinutes }}m</dd>
+        </div>
+        <div>
+          <dt>Rest</dt>
+          <dd>{{ restStatLabel() }}</dd>
+        </div>
+        <div>
+          <dt>{{ mode() === 'adhoc' ? 'Block' : 'Goal' }}</dt>
+          <dd class="stat-num">
+            @if (mode() === 'adhoc') {
+              {{ currentIteration() }}
+            } @else if (phase() === 'complete') {
+              {{ config().iterations }}/{{ config().iterations }}
+            } @else if (phase() === 'idle') {
+              {{ config().iterations }}
+            } @else {
+              {{ currentIteration() }}/{{ config().iterations }}
+            }
+          </dd>
+        </div>
+        @if (mode() !== 'adhoc') {
+          <div>
+            <dt>Done</dt>
+            <dd class="stat-num">{{ completedBlocks() }}</dd>
+          </div>
+        }
+      </dl>
+    }
+    @if (canEdit || setupKind === 'vigilia' || setupKind === 'consuetudo') {
+      <div class="setup" [hidden]="!canEdit">
+        <div class="chips">
+          <button
+            type="button"
+            class="exit slim"
+            [class.selected]="setupKind === 'planned'"
+            (click)="setSetupKind('planned')"
+          >
+            Sessio
+          </button>
+          <button
+            type="button"
+            class="exit slim"
+            [class.selected]="setupKind === 'adhoc'"
+            (click)="setSetupKind('adhoc')"
+          >
+            Track
+          </button>
+          <button
+            type="button"
+            class="exit slim"
+            [class.selected]="setupKind === 'vigilia'"
+            (click)="setSetupKind('vigilia')"
+          >
+            Vigilia
+          </button>
+          @if (showConsuetudo) {
+            <button
+              type="button"
+              class="exit slim"
+              [class.selected]="setupKind === 'consuetudo'"
+              (click)="setSetupKind('consuetudo')"
+            >
+              Consuetudo
+            </button>
+          }
+        </div>
+        @if (setupKind === 'planned') {
+          <div class="chips">
+            @for (preset of presets(); track preset.id) {
+              <button
+                type="button"
+                class="exit slim"
+                [class.selected]="timerPreset() === preset.id"
+                (click)="selectPreset(preset.id)"
+              >
+                {{ preset.label }}
+              </button>
+            }
+          </div>
+        }
+        @if (setupKind !== 'vigilia' && setupKind !== 'consuetudo') {
+        <div class="fields">
+          <label>
+            Work
+            <app-number-field
+              ariaLabel="Work minutes"
+              [min]="1"
+              [max]="180"
+              [value]="config().workMinutes"
+              (valueChange)="setWork($event)"
+            />
+          </label>
+          <label>
+            Rest
+            <app-number-field
+              ariaLabel="Rest minutes"
+              [min]="1"
+              [max]="60"
+              [value]="config().restMinutes"
+              (valueChange)="setRest($event)"
+            />
+          </label>
+          @if (mode() === 'planned') {
+            <label>
+              Laps
+              <app-number-field
+                ariaLabel="Laps"
+                [min]="2"
+                [max]="20"
+                [value]="config().iterations"
+                (valueChange)="setIterations($event)"
+              />
+            </label>
+          }
+        </div>
+        }
+        @if (setupKind !== 'vigilia' && setupKind !== 'consuetudo' && (dailies.length > 0 || boundDailyId)) {
+        <label class="task">
+          Task
+          <select
+            [value]="boundDailyId"
+            (change)="pickDaily($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (d of dailies; track bindKey(d)) {
+              <option [value]="bindKey(d)">
+                @switch (d.source) {
+                  @case ('daily') { Daily · {{ d.name }} }
+                  @case ('subtask') { Subtask · {{ d.journeyLabel || d.name }} }
+                  @default { Check-in · {{ d.journeyLabel || d.name }} }
+                }
+              </option>
+            }
+          </select>
+        </label>
+        }
+        @if (setupKind === 'consuetudo') {
+        <label class="task">
+          Practice
+          <select
+            [value]="selectedRoutineId == null ? '' : '' + selectedRoutineId"
+            (change)="pickRoutine($any($event.target).value)"
+          >
+            @if (routines.length === 0) {
+              <option value="">None</option>
+            }
+            @for (r of routines; track r.id) {
+              <option
+                [value]="'' + r.id"
+                [selected]="(selectedRoutineId == null ? '' : '' + selectedRoutineId) === '' + r.id"
+              >
+                {{ r.icon || '🌅' }} {{ r.name }}
+              </option>
+            }
+          </select>
+        </label>
+        } @else if (setupKind === 'vigilia') {
+        <label class="task">
+          Vigilia
+          <select
+            [value]="vigiliaSelectValue"
+            (change)="selectWatch($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (g of vigiliaGroups; track g.id) {
+              <optgroup [attr.label]="g.label">
+                @for (o of g.options; track o.value) {
+                  <option [value]="o.value">{{ o.label }}</option>
+                }
+              </optgroup>
+            }
+          </select>
+        </label>
+        @if (vigiliaCustomAllowed) {
+          <form class="create" (submit)="$event.preventDefault(); createWatch()">
+            <input
+              type="text"
+              maxlength="80"
+              [value]="watchDraftName()"
+              (input)="setWatchDraftName($any($event.target).value)"
+              placeholder="New project"
+            />
+            <button type="submit" class="exit slim" [disabled]="!watchDraftName().trim()">
+              Create
+            </button>
+          </form>
+        }
+        @if (vigiliaTrackScriptorium && scriptoriumWorks.length) {
+          <label class="task">
+            From Scriptorium
+            <select (change)="bindScriptoriumWork($any($event.target).value)">
+              <option value="">Choose a work…</option>
+              @for (w of scriptoriumWorks; track w.id) {
+                <option [value]="w.id">{{ w.icon || '📜' }} {{ w.title }}</option>
+              }
+            </select>
+          </label>
+        }
+        } @else if (projectWatches().length > 0) {
+        <label class="task">
+          Vigilia
+          <select
+            [value]="selectedWatchId() ?? ''"
+            (change)="selectWatch($any($event.target).value)"
+          >
+            <option value="">None</option>
+            @for (w of projectWatches(); track w.id) {
+              <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w.id) }}</option>
+            }
+          </select>
+        </label>
+        @if (selectedWatch()) {
+          <button
+            type="button"
+            class="exit slim"
+            [class.selected]="widgetVisible"
+            (click)="toggleWatchWidget()"
+          >
+            {{ widgetVisible ? 'Widget on' : 'Widget off' }}
+          </button>
+        }
+        }
+      </div>
+    }
+
+    <div class="controls">
+      @if (setupKind === 'vigilia') {
+        @if (watchRunning()) {
+          <button type="button" class="exit primary" (click)="pause()">Pause</button>
+        } @else {
+          <button
+            type="button"
+            class="exit primary"
+            (click)="begin()"
+            [disabled]="!selectedWatch()"
+          >
+            Start Vigilia
+          </button>
+        }
+      } @else if (setupKind === 'consuetudo') {
+        @if (consuetudoFinished()) {
+          <button type="button" class="exit primary" disabled>
+            {{ consuetudoAwarding() ? 'Logging…' : 'Complete' }}
+          </button>
+        } @else if (consuetudoRunning()) {
+          <button type="button" class="exit primary" (click)="pause()">Pause</button>
+          <button type="button" class="exit" (click)="completeStep()">Completed</button>
+          <button type="button" class="exit" (click)="skipStep()">Skip</button>
+        } @else if (consuetudoInProgress()) {
+          <button type="button" class="exit primary" (click)="resume()">Resume</button>
+          <button type="button" class="exit" (click)="completeStep()">Completed</button>
+          <button type="button" class="exit" (click)="skipStep()">Skip</button>
+          <button type="button" class="exit" (click)="stop()">Stop</button>
+        } @else {
+          <button
+            type="button"
+            class="exit primary"
+            (click)="begin()"
+            [disabled]="!selectedRoutineId"
+          >
+            Start Consuetudo
+          </button>
+        }
+      } @else if (phase() === 'idle') {
+        <button type="button" class="exit primary" (click)="begin()">
+          {{ mode() === 'adhoc' ? 'Start Track' : 'Begin Sessio' }}
+        </button>
+      } @else if (phase() === 'complete') {
+        <button type="button" class="exit primary" (click)="stop()" [disabled]="awarding()">
+          {{ awarding() ? 'Logging…' : 'New Sessio' }}
+        </button>
+        @if (canCompleteTask) {
+          <button type="button" class="exit" (click)="markTaskDone()" [disabled]="awarding()">
+            {{ taskLabel || 'Task' }} done
+          </button>
+        }
+      } @else {
+        @if (running()) {
+          <button type="button" class="exit primary" (click)="pause()">Pause</button>
+        } @else {
+          <button type="button" class="exit primary" (click)="resume()">{{ continueLabel() }}</button>
+        }
+        @if (canSkipRest()) {
+          <button type="button" class="exit" (click)="skipRest()" [disabled]="awarding()">
+            Skip rest
+          </button>
+        }
+        <button type="button" class="exit" (click)="stop()" [disabled]="awarding()">Stop</button>
+        @if (canCompleteTask) {
+          <button type="button" class="exit" (click)="markTaskDone()" [disabled]="awarding()">
+            {{ taskLabel || 'Task' }} done
+          </button>
+        }
+      }
+    </div>
+
+    <div class="notes-toggle">
+      <app-ui-icon-btn
+        icon="note"
+        label="Toggle notes"
+        [round]="true"
+        [expanded]="notesOpen()"
+        (clicked)="toggleSceneryNotes()"
+      />
+    </div>
+  </section>
+
+  @if (notesOpen()) {
+    <aside class="notes-dock">
+      <div class="notes-head">
+        <p>Notes</p>
+        <app-ui-icon-btn
+          icon="close"
+          label="Close notes"
+          [round]="true"
+          (clicked)="toggleSceneryNotes()"
+        />
+      </div>
+      <textarea
+        class="live-notes"
+        [value]="notes()"
+        (input)="setLiveNotes($any($event.target).value)"
+        maxlength="4000"
+        placeholder="Live notes"
+      ></textarea>
+    </aside>
+  }
+  </div>
+
+  @if (setupKind !== 'vigilia' && setupKind !== 'consuetudo' && widgetVisible && selectedWatch(); as watch) {
+    <aside class="watch-widget">
+      <div>
+        <p>Vigilia</p>
+        <strong>{{ watch.name }}</strong>
+      </div>
+      <span>{{ watchElapsedLabel() }}</span>
+      <button type="button" class="exit slim" (click)="toggleWatchWidget()">Hide</button>
+    </aside>
+  } @else if (setupKind !== 'vigilia' && setupKind !== 'consuetudo' && selectedWatch() && !widgetVisible && phase() !== 'idle') {
+    <button type="button" class="exit slim watch-show" (click)="toggleWatchWidget()">
+      Show vigilia
+    </button>
+  }
+
+  <div class="sound-dock">
+    @if (soundOpen()) {
+      <div class="sound-panel" aria-label="Sound">
+        <section class="sound-block" aria-label="General volume">
+          <header>
+            <p>General</p>
+            <button type="button" class="exit slim" (click)="toggleJinglesMute()">
+              {{ jinglesMuted() ? 'Chimes off' : 'Mute chimes' }}
+            </button>
+          </header>
+          <label class="vol">
+            Volume {{ generalVolume() }}%
+            <input
+              type="range"
+              min="0"
+              max="100"
+              [value]="generalVolume()"
+              (input)="setGeneralVolume($any($event.target).value)"
+            />
+          </label>
+        </section>
+        <section class="sound-block" aria-label="Soundscape volume">
+          <header>
+            <p>Soundscape</p>
+            <button type="button" class="exit slim" (click)="toggleAmbienceMute()">
+              {{ ambienceMuted() ? 'Unmute bed' : 'Mute bed' }}
+            </button>
+          </header>
+          <label class="vol">
+            Volume {{ bedVolume() }}%
+            <input
+              type="range"
+              min="0"
+              max="100"
+              [value]="bedVolume()"
+              (input)="setBedVolume($any($event.target).value)"
+            />
+          </label>
+        </section>
+        <section class="sound-block scene-pick" aria-label="Scene">
+          <header>
+            <p>Scene</p>
+          </header>
+          <select
+            class="scene-select"
+            [value]="sceneId"
+            (change)="pickScene($any($event.target).value)"
+            aria-label="Change scenery"
+          >
+            @for (scene of scenes; track scene.id) {
+              <option [value]="scene.id">{{ scene.name }}</option>
+            }
+          </select>
+        </section>
+      </div>
+    }
+    <button
+      type="button"
+      class="orb"
+      [class.open]="soundOpen()"
+      [attr.aria-expanded]="soundOpen()"
+      aria-haspopup="true"
+      [attr.aria-label]="'Soundscape: ' + name"
+      (click)="toggleSoundPanel()"
+    >
+      <video
+        class="orb-loop"
+        [src]="src"
+        autoplay
+        muted
+        loop
+        playsinline
+        (loadeddata)="playLoop()"
+        aria-hidden="true"
+      ></video>
+      <span class="orb-ring" aria-hidden="true"></span>
+    </button>
+    <p class="orb-label">{{ name }}</p>
+  </div>
+
+  <button type="button" class="exit leave" (click)="exit()">Exit Scenery</button>
+</div>

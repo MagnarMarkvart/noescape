@@ -1,42 +1,53 @@
 <section class="dailies-shell">
   <div class="toolbar">
     <div class="date-nav" aria-label="Day navigation">
-      <button type="button" class="ghost icon" (click)="shiftDate(-1)" aria-label="Previous day">‹</button>
-      <input
-        class="date-input"
-        type="date"
-        [value]="selectedDate()"
-        (change)="onDatePicked($event)"
-        aria-label="Pick date"
+      <app-date-nav
+        [date]="selectedDate()"
+        [today]="todayIso()"
+        [marks]="calendarMarks()"
+        [showTomorrow]="true"
+        (dateChange)="onDateNav($event)"
+        (rangeChange)="loadCalendar($event)"
       />
-      <button type="button" class="ghost icon" (click)="shiftDate(1)" aria-label="Next day">›</button>
-      @if (!isToday()) {
-        <button type="button" class="ghost" (click)="goToday()">Today</button>
-      }
-      @if (!isTomorrow()) {
-        <button type="button" class="ghost" (click)="goTomorrow()">Tomorrow</button>
-      }
     </div>
 
     <div class="toolbar-actions">
-      <a class="ghost linkish" routerLink="/dailies/defaults">Defaults</a>
+      <app-ui-icon-btn
+        icon="log"
+        label="Daily log"
+        href="/dailies/log"
+        [queryParams]="{ date: selectedDate() }"
+      />
+      <app-ui-icon-btn
+        icon="wrench"
+        label="Default tasks"
+        href="/dailies/defaults"
+        [queryParams]="{ from: 'dailies' }"
+      />
       @if (board(); as current) {
-        @if (current.canCopyIncomplete) {
-          <button type="button" (click)="copyIncomplete()">Carry Over</button>
-        }
-        @if (current.isEditable && current.filledCount > 0) {
-          <button type="button" (click)="sealDay()">Seal</button>
-        }
-        @if (current.sealRequired) {
-          <span class="seal-flag">Seal required</span>
-        }
-        @if (current.readOnly) {
-          <span class="seal-flag">Read only</span>
-        }
-        @if (current.isEditable && current.filledCount > 0) {
-          <button type="button" class="ghost" (click)="toggleSetup()">
-            {{ setupOpen() ? 'Tasks' : 'Setup' }}
-          </button>
+        @if (current.isSealed) {
+          <button type="button" (click)="unsealDay()">Unseal</button>
+        } @else {
+          @if (current.canCopyIncomplete && canMutate()) {
+            <button type="button" (click)="copyIncomplete()">Carry Over</button>
+          }
+          @if (!setupOpen() && canMutate() && current.filledCount > 0) {
+            <button type="button" (click)="sealDay()">Seal</button>
+          }
+          @if (current.sealRequired) {
+            <span class="seal-flag">Seal required</span>
+          }
+          @if (isPast() && !canMutate()) {
+            <button type="button" (click)="unlockHistory()">Edit</button>
+          }
+          @if (isPast() && historyUnlocked()) {
+            <button type="button" class="ghost" (click)="lockHistory()">Done</button>
+          }
+          @if (canMutate() && current.filledCount > 0) {
+            <button type="button" class="ghost" (click)="toggleSetup()">
+              {{ setupOpen() ? 'Tasks' : 'Setup' }}
+            </button>
+          }
         }
       }
     </div>
@@ -51,6 +62,15 @@
   } @else if (error()) {
     <p class="state-msg error" role="alert">{{ error() }}</p>
   } @else if (board(); as current) {
+    @if (current.isSealed) {
+      @if (dayVerdict(); as verdict) {
+        <app-daily-day-card
+          [verdict]="verdict"
+          [tasks]="filledTasks()"
+          [earnedXp]="current.earnedXp"
+        />
+      }
+    } @else {
     <div class="day-panel" aria-label="Day progress">
       <div class="stat">
         <span class="stat-label">Done</span>
@@ -60,12 +80,12 @@
         <span class="stat-label">XP</span>
         <span class="stat-value">{{ current.earnedXp | number }}</span>
       </div>
-      @if (current.isSealed) {
+      @if (current.isSealed && !canMutate()) {
         <div class="stat sealed">
           <span class="stat-label">Status</span>
           <span class="stat-value">Sealed</span>
         </div>
-      } @else if (current.readOnly) {
+      } @else if (isPast() && !canMutate()) {
         <div class="stat sealed">
           <span class="stat-label">Status</span>
           <span class="stat-value">History</span>
@@ -80,9 +100,14 @@
         </header>
 
         <div class="tiers setup-tiers">
+          <app-drop-group (dropped)="onDailyDrop($event)">
           @for (tier of current.tiers; track tier.importance) {
             <section
               class="tier"
+              appDropList
+              [dropListId]="tier.importance"
+              dropMode="swap"
+              [disabled]="!canMutate()"
               [class.most-important]="tier.importance === 'MOST_IMPORTANT'"
               [class.important]="tier.importance === 'IMPORTANT'"
               [class.regular]="tier.importance === 'REGULAR'"
@@ -94,29 +119,29 @@
 
               <ul class="slot-list">
                 @for (slot of tier.slots; track slot.slotIndex) {
-                  <li class="slot" [class.editing]="isEditing(slot)" [class.filled]="slot.isFilled">
+                  <li
+                    class="slot"
+                    [appDragItem]="slot.slotIndex"
+                    [dragDisabled]="!canMutate() || !slot.isFilled || isEditing(slot)"
+                    [class.editing]="isEditing(slot)"
+                    [class.filled]="slot.isFilled"
+                  >
+                    @if (canMutate() && slot.isFilled && !isEditing(slot)) {
+                      <app-drag-grip />
+                    }
                     @if (isEditing(slot)) {
                       <form class="slot-form" (submit)="$event.preventDefault(); saveSlot()">
-                        <label class="title-field">
-                          Title
+                        <fieldset class="picker-block">
+                          <legend>Title</legend>
                           <input type="text" [formField]="slotForm.title" placeholder="Quest" />
-                        </label>
+                        </fieldset>
 
-                        @if (templates().length) {
-                          <label class="title-field">
-                            Default task
-                            <select
-                              (change)="onTemplateSelect($event)"
-                            >
-                              <option value="">— pick a preset —</option>
-                              @for (t of templates(); track t.id) {
-                                <option [value]="t.id">
-                                  {{ t.icon }} {{ t.name }} (+{{ t.fixedXp }} {{ t.skill.name }})
-                                </option>
-                              }
-                            </select>
-                          </label>
-                        }
+                        <app-default-task-picker
+                          [templates]="templates()"
+                          (pick)="applyTemplate($event)"
+                        />
+
+                        <app-quest-task-picker (pick)="applyQuestTask($event)" />
 
                         @if (habits().length) {
                           <label class="title-field">
@@ -135,108 +160,62 @@
                           </label>
                         }
 
-                        @if (slotModel().fixedXp; as fx) {
-                          <p class="fixed-xp-note">Fixed reward: +{{ fx }} XP</p>
-                        }
+                        <p class="xp-preview">Reward ~{{ previewXp() | number }} XP</p>
 
                         <fieldset class="picker-block">
-                          <legend>Skill</legend>
-                          <div class="icon-grid parents" role="listbox" aria-label="Parent skills">
-                            @for (cat of categories(); track cat.category) {
-                              <button
-                                type="button"
-                                class="pick-tile"
-                                role="option"
-                                [class.selected]="selectedCategory() === cat.category"
-                                [attr.aria-selected]="selectedCategory() === cat.category"
-                                (click)="selectCategory(cat.category)"
-                              >
-                                <span class="pick-icon" aria-hidden="true">{{ cat.icon }}</span>
-                                <span class="pick-label">{{ cat.label }}</span>
-                              </button>
-                            }
-                          </div>
+                          <legend>Skills</legend>
+                          <app-skill-weight-list
+                            [shares]="weightShares()"
+                            [remaining]="weightRemaining()"
+                            [valid]="weightsValid()"
+                            (bump)="bumpSkillWeight($event)"
+                            (remove)="removeSkillWeight($event)"
+                          />
+                          <app-skill-tree-picker
+                            [showLevel]="true"
+                            [categories]="categories()"
+                            [skills]="subskills()"
+                            [selectedCategory]="selectedCategory() || null"
+                            [selectedSlugs]="selectedSlugs()"
+                            (categoryChange)="selectCategory($event)"
+                            (skillPick)="pickSkill($event)"
+                          />
                         </fieldset>
 
-                        @if (selectedCategory()) {
+                        <app-effort-field
+                          [value]="slotModel().effortLevel"
+                          (valueChange)="selectEffort($event)"
+                        />
+
+                        <app-duration-field
+                          legend="Duration"
+                          [presets]="durationPresets"
+                          [minutes]="slotModel().durationMinutes"
+                          [maxHours]="24"
+                          (minutesChange)="setDuration($event)"
+                        />
+
+                        @if (showWealth()) {
                           <fieldset class="picker-block">
-                            <legend>Subskill</legend>
-                            <div class="icon-grid subs" role="listbox" aria-label="Subskills">
-                              @for (skill of subskills(); track skill.id) {
-                                <button
-                                  type="button"
-                                  class="pick-tile"
-                                  role="option"
-                                  [class.selected]="slotModel().skillId === skill.id"
-                                  [attr.aria-selected]="slotModel().skillId === skill.id"
-                                  (click)="selectSkill(skill.id)"
-                                >
-                                  <span class="pick-icon" aria-hidden="true">{{ skill.icon }}</span>
-                                  <span class="pick-label">{{ skill.name }}</span>
-                                  <span class="pick-meta">Lv {{ skill.level }}</span>
-                                </button>
-                              }
-                            </div>
+                            <legend>Wealth gained ({{ currencyLabel() }})</legend>
+                            <input
+                              type="text"
+                              inputmode="decimal"
+                              [value]="slotModel().wealthAmount"
+                              (input)="setWealthAmount($event)"
+                              placeholder="0.00"
+                            />
                           </fieldset>
                         }
 
-                        <fieldset class="picker-block">
-                          <legend>Effort</legend>
-                          <div class="icon-grid effort" role="listbox" aria-label="Effort level">
-                            @for (level of effortLevels; track level) {
-                              <button
-                                type="button"
-                                class="pick-tile compact"
-                                role="option"
-                                [class.selected]="slotModel().effortLevel === level"
-                                [attr.aria-selected]="slotModel().effortLevel === level"
-                                (click)="selectEffort(level)"
-                              >
-                                {{ level }}
-                              </button>
-                            }
-                          </div>
-                        </fieldset>
-
-                        <fieldset class="picker-block">
-                          <legend>Duration</legend>
-                          <div class="icon-grid duration" role="listbox" aria-label="Duration">
-                            @for (mins of durationPresets; track mins) {
-                              <button
-                                type="button"
-                                class="pick-tile compact"
-                                role="option"
-                                [class.selected]="!slotModel().customDuration && slotModel().durationMinutes === mins"
-                                [attr.aria-selected]="!slotModel().customDuration && slotModel().durationMinutes === mins"
-                                (click)="selectDurationPreset(mins)"
-                              >
-                                {{ formatDuration(mins) }}
-                              </button>
-                            }
-                            <button
-                              type="button"
-                              class="pick-tile compact custom-tile"
-                              role="option"
-                              [class.selected]="slotModel().customDuration"
-                              [attr.aria-selected]="slotModel().customDuration"
-                              (click)="enableCustomDuration()"
-                              aria-label="Custom duration"
-                              title="Custom"
-                            >
-                              <span aria-hidden="true">✎</span>
-                            </button>
-                          </div>
-                          @if (slotModel().customDuration) {
-                            <label class="custom-duration">
-                              Minutes
-                              <input type="number" [formField]="slotForm.customDurationMinutes" />
-                            </label>
-                          }
-                        </fieldset>
-
                         <div class="form-actions">
-                          <button type="submit" [disabled]="saving() || slotForm().invalid()">Save</button>
+                          <button type="submit" [disabled]="saving() || slotForm().invalid() || !weightsValid()">Save</button>
                           <button type="button" class="ghost" (click)="cancelEdit()">Cancel</button>
+                          <app-rune-check
+                            label="Remember"
+                            [checked]="slotModel().saveAsDefault"
+                            (checkedChange)="setSaveAsDefault($event)"
+                          />
                           @if (canPostponeEdit()) {
                             <div class="postpone-group">
                               <button
@@ -268,7 +247,7 @@
                       <button
                         type="button"
                         class="empty-slot"
-                        [disabled]="current.readOnly"
+                        [disabled]="!canMutate()"
                         (click)="startEdit(slot)"
                       >
                         <span class="empty-mark">+</span>
@@ -279,12 +258,12 @@
                         type="button"
                         class="filled-chip"
                         (click)="startEdit(slot)"
-                        [disabled]="slot.completed || current.readOnly"
+                        [disabled]="slot.completed || !canMutate() || !!slot.scriptoriumWorkId"
                       >
                         <span aria-hidden="true">{{ slot.skill?.icon }}</span>
                         <span class="filled-chip-text">
                           <strong>{{ slot.title }}</strong>
-                          <span class="muted">{{ slot.skill?.name }} · E{{ slot.effortLevel }} · {{ formatDuration(slot.durationMinutes) }}</span>
+                          <span class="muted">{{ skillLine(slot) }} · E{{ slot.effortLevel }} · {{ formatDuration(slot.durationMinutes) }}@if (formatWealth(slot.wealthCents); as cash) { · {{ cash }} }</span>
                         </span>
                       </button>
                     }
@@ -292,20 +271,21 @@
                 }
               </ul>
 
-              @if (tier.importance === 'REGULAR' && current.canAddRegular) {
+              @if (tier.importance === 'REGULAR' && current.canAddRegular && canMutate()) {
                 <button type="button" class="ghost add-regular" (click)="addRegularSlot()">
                   + Regular
                 </button>
               }
             </section>
           }
+          </app-drop-group>
         </div>
       </section>
     } @else {
       <section class="board-pane" aria-label="Configured dailies">
         @if (filledSlots().length === 0) {
           <div class="board-empty">
-            @if (current.isEditable) {
+            @if (canMutate()) {
               <button type="button" (click)="toggleSetup(true)">Setup</button>
             } @else {
               <span class="muted">No tasks logged.</span>
@@ -313,10 +293,15 @@
           </div>
         } @else {
           <div class="board-tiers">
+            <app-drop-group (dropped)="onDailyDrop($event)">
             @for (tier of current.tiers; track tier.importance) {
-              @if (tier.filled > 0) {
+              @if (tier.filled > 0 || canMutate()) {
                 <section
                   class="tier board-tier"
+                  appDropList
+                  [dropListId]="tier.importance"
+                  dropMode="swap"
+                  [disabled]="!canMutate()"
                   [class.most-important]="tier.importance === 'MOST_IMPORTANT'"
                   [class.important]="tier.importance === 'IMPORTANT'"
                   [class.regular]="tier.importance === 'REGULAR'"
@@ -325,18 +310,47 @@
                     <h3>{{ tier.label }}</h3>
                     <span class="tier-meta">{{ tier.completed }}/{{ tier.filled }}</span>
                   </div>
+                  @if (tier.filled === 0) {
+                    <p class="drop-hint">Drop a task here</p>
+                  }
 
                   <ul class="slot-list">
                     @for (slot of tier.slots; track slot.slotIndex) {
                       @if (slot.isFilled) {
-                        <li class="slot" [class.completed]="slot.completed">
+                        <li
+                          class="slot"
+                          [class.completed]="slot.completed"
+                          [appDragItem]="slot.slotIndex"
+                          [dragDisabled]="!canMutate()"
+                        >
+                          @if (canMutate()) {
+                            <app-drag-grip />
+                          }
                           <article class="quest-card">
                             <div class="quest-top">
                               <div class="quest-title-wrap">
                                 <h3>{{ slot.title }}</h3>
+                                @if (slot.questId) {
+                                  <a
+                                    class="quest-link-chip"
+                                    [routerLink]="['/quests', slot.questId]"
+                                    title="Linked to quest"
+                                  >
+                                    ⚔ {{ slot.questBindKind === 'subtask' ? 'Quest subtask' : 'Quest daily work' }}
+                                  </a>
+                                }
+                                @if (slot.scriptoriumWorkId) {
+                                  <a
+                                    class="quest-link-chip"
+                                    [routerLink]="['/scriptorium', slot.scriptoriumWorkId]"
+                                    title="Linked to Scriptorium"
+                                  >
+                                    📜 Scriptorium
+                                  </a>
+                                }
                                 <p class="skill-chip">
                                   <span aria-hidden="true">{{ slot.skill?.icon }}</span>
-                                  {{ slot.skill?.name }}
+                                  {{ skillLine(slot) }}
                                   <span class="muted">Lv {{ slot.skill?.level }}</span>
                                 </p>
                               </div>
@@ -358,20 +372,46 @@
                                 <dt>Duration</dt>
                                 <dd>{{ formatDuration(slot.durationMinutes) }}</dd>
                               </div>
+                              <div>
+                                <dt>Tracked</dt>
+                                <dd>{{ formatElapsed(slot.elapsedMs) }}</dd>
+                              </div>
+                              @if (formatWealth(slot.wealthCents); as cash) {
+                                <div>
+                                  <dt>Wealth</dt>
+                                  <dd>{{ cash }}</dd>
+                                </div>
+                              }
                             </dl>
 
+                            @if (slot.id && (slot.elapsedMs ?? 0) > 0) {
+                              <app-work-interval-log [target]="{ dailyTaskId: slot.id }" />
+                            }
+
                             <div class="quest-actions">
-                              @if (current.isEditable) {
+                              @if (canMutate()) {
                                 @if (!slot.completed) {
-                                  <button
-                                    type="button"
-                                    class="complete-btn"
-                                    [disabled]="completingId() === slot.id"
-                                    (click)="completeSlot(slot)"
-                                  >
-                                    {{ completingId() === slot.id ? '…' : 'Complete' }}
-                                  </button>
-                                  <button type="button" class="ghost" (click)="startEdit(slot)">Edit</button>
+                                  @if (pendingElapsedId() === slot.id) {
+                                    <app-elapsed-complete
+                                      [minutes]="pendingMinutes()"
+                                      [busy]="completingId() === slot.id"
+                                      (minutesChange)="pendingMinutes.set($event)"
+                                      (confirm)="confirmElapsedComplete()"
+                                      (cancel)="cancelElapsedComplete()"
+                                    />
+                                  } @else {
+                                    <button
+                                      type="button"
+                                      class="complete-btn"
+                                      [disabled]="completingId() === slot.id"
+                                      (click)="completeSlot(slot)"
+                                    >
+                                      {{ completingId() === slot.id ? '…' : 'Complete' }}
+                                    </button>
+                                    @if (!slot.scriptoriumWorkId) {
+                                      <button type="button" class="ghost" (click)="startEdit(slot)">Edit</button>
+                                    }
+                                  }
                                 } @else {
                                   <span class="done-stamp">Done</span>
                                   <button
@@ -388,7 +428,7 @@
                               }
                             </div>
 
-                            @if (current.isEditable && !slot.completed) {
+                            @if (canMutate() && !slot.completed && !slot.scriptoriumWorkId) {
                               <button
                                 type="button"
                                 class="icon-clear"
@@ -407,9 +447,11 @@
                 </section>
               }
             }
+            </app-drop-group>
           </div>
         }
       </section>
+    }
     }
   }
 </section>

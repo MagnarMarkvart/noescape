@@ -219,6 +219,19 @@
   margin: 0.85rem 0;
 }
 
+.wd {
+  text-align: center;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.day.pad {
+  border-color: transparent;
+  background: transparent;
+}
+
 .day {
   aspect-ratio: 1;
   display: grid;

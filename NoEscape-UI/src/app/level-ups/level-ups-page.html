@@ -30,7 +30,7 @@
               </p>
             </div>
             <time [attr.datetime]="row.createdAt">
-              {{ row.createdAt | date: 'yyyy-MM-dd HH:mm' }}
+              {{ formatWhen(row.createdAt) }}
             </time>
           </li>
         }

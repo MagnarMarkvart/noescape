@@ -32,7 +32,7 @@ const skills = [
     slug: 'hygiene',
     category: 'Physical',
     icon: '🚿',
-    xpSources: 'Shower, shave, deodorant: fixed daily presets',
+    xpSources: 'Shower, shave, deodorant: effort × duration formula',
     sortOrder: 4,
   },
   {
@@ -564,6 +564,39 @@ const rewards: SeedReward[] = [
   },
 ];
 
+/** Catalog quests belong in this seed — not only in the live UI. */
+async function syncCatalogSubtasks(
+  slug: string,
+  rows: Array<{ title: string; gatesJourney?: boolean }>,
+) {
+  const quest = await prisma.quest.findUnique({ where: { slug } });
+  if (!quest) {
+    return;
+  }
+  const existing = await prisma.questSubtask.findMany({
+    where: { questId: quest.id },
+  });
+  const byTitle = new Map(existing.map((s) => [s.title, s]));
+  for (const [i, row] of rows.entries()) {
+    const found = byTitle.get(row.title);
+    const data = {
+      title: row.title,
+      sortOrder: i,
+      gatesJourney: Boolean(row.gatesJourney),
+    };
+    if (found) {
+      await prisma.questSubtask.update({
+        where: { id: found.id },
+        data,
+      });
+    } else {
+      await prisma.questSubtask.create({
+        data: { questId: quest.id, ...data },
+      });
+    }
+  }
+}
+
 async function main() {
   for (const skill of skills) {
     await prisma.skill.upsert({
@@ -670,6 +703,11 @@ async function main() {
     update: {},
     create: { key: 'feature:habitus', unlocked: false },
   });
+  await prisma.featureUnlock.upsert({
+    where: { key: 'feature:consuetudo' },
+    update: {},
+    create: { key: 'feature:consuetudo', unlocked: false },
+  });
 
   await prisma.quest.upsert({
     where: { slug: 'custodia-mentis' },
@@ -683,6 +721,16 @@ async function main() {
       skillSlug: 'discipline',
       durationDays: 7,
       kind: 'STREAK_LOG',
+      rules:
+        'Üks short on OK (kogemata); scrollimine = FAIL. Logi iga päev Clean või Broken. Vahele jäetud päev loetakse katkiseks.',
+      stakes:
+        'Doomscrollimine on dopamiiniklotside jaoks nagu labane nälg — sa ei ole näljane, sa lihtsalt näksid.',
+      howToWin:
+        '7 clean päeva järjest = complete. Streak reset ei tapa questi — alustad päevast 1 uuesti.',
+      destination: 'Seven consecutive clean days without short-form doomscroll.',
+      journeyLabel: 'Clean day (no doomscroll)',
+      journeyNote: 'Each day: log Clean or Broken. Missed day counts as Broken.',
+      commitmentLevel: 7,
       skillReqsJson: null,
       unlockReqsJson: null,
       questReqsJson: null,
@@ -708,6 +756,16 @@ async function main() {
       skillSlug: 'discipline',
       durationDays: 7,
       kind: 'STREAK_LOG',
+      rules:
+        'Üks short on OK (kogemata); scrollimine = FAIL. Logi iga päev Clean või Broken. Vahele jäetud päev loetakse katkiseks.',
+      stakes:
+        'Doomscrollimine on dopamiiniklotside jaoks nagu labane nälg — sa ei ole näljane, sa lihtsalt näksid.',
+      howToWin:
+        '7 clean päeva järjest = complete. Streak reset ei tapa questi — alustad päevast 1 uuesti.',
+      destination: 'Seven consecutive clean days without short-form doomscroll.',
+      journeyLabel: 'Clean day (no doomscroll)',
+      journeyNote: 'Each day: log Clean or Broken. Missed day counts as Broken.',
+      commitmentLevel: 7,
       xpPlanJson: JSON.stringify({
         dayXp: [20, 30, 30, 50, 50, 80, 80],
         completionBonus: { discipline: 300, finance: 50 },
@@ -721,6 +779,119 @@ async function main() {
       createdByUser: false,
     },
   });
+
+  const keepCleanWeights = [
+    { slug: 'order', weight: 8 },
+    { slug: 'hygiene', weight: 2 },
+  ];
+  const keepCleanXp = 1000;
+  const keepCleanBonus = Object.fromEntries(
+    keepCleanWeights.map((w) => [
+      w.slug,
+      Math.round((keepCleanXp * w.weight) / 10),
+    ]),
+  );
+  const keepCleanFields = {
+    name: 'Keep it Clean!',
+    tier: 'NOVICE',
+    summary: 'One full week of a pristine room.',
+    description:
+      'Vacuum and wipe first. Then keep the room tidy every day for a week while you organize the rest.',
+    coverImage: 'pexels-kien-6026720.jpg',
+    skillSlug: 'order',
+    durationDays: 7,
+    kind: 'JOURNEY',
+    rules:
+      'Daily “Keep it Tidy!” is locked until Vacuum and Wipe is done. Missed days after unlock are recorded. The room must stay pristine for seven days.',
+    stakes:
+      'A messy room bleeds into everything else. This week is the reset.',
+    howToWin:
+      'Finish Vacuum and Wipe, check in Keep it Tidy! every day for a week, complete the organize subtasks, then mark the destination.',
+    destination: 'One full week of a pristine room.',
+    journeyLabel: 'Keep it Tidy!',
+    journeyNote:
+      'Daily tidy check-in. Unlocks after Vacuum and Wipe. Expected every day.',
+    commitmentLevel: 7,
+    totalXp: keepCleanXp,
+    skillWeightsJson: JSON.stringify(keepCleanWeights),
+    skillReqsJson: null,
+    unlockReqsJson: null,
+    questReqsJson: null,
+    xpPlanJson: JSON.stringify({
+      dayXp: [0],
+      completionBonus: keepCleanBonus,
+    }),
+    sortOrder: 2,
+    createdByUser: false,
+  };
+  await prisma.quest.upsert({
+    where: { slug: 'keep-it-clean' },
+    update: keepCleanFields,
+    create: { slug: 'keep-it-clean', ...keepCleanFields },
+  });
+  await syncCatalogSubtasks('keep-it-clean', [
+    { title: 'Vacuum and Wipe', gatesJourney: true },
+    { title: 'Organize clothes' },
+    { title: 'Organize Shelves' },
+    { title: 'Organize Drawers' },
+    { title: 'Organize Bathroom' },
+    { title: 'Clean Trashbins' },
+  ]);
+
+  const ordoWeights = [
+    { slug: 'strategy', weight: 6 },
+    { slug: 'focus', weight: 1 },
+    { slug: 'discipline', weight: 3 },
+  ];
+  const ordoXp = 2000;
+  const ordoBonus = Object.fromEntries(
+    ordoWeights.map((w) => [w.slug, Math.round((ordoXp * w.weight) / 10)]),
+  );
+  const ordoFields = {
+    name: 'Ordo Diei',
+    tier: 'NOVICE',
+    summary: 'Forge a Consuetudo and walk it once. Unlock Practice.',
+    description:
+      'A day without order is a day spent reacting. Name a Consuetudo — a morning practice, an evening close, any sequence you mean to keep — then walk every step from start to finish. One forged practice, one completed walk. After that, Horologium opens Consuetudo as a fourth mode, and you may keep as many routines as the day can hold.',
+    coverImage: 'pexels-sikunovruslan-20373905.jpg',
+    skillSlug: 'strategy',
+    durationDays: null,
+    kind: 'DESTINATION',
+    rules:
+      'Forge one Consuetudo (name, steps, durations). Complete it once in Horologium. Skips are allowed on the walk; the destination still counts. Until the quest is done you may keep only one routine.',
+    stakes:
+      'Without a practice the morning dissolves. This quest puts the first sequence on the bronze.',
+    howToWin:
+      'Create a Consuetudo, then complete it once. The feature unlocks on destination.',
+    destination: 'Complete one Consuetudo from start to finish.',
+    journeyLabel: null,
+    journeyNote: null,
+    commitmentLevel: 1,
+    totalXp: ordoXp,
+    skillWeightsJson: JSON.stringify(ordoWeights),
+    skillReqsJson: null,
+    unlockReqsJson: null,
+    questReqsJson: null,
+    xpPlanJson: JSON.stringify({
+      dayXp: [0],
+      completionBonus: ordoBonus,
+    }),
+    rewardJson: JSON.stringify({
+      title: 'Consuetudo',
+      features: ['feature:consuetudo'],
+    }),
+    sortOrder: 3,
+    createdByUser: false,
+  };
+  await prisma.quest.upsert({
+    where: { slug: 'ordo-diei' },
+    update: ordoFields,
+    create: { slug: 'ordo-diei', ...ordoFields },
+  });
+  await syncCatalogSubtasks('ordo-diei', [
+    { title: 'Forge a Consuetudo' },
+    { title: 'Walk the Consuetudo' },
+  ]);
 
   // Dev sample habits (visible when Habitus unlocked or ?dev=1).
   const gymSkill = bySlug['strength'];
@@ -757,33 +928,72 @@ async function main() {
     name: string;
     icon: string;
     skillSlug: string;
-    fixedXp: number;
+    effortLevel: number;
+    durationMinutes: number;
     sortOrder: number;
   }> = [
-    { name: 'Showering', icon: '🚿', skillSlug: 'hygiene', fixedXp: 50, sortOrder: 1 },
-    { name: 'Shaving Beard', icon: '🪒', skillSlug: 'hygiene', fixedXp: 50, sortOrder: 2 },
-    { name: 'Shaving Body', icon: '🛁', skillSlug: 'hygiene', fixedXp: 150, sortOrder: 3 },
+    {
+      name: 'Showering',
+      icon: '🚿',
+      skillSlug: 'hygiene',
+      effortLevel: 1,
+      durationMinutes: 15,
+      sortOrder: 1,
+    },
+    {
+      name: 'Shaving Beard',
+      icon: '🪒',
+      skillSlug: 'hygiene',
+      effortLevel: 2,
+      durationMinutes: 15,
+      sortOrder: 2,
+    },
+    {
+      name: 'Shaving Body',
+      icon: '🛁',
+      skillSlug: 'hygiene',
+      effortLevel: 4,
+      durationMinutes: 30,
+      sortOrder: 3,
+    },
     {
       name: 'Deodorant + Perfume',
       icon: '🧴',
       skillSlug: 'hygiene',
-      fixedXp: 25,
+      effortLevel: 1,
+      durationMinutes: 5,
       sortOrder: 4,
     },
-    { name: 'Dog Walking', icon: '🐕', skillSlug: 'cardio', fixedXp: 50, sortOrder: 5 },
+    {
+      name: 'Dog Walking',
+      icon: '🐕',
+      skillSlug: 'cardio',
+      effortLevel: 3,
+      durationMinutes: 30,
+      sortOrder: 5,
+    },
     {
       name: 'Full-Body Stretching',
       icon: '🤸',
       skillSlug: 'mobility',
-      fixedXp: 100,
+      effortLevel: 4,
+      durationMinutes: 20,
       sortOrder: 6,
     },
-    { name: 'Home Cooking', icon: '🍳', skillSlug: 'cook', fixedXp: 150, sortOrder: 7 },
+    {
+      name: 'Home Cooking',
+      icon: '🍳',
+      skillSlug: 'cook',
+      effortLevel: 5,
+      durationMinutes: 60,
+      sortOrder: 7,
+    },
     {
       name: 'Room/Apartment Cleaning',
       icon: '🧹',
       skillSlug: 'order',
-      fixedXp: 200,
+      effortLevel: 6,
+      durationMinutes: 90,
       sortOrder: 8,
     },
   ];
@@ -802,7 +1012,10 @@ async function main() {
         data: {
           icon: t.icon,
           skillId,
-          fixedXp: t.fixedXp,
+          habitId: existing.habitId,
+          fixedXp: 0,
+          effortLevel: t.effortLevel,
+          durationMinutes: t.durationMinutes,
           sortOrder: t.sortOrder,
           active: true,
         },
@@ -813,7 +1026,9 @@ async function main() {
           name: t.name,
           icon: t.icon,
           skillId,
-          fixedXp: t.fixedXp,
+          fixedXp: 0,
+          effortLevel: t.effortLevel,
+          durationMinutes: t.durationMinutes,
           sortOrder: t.sortOrder,
           createdByUser: false,
         },
@@ -822,7 +1037,7 @@ async function main() {
   }
 
   console.log(
-    `Seeded ${skills.length} skills, ${rewardCount} rewards, Custodia Mentis, Character, default tasks`,
+    `Seeded ${skills.length} skills, ${rewardCount} rewards, Custodia Mentis, Keep it Clean!, Ordo Diei, Character, default tasks`,
   );
 }
 

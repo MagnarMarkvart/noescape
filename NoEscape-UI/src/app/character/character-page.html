@@ -5,7 +5,8 @@
     <header class="char-bar">
       <div class="identity">
         <p class="kicker">Character</p>
-        <h1>{{ p.title }}</h1>
+        <h1>{{ p.nickname || 'Unnamed' }}</h1>
+        <p class="title-line">{{ p.title }}</p>
       </div>
       <dl class="vitals">
         <div>
@@ -18,18 +19,39 @@
         </div>
         <div>
           <dt>Habitus</dt>
-          <dd>{{ p.habitusUnlocked ? 'On' : '—' }}</dd>
+          <dd>On</dd>
         </div>
+        <div>
+          <dt>Consuetudo</dt>
+          <dd>{{ p.consuetudoUnlocked ? 'On' : '—' }}</dd>
+        </div>
+        <a routerLink="/wealth" class="wealth-vital">
+          <dt>Wealth</dt>
+          <dd>{{ wealthLabel() }}</dd>
+        </a>
       </dl>
       <nav class="quick" aria-label="Shortcuts">
         <a routerLink="/quests">Quests</a>
-        @if (p.habitusUnlocked) {
-          <a routerLink="/habitus">Habitus</a>
+        <a routerLink="/habitus">Habitus</a>
+        @if (p.consuetudoUnlocked) {
+          <a routerLink="/consuetudo">Consuetudo</a>
         }
+        <a routerLink="/settings">Settings</a>
+        <a routerLink="/wealth">Wealth</a>
       </nav>
     </header>
 
     <div class="skills-board" aria-label="Skills">
+      <header class="skills-head">
+        <h2>Skills</h2>
+        <app-ui-icon-btn
+          icon="wrench"
+          label="Default tasks"
+          href="/dailies/defaults"
+          [queryParams]="{ from: 'character' }"
+        />
+      </header>
+      <app-quick-task-panel (logged)="onQuickLogged()" />
       @for (group of skillGroups(); track group.category) {
         <section class="skill-group">
           <h2>{{ group.category }}</h2>

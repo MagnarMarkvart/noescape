@@ -96,6 +96,7 @@ export interface LogActivityResponse {
   previousXp: number;
   previousProgress: SkillProgress;
   newUnlocks?: Reward[];
+  newlyMetQuestReqs?: Array<{ questName: string; label: string }>;
 }
 
 export interface XpReversalResponse {

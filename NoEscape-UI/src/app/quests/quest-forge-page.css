@@ -1,76 +1,41 @@
 :host {
-  --rs-bg: #2b2518;
   --rs-border: #8a7340;
   --rs-border-bright: #c6a85a;
   --rs-text: #f0e6c8;
   --rs-muted: #b8a878;
   --rs-accent: #d4a84b;
   --font-display: 'Cinzel', 'Palatino Linotype', Palatino, serif;
-  --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-
   display: block;
-  min-height: 100dvh;
-  color: var(--rs-text);
-  font-family: var(--font-body);
-  background:
-    radial-gradient(ellipse at 30% 0%, rgba(212, 168, 75, 0.14), transparent 50%),
-    linear-gradient(180deg, #1c1810 0%, var(--rs-bg) 50%, #221c12 100%);
-}
-
-.forge-shell {
-  max-width: 36rem;
-  padding: 0.85rem 1rem 2rem;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.25rem;
-}
-
-.kicker {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--rs-muted);
-}
-
-.toolbar h1 {
-  margin: 0.2rem 0 0;
-  font-family: var(--font-display);
-  font-size: clamp(1.6rem, 3vw, 2.2rem);
-  color: var(--rs-accent);
-}
-
-.lede {
-  margin: 0.45rem 0 0;
-  color: var(--rs-muted);
-  font-size: 0.95rem;
-}
-
-.back {
-  color: var(--rs-muted);
-  text-decoration: none;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  align-self: start;
-}
-
-.toast {
-  padding: 0.65rem 0.85rem;
-  margin-bottom: 0.85rem;
-  border: 1px solid var(--rs-border-bright);
-  background: rgba(47, 143, 58, 0.16);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .forge-form {
   display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
+  gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.forge-form fieldset {
+  margin: 0;
+  padding: 0.9rem 1rem 1.05rem;
   border: 1px solid var(--rs-border);
-  background: rgba(30, 24, 14, 0.72);
+  background: rgba(22, 18, 10, 0.42);
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+}
+
+.forge-form legend {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--rs-accent);
+  padding: 0 0.4rem;
 }
 
 .forge-form label {
@@ -81,7 +46,12 @@
 }
 
 .forge-form input,
-.forge-form textarea {
+.forge-form textarea,
+.forge-form select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--rs-border);
   background: #1a1610;
@@ -89,12 +59,138 @@
   font: inherit;
 }
 
+.hint,
+.sublegend {
+  margin: 0;
+  color: var(--rs-muted);
+  font-size: 0.82rem;
+}
+
+.sublegend {
+  margin-top: 0.25rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cover-row {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.cover-preview {
+  width: 7rem;
+  height: 4.5rem;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--rs-border);
+}
+
+.inline-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: end;
+}
+
+.inline-add app-date-field,
+.subtask-list app-date-field {
+  min-width: 8.5rem;
+  flex: 0 0 auto;
+}
+
+.minutes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--rs-muted);
+  flex: 0 0 auto;
+}
+
+.ghost-btn {
+  font-family: var(--font-display);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-muted);
+  cursor: pointer;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip-row .chip {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--rs-border);
+  background: transparent;
+  color: var(--rs-muted);
+  cursor: pointer;
+}
+
+.chip-row .chip.selected {
+  border-color: var(--rs-border-bright);
+  color: var(--rs-accent);
+}
+
+.chip-list,
+.check-list,
+.subtask-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.chip-list li,
+.subtask-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  align-items: start;
+  padding: 0.45rem 0.5rem 0.55rem;
+  border: 1px solid rgba(138, 115, 64, 0.45);
+  color: var(--rs-text);
+}
+
+.drag-body {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.chip-list button {
+  border: 0;
+  background: transparent;
+  color: var(--rs-muted);
+  cursor: pointer;
+}
+
+.check-list app-rune-check {
+  color: var(--rs-text);
+}
+
+.commit-label {
+  color: var(--rs-accent);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+
+.commit-label.warn {
+  color: #d4a070;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
-  margin-top: 0.35rem;
 }
 
 .primary {

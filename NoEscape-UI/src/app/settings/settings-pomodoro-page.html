@@ -1,0 +1,100 @@
+@if (toast()) {
+  <p class="toast" role="status">{{ toast() }}</p>
+}
+
+<fieldset class="option-group">
+  <legend>Between phases</legend>
+  <app-rune-check
+    label="Auto-continue — rest and the next lap start on their own"
+    [checked]="autoContinue()"
+    [disabled]="savingContinue()"
+    (checkedChange)="setAutoContinue(true, $event)"
+  />
+  <app-rune-check
+    label="Wait for a click — start rest and the next lap yourself"
+    [checked]="!autoContinue()"
+    [disabled]="savingContinue()"
+    (checkedChange)="setAutoContinue(false, $event)"
+  />
+  <p class="hint">
+    After the last block the session still completes on its own. Changing this
+    mid-session applies when the current phase ends.
+  </p>
+</fieldset>
+
+<p class="lede">
+  Sessio splits used on Horologium. Add your own, or edit and delete the
+  built-in ones.
+</p>
+
+<ul class="preset-list">
+  @for (row of rows(); track row.id) {
+    <li [class.editing]="editingId() === row.id">
+      <button type="button" class="pick" (click)="edit(row)">
+        <strong>{{ row.label }}</strong>
+        <small>
+          {{ row.workMinutes }} / {{ row.restMinutes }} · {{ row.iterations }}
+          @if (row.restAfterLast) {
+            · rest after last
+          }
+        </small>
+      </button>
+      <button type="button" class="danger" (click)="remove(row)">Delete</button>
+    </li>
+  } @empty {
+    <li class="empty">No presets yet.</li>
+  }
+</ul>
+
+<form class="editor" (submit)="$event.preventDefault(); save()">
+  <h2>{{ editingId() == null ? 'New preset' : 'Edit preset' }}</h2>
+  <label>
+    Name
+    <input type="text" [formField]="editor.label" />
+  </label>
+  <div class="row">
+    <label>
+      Work (min)
+      <app-number-field
+        ariaLabel="Work minutes"
+        [min]="1"
+        [max]="180"
+        [value]="model().workMinutes"
+        (valueChange)="setWorkMinutes($event)"
+      />
+    </label>
+    <label>
+      Rest (min)
+      <app-number-field
+        ariaLabel="Rest minutes"
+        [min]="0"
+        [max]="60"
+        [value]="model().restMinutes"
+        (valueChange)="setRestMinutes($event)"
+      />
+    </label>
+    <label>
+      Iterations
+      <app-number-field
+        ariaLabel="Iterations"
+        [min]="2"
+        [max]="12"
+        [value]="model().iterations"
+        (valueChange)="setIterations($event)"
+      />
+    </label>
+  </div>
+  <app-rune-check
+    label="Rest after the last work block"
+    [checked]="model().restAfterLast"
+    (checkedChange)="setRestAfterLast($event)"
+  />
+  <div class="actions">
+    <button type="submit" [disabled]="saving() || editor().invalid()">
+      {{ saving() ? '…' : editingId() == null ? 'Add preset' : 'Save changes' }}
+    </button>
+    @if (editingId() != null) {
+      <button type="button" class="ghost" (click)="startCreate()">Cancel</button>
+    }
+  </div>
+</form>

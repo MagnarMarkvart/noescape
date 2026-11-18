@@ -1,0 +1,57 @@
+@if (toast()) {
+  <p class="toast" role="status">{{ toast() }}</p>
+}
+
+@if (loading()) {
+  <p class="state">Loading…</p>
+} @else {
+  <form class="settings-form" (submit)="$event.preventDefault(); save()">
+    <label>
+      Timezone
+      <select [value]="timezone()" (change)="setTimezone($event)">
+        @for (z of zones(); track z) {
+          <option [value]="z">{{ z }}</option>
+        }
+      </select>
+    </label>
+    <p class="hint">
+      Wall-clock for logs, dailies, Consuetudo, Horologium, and Tabularium.
+    </p>
+
+    <label>
+      Start of day
+      <select [value]="dayStartHour()" (change)="setDayStartHour($event)">
+        @for (hour of dayHours; track hour) {
+          <option [value]="hour">{{ hourLabel(hour) }}</option>
+        }
+      </select>
+    </label>
+    <p class="hint">{{ exampleHint() }}</p>
+
+    <fieldset class="option-group">
+      <legend>Time format</legend>
+      @for (fmt of timeFormats; track fmt.id) {
+        <app-rune-check
+          [label]="fmt.label + ' · ' + fmt.example"
+          [checked]="timeFormat() === fmt.id"
+          (checkedChange)="setTimeFormat(fmt.id, $event)"
+        />
+      }
+    </fieldset>
+
+    <fieldset class="option-group">
+      <legend>Date format</legend>
+      @for (fmt of dateFormats; track fmt.id) {
+        <app-rune-check
+          [label]="fmt.label + ' · ' + fmt.example"
+          [checked]="dateFormat() === fmt.id"
+          (checkedChange)="setDateFormat(fmt.id, $event)"
+        />
+      }
+    </fieldset>
+
+    <button type="submit" class="save" [disabled]="saving()">
+      {{ saving() ? 'Saving…' : 'Save' }}
+    </button>
+  </form>
+}

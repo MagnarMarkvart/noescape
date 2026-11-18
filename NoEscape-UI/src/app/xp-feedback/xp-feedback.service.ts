@@ -1,22 +1,31 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { SkillsService } from '../skills/skills.service';
+import { SoundSettingsService } from '../shared/sound-settings.service';
 import {
   LEVEL_DOWN_MS,
+  LEVEL_UP_GRANT_MS,
   LEVEL_UP_JINGLE,
   LEVEL_UP_MS,
   mockFocusSkill,
   NOPE_JINGLE,
+  QUEST_CEREMONY_MS,
+  QuestCeremony,
   XP_DROP_MS,
   XP_GAIN_SFX,
   XP_LOSS_SFX,
   XpFeedbackEvent,
   XpFeedbackPhase,
 } from './xp-feedback.model';
-import { Skill } from '../skills/skill.model';
+import { Reward, Skill } from '../skills/skill.model';
 
 @Injectable({ providedIn: 'root' })
 export class XpFeedbackService {
+  private readonly skills = inject(SkillsService);
+  private readonly sound = inject(SoundSettingsService);
   private readonly queue: XpFeedbackEvent[] = [];
+  private readonly questQueue: QuestCeremony[] = [];
   private busy = false;
+  private generation = 0;
   private timers: ReturnType<typeof setTimeout>[] = [];
   private levelUpAudio: HTMLAudioElement | null = null;
   private nopeAudio: HTMLAudioElement | null = null;
@@ -30,12 +39,18 @@ export class XpFeedbackService {
   readonly dropActive = signal(false);
   readonly levelUpActive = signal(false);
   readonly levelDownActive = signal(false);
+  readonly questActive = signal(false);
+  readonly currentQuest = signal<QuestCeremony | null>(null);
 
   publish(event: XpFeedbackEvent): void {
     if (!event.xpAmount || event.xpAmount <= 0) {
       return;
     }
-    this.queue.push(event);
+    this.queue.push({
+      ...event,
+      unlocks: event.unlocks ?? [],
+      questReqs: event.questReqs ?? [],
+    });
     void this.pump();
   }
 
@@ -47,6 +62,8 @@ export class XpFeedbackService {
     levelsGained: number;
     previousLevel?: number;
     previousProgress?: Skill['progress'];
+    newUnlocks?: Reward[];
+    newlyMetQuestReqs?: Array<{ questName: string; label: string }>;
   }): void {
     const previousLevel =
       award.previousLevel ?? award.skill.level - (award.levelsGained || 0);
@@ -66,7 +83,29 @@ export class XpFeedbackService {
       levelsChanged: award.levelsGained,
       previousLevel,
       previousProgress,
+      unlocks: (award.newUnlocks ?? []).map((u) => ({
+        icon: u.icon || '🔓',
+        label: u.label,
+        type: u.type,
+      })),
+      questReqs: award.newlyMetQuestReqs ?? [],
     });
+    if (award.leveledUp) {
+      this.skills.noteLevelUp();
+    }
+  }
+
+  publishQuest(ceremony: QuestCeremony): void {
+    const name = ceremony.name.trim();
+    if (!name) {
+      return;
+    }
+    this.questQueue.push({
+      kind: ceremony.kind,
+      name,
+      subtitle: ceremony.subtitle?.trim() || undefined,
+    });
+    void this.pump();
   }
 
   /** Convenience for reverse/uncomplete payloads. */
@@ -145,6 +184,37 @@ export class XpFeedbackService {
     });
   }
 
+  mockLevelUpUnlock(): void {
+    const after = mockFocusSkill({
+      level: 13,
+      progress: { currentLevelXp: 0, nextLevelXp: 0, intoLevel: 0, needed: 1, percent: 8 },
+    });
+    this.publish({
+      direction: 'gain',
+      xpAmount: 120,
+      skill: after,
+      leveledUp: true,
+      leveledDown: false,
+      levelsChanged: 1,
+      previousLevel: 12,
+      previousProgress: {
+        currentLevelXp: 0,
+        nextLevelXp: 0,
+        intoLevel: 0,
+        needed: 1,
+        percent: 88,
+      },
+      unlocks: [
+        { icon: '🪙', label: 'Focus Token', type: 'FEATURE' },
+        { icon: '📜', label: 'Scriptorium folio slot', type: 'FEATURE' },
+      ],
+      questReqs: [
+        { questName: 'Night Watch', label: 'Focus Lv 13' },
+        { questName: 'Custodia Mentis', label: 'Focus Lv 13' },
+      ],
+    });
+  }
+
   mockXpLoss(): void {
     const after = mockFocusSkill({
       level: 12,
@@ -191,14 +261,84 @@ export class XpFeedbackService {
     });
   }
 
+  mockQuestStarted(): void {
+    this.publishQuest({
+      kind: 'started',
+      name: 'Night Watch',
+      subtitle: 'The path is open',
+    });
+  }
+
+  mockQuestCompleted(): void {
+    this.publishQuest({
+      kind: 'completed',
+      name: 'Custodia Mentis',
+      subtitle: 'Destination reached',
+    });
+  }
+
+  /** Drop the queue and hide every XP/level overlay. Jingles keep playing. */
+  dismissQueuedVisuals(): void {
+    if (!this.current() && !this.currentQuest() && this.queue.length === 0 && this.questQueue.length === 0) {
+      return;
+    }
+    this.generation += 1;
+    this.queue.length = 0;
+    this.questQueue.length = 0;
+    this.resetStage();
+  }
+
+  /** Close the current level-up / level-down / quest overlay and continue the queue. */
+  skipLevelStage(): void {
+    if (!this.levelUpActive() && !this.levelDownActive() && !this.questActive()) {
+      return;
+    }
+    this.generation += 1;
+    this.resetStage();
+    void this.pump();
+  }
+
+  private resetStage(): void {
+    this.dropActive.set(false);
+    this.levelUpActive.set(false);
+    this.levelDownActive.set(false);
+    this.questActive.set(false);
+    this.phase.set('idle');
+    this.current.set(null);
+    this.currentQuest.set(null);
+    this.busy = false;
+  }
+
   private async pump(): Promise<void> {
     if (this.busy) {
+      return;
+    }
+    const ceremony = this.questQueue.shift();
+    if (ceremony) {
+      const gen = this.generation;
+      this.busy = true;
+      this.currentQuest.set(ceremony);
+      this.questActive.set(true);
+      this.phase.set('quest');
+      this.playSfx(ceremony.kind === 'started' ? 'gain' : 'levelup');
+      if (!(await this.wait(QUEST_CEREMONY_MS, gen))) {
+        return;
+      }
+      if (gen !== this.generation) {
+        return;
+      }
+      this.questActive.set(false);
+      this.currentQuest.set(null);
+      this.phase.set('idle');
+      this.busy = false;
+      void this.pump();
       return;
     }
     const next = this.queue.shift();
     if (!next) {
       return;
     }
+    const gen = this.generation;
     this.busy = true;
     this.current.set(next);
     this.orbPercent.set(next.previousProgress.percent);
@@ -206,32 +346,45 @@ export class XpFeedbackService {
     this.dropActive.set(true);
     this.playSfx(next.direction === 'gain' ? 'gain' : 'loss');
 
-    await this.wait(80);
+    if (!(await this.wait(80, gen))) {
+      return;
+    }
     if (next.direction === 'gain') {
       this.orbPercent.set(next.leveledUp ? 100 : next.skill.progress.percent);
     } else {
       this.orbPercent.set(next.leveledDown ? 0 : next.skill.progress.percent);
     }
 
-    await this.wait(XP_DROP_MS);
+    if (!(await this.wait(XP_DROP_MS, gen))) {
+      return;
+    }
     this.dropActive.set(false);
 
     if (next.direction === 'gain' && next.leveledUp) {
       this.phase.set('levelup');
       this.levelUpActive.set(true);
       this.playSfx('levelup');
-      await this.wait(LEVEL_UP_MS);
+      const grants =
+        (next.unlocks?.length ?? 0) + (next.questReqs?.length ?? 0);
+      if (!(await this.wait(grants > 0 ? LEVEL_UP_GRANT_MS : LEVEL_UP_MS, gen))) {
+        return;
+      }
       this.levelUpActive.set(false);
       this.orbPercent.set(next.skill.progress.percent);
     } else if (next.direction === 'loss' && next.leveledDown) {
       this.phase.set('leveldown');
       this.levelDownActive.set(true);
       this.playSfx('leveldown');
-      await this.wait(LEVEL_DOWN_MS);
+      if (!(await this.wait(LEVEL_DOWN_MS, gen))) {
+        return;
+      }
       this.levelDownActive.set(false);
       this.orbPercent.set(next.skill.progress.percent);
     }
 
+    if (gen !== this.generation) {
+      return;
+    }
     this.phase.set('idle');
     this.current.set(null);
     this.busy = false;
@@ -239,7 +392,8 @@ export class XpFeedbackService {
   }
 
   private playSfx(kind: 'gain' | 'loss' | 'levelup' | 'leveldown'): void {
-    if (typeof Audio === 'undefined') {
+    const gain = this.sound.playbackGain();
+    if (gain == null || typeof Audio === 'undefined') {
       return;
     }
     let audio: HTMLAudioElement;
@@ -258,6 +412,7 @@ export class XpFeedbackService {
         break;
     }
     try {
+      audio.volume = gain;
       audio.currentTime = 0;
       void audio.play();
     } catch {
@@ -265,11 +420,11 @@ export class XpFeedbackService {
     }
   }
 
-  private wait(ms: number): Promise<void> {
+  private wait(ms: number, gen: number): Promise<boolean> {
     return new Promise((resolve) => {
       const id = setTimeout(() => {
         this.timers = this.timers.filter((t) => t !== id);
-        resolve();
+        resolve(gen === this.generation);
       }, ms);
       this.timers.push(id);
     });
