@@ -116,6 +116,7 @@ export class DailiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly skillsService: SkillsService,
+    @Inject(forwardRef(() => HabitsService))
     private readonly habitsService: HabitsService,
     private readonly characterService: CharacterService,
     private readonly time: TimeService,

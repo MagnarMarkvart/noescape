@@ -1,0 +1,55 @@
+name: NoEscape Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    env:
+      NODE_VERSION: 22
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            no-escape-back/package-lock.json
+            NoEscape-UI/package-lock.json
+
+      - name: Backend — install deps
+        run: |
+          cd no-escape-back
+          npm ci
+
+      - name: Backend — Prisma migrate & generate
+        run: |
+          cd no-escape-back
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Backend — build
+        run: |
+          cd no-escape-back
+          npm run build
+
+      - name: Frontend — install deps
+        run: |
+          cd NoEscape-UI
+          npm ci
+
+      - name: Frontend — build (production)
+        run: |
+          cd NoEscape-UI
+          npx ng build --configuration production
+
+      - name: Restart PM2
+        run: pm2 restart noescape
