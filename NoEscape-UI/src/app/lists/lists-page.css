@@ -1,3 +1,9 @@
+:host *,
+:host *::before,
+:host *::after {
+  box-sizing: border-box;
+}
+
 :host {
   --ls-bg: #2b2518;
   --ls-panel: #3a3120;
@@ -240,26 +246,8 @@ h1 {
   opacity: 0.6;
 }
 
-.item-check {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  cursor: pointer;
-  font-size: 0.9rem;
-  width: 100%;
-}
 
-.item-check input[type='checkbox'] {
-  width: 1.1rem;
-  height: 1.1rem;
-  cursor: pointer;
-  accent-color: var(--ls-accent);
-}
 
-.preview-item.done .item-check span {
-  text-decoration: line-through;
-  color: var(--ls-muted);
-}
 
 .btn-open {
   width: 100%;
@@ -293,4 +281,10 @@ h1 {
   .lists-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.item-check {
+  display: block;
+  width: 100%;
+  min-width: 0;
 }

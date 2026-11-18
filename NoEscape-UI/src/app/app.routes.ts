@@ -260,18 +260,18 @@ export const routes: Routes = [
     path: 'lists/new',
     loadComponent: () =>
       import('./lists/list-detail-page').then((m) => m.ListDetailPage),
-    title: 'New List — No Escape',
+    title: 'New List — Inventarium — No Escape',
   },
   {
     path: 'lists/:id',
     loadComponent: () =>
       import('./lists/list-detail-page').then((m) => m.ListDetailPage),
-    title: 'List — No Escape',
+    title: 'Inventarium — No Escape',
   },
   {
     path: 'lists',
     loadComponent: () => import('./lists/lists-page').then((m) => m.ListsPage),
-    title: 'Lists — No Escape',
+    title: 'Inventarium — No Escape',
   },
   {
     path: 'level-ups',

@@ -30,6 +30,7 @@ describe('ListsService', () => {
               create: jest.fn(),
               update: jest.fn(),
               delete: jest.fn(),
+              deleteMany: jest.fn(),
             },
             listItemMemory: {
               findUnique: jest.fn(),
@@ -38,6 +39,7 @@ describe('ListsService', () => {
               create: jest.fn(),
               update: jest.fn(),
               delete: jest.fn(),
+              deleteMany: jest.fn(),
             },
             $transaction: jest.fn((fn) => Promise.resolve(fn)),
           },
@@ -350,7 +352,7 @@ describe('ListsService', () => {
           {
             id: 2,
             title: 'Milk',
-            done: false,
+            done: true,
             sortOrder: 0,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -721,6 +723,113 @@ describe('ListsService', () => {
       jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(null);
 
       await expect(service.remove(999)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('unified history deletion', () => {
+    const baseList = (
+      items: Array<{ id: number; title: string; done: boolean }>,
+    ) => ({
+      id: 1,
+      name: 'Shopping',
+      icon: null,
+      isMain: false,
+      suggestionsEnabled: true,
+      sortOrder: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      items: items.map((item, i) => ({
+        ...item,
+        sortOrder: i,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
+      itemMemory: [],
+    });
+
+    it('removeItem also deletes the memory entry and done duplicates', async () => {
+      const list = baseList([
+        { id: 10, title: 'Milk', done: true },
+        { id: 11, title: ' milk', done: true },
+        { id: 12, title: 'MILK', done: false },
+        { id: 13, title: 'Bread', done: true },
+      ]);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(list as any);
+      jest
+        .spyOn(prisma.listItem, 'findFirst')
+        .mockResolvedValue({
+          id: 10,
+          listId: 1,
+          title: 'Milk',
+          done: true,
+        } as any);
+
+      await service.removeItem(1, 10);
+
+      expect(prisma.listItem.delete).toHaveBeenCalledWith({
+        where: { id: 10 },
+      });
+      expect(prisma.listItem.deleteMany).toHaveBeenCalledWith({
+        where: { listId: 1, id: { in: [11] } },
+      });
+      expect(prisma.listItemMemory.deleteMany).toHaveBeenCalledWith({
+        where: { listId: 1, titleNormalized: 'milk' },
+      });
+    });
+
+    it('removeItem without done duplicates only deletes the item and memory', async () => {
+      const list = baseList([{ id: 10, title: 'Eggs', done: false }]);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(list as any);
+      jest
+        .spyOn(prisma.listItem, 'findFirst')
+        .mockResolvedValue({
+          id: 10,
+          listId: 1,
+          title: 'Eggs',
+          done: false,
+        } as any);
+
+      await service.removeItem(1, 10);
+
+      expect(prisma.listItem.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.listItemMemory.deleteMany).toHaveBeenCalledWith({
+        where: { listId: 1, titleNormalized: 'eggs' },
+      });
+    });
+
+    it('removeMemory also deletes done items with that title but keeps active ones', async () => {
+      const list = baseList([
+        { id: 10, title: 'Milk', done: true },
+        { id: 11, title: 'milk ', done: true },
+        { id: 12, title: 'Milk', done: false },
+        { id: 13, title: 'Bread', done: true },
+      ]);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(list as any);
+      jest.spyOn(prisma.listItemMemory, 'findFirst').mockResolvedValue({
+        id: 5,
+        listId: 1,
+        title: 'Milk',
+        titleNormalized: 'milk',
+      } as any);
+
+      await service.removeMemory(1, 5);
+
+      expect(prisma.listItemMemory.delete).toHaveBeenCalledWith({
+        where: { id: 5 },
+      });
+      expect(prisma.listItem.deleteMany).toHaveBeenCalledWith({
+        where: { listId: 1, id: { in: [10, 11] } },
+      });
+    });
+
+    it('removeMemory throws NotFound for an unknown entry', async () => {
+      jest
+        .spyOn(prisma.list, 'findUnique')
+        .mockResolvedValue(baseList([]) as any);
+      jest.spyOn(prisma.listItemMemory, 'findFirst').mockResolvedValue(null);
+      await expect(service.removeMemory(1, 99)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

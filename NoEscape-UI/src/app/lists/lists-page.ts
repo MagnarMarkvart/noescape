@@ -7,12 +7,13 @@ import {
   signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { RuneCheck } from '../shared/rune-check';
 import { DEFAULT_LIST_ICON, ListDetailView, ListView } from './lists.model';
 import { ListsService } from './lists.service';
 
 @Component({
   selector: 'app-lists-page',
-  imports: [RouterLink],
+  imports: [RouterLink, RuneCheck],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './lists-page.html',
   styleUrl: './lists-page.css',
@@ -86,8 +87,7 @@ export class ListsPage implements OnInit {
     void this.router.navigate(['/lists', listId]);
   }
 
-  protected toggleItemDone(listId: number, itemId: number, done: boolean, event: Event): void {
-    event.stopPropagation();
+  protected toggleItemDone(listId: number, itemId: number, done: boolean, _checked?: boolean): void {
 
     const currentDetail = this.expandedListDetail();
     if (!currentDetail) {

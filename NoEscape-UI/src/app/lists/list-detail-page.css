@@ -1,3 +1,9 @@
+:host *,
+:host *::before,
+:host *::after {
+  box-sizing: border-box;
+}
+
 :host {
   --ld-bg: #2b2518;
   --ld-panel: #3a3120;
@@ -92,8 +98,8 @@ h1 {
 }
 
 .input-name {
-  flex: 1;
-  min-width: 200px;
+  flex: 1 1 12rem;
+  min-width: 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--ld-border);
   border-radius: 2px;
@@ -103,20 +109,9 @@ h1 {
 }
 
 .toggle-main {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  color: var(--ld-muted);
-  cursor: pointer;
+  flex: 0 0 auto;
 }
 
-.toggle-main input[type='checkbox'] {
-  width: 1rem;
-  height: 1rem;
-  cursor: pointer;
-  accent-color: var(--ld-accent);
-}
 
 .btn-save,
 .btn-add {
@@ -293,20 +288,7 @@ h2 {
   color: var(--ld-muted);
 }
 
-.toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
 
-.toggle-label input[type='checkbox'] {
-  width: 1.1rem;
-  height: 1.1rem;
-  cursor: pointer;
-  accent-color: var(--ld-accent);
-}
 
 .empty-message {
   color: var(--ld-muted);
@@ -335,72 +317,24 @@ h2 {
   background: rgba(28, 24, 16, 0.6);
 }
 
-.item-row.done {
-  opacity: 0.7;
-}
 
-.item-row.done .item-title {
-  text-decoration: line-through;
-  color: var(--ld-muted);
-}
 
 .item-row.done .btn-danger {
   color: rgba(196, 92, 74, 0.5);
 }
 
-.item-row input[type='checkbox'] {
-  width: 1.1rem;
-  height: 1.1rem;
-  cursor: pointer;
-  accent-color: var(--ld-accent);
-}
 
 .item-title {
   flex: 1;
   font-size: 0.95rem;
 }
 
-.memory-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
 
-.memory-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.75rem;
-  background: rgba(28, 24, 16, 0.4);
-  border-radius: 2px;
-  transition: background 0.15s;
-}
 
-.memory-row:hover {
-  background: rgba(28, 24, 16, 0.6);
-}
 
-.memory-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
 
-.memory-title {
-  font-size: 0.95rem;
-}
 
-.memory-meta {
-  font-size: 0.75rem;
-  color: var(--ld-muted);
-}
 
-.memory-actions {
-  display: flex;
-  gap: 0.4rem;
-}
 
 .form-title {
   margin: 0 0 0.25rem;
@@ -421,13 +355,16 @@ h2 {
 
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
   gap: 0.4rem;
+  width: 100%;
   max-width: 34rem;
+  min-width: 0;
 }
 
 .icon-choice {
-  min-width: 44px;
+  min-width: 0;
+  padding: 0;
   min-height: 44px;
   font-size: 1.35rem;
   line-height: 1;
@@ -481,10 +418,31 @@ h2 {
     align-items: stretch;
   }
 
-  .input-name,
-  .btn-save,
-  .btn-cancel {
-    width: 100%;
+  .edit-row {
+    flex-wrap: nowrap;
+  }
+
+  .input-icon {
+    flex: 0 0 3.25rem;
+  }
+
+  .input-name {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .edit-actions .btn-save,
+  .edit-actions .btn-cancel {
+    flex: 1 1 calc(50% - 0.35rem);
+  }
+
+  .btn-delete-list {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .icon-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .input-row {
@@ -505,12 +463,55 @@ h2 {
     font-size: 1.4rem;
   }
 
-  .memory-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+}
 
-  .memory-actions {
-    align-self: flex-end;
-  }
+/* Rune checks (same component as Settings) inside item rows. */
+.item-check {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.item-row.done .item-check {
+  opacity: 0.85;
+}
+
+.section-hint {
+  margin: -0.4rem 0 0.85rem;
+  color: var(--ld-muted);
+  font-size: 0.8rem;
+}
+
+.history-row {
+  min-height: 2.75rem;
+}
+
+.history-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.5rem;
+  padding-left: 1.65rem;
+}
+
+.history-title {
+  color: var(--ld-muted);
+  overflow-wrap: anywhere;
+}
+
+.item-row.done .history-title {
+  text-decoration: line-through;
+  color: var(--ld-muted);
+}
+
+.history-meta {
+  margin-left: 0.4rem;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  color: var(--ld-accent);
 }

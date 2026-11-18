@@ -238,8 +238,13 @@ export class ListsService {
     return this.getOne(listId);
   }
 
+  /**
+   * Remove an item. History and memory are one concept: deleting an item also
+   * forgets it (its ListItemMemory row, matched by normalized title) and drops
+   * any other done rows with the same title, so it no longer shows in history.
+   */
   async removeItem(listId: number, itemId: number): Promise<ListDetailView> {
-    await this.load(listId);
+    const list = await this.load(listId);
     const existing = await this.prisma.listItem.findFirst({
       where: { id: itemId, listId },
     });
@@ -247,7 +252,25 @@ export class ListsService {
       throw new NotFoundException(`Item #${itemId} not found`);
     }
 
+    const titleNormalized = this.normalizeTitle(existing.title);
+    const doneDuplicateIds = list.items
+      .filter(
+        (item) =>
+          item.id !== itemId &&
+          item.done &&
+          this.normalizeTitle(item.title) === titleNormalized,
+      )
+      .map((item) => item.id);
+
     await this.prisma.listItem.delete({ where: { id: itemId } });
+    if (doneDuplicateIds.length) {
+      await this.prisma.listItem.deleteMany({
+        where: { listId, id: { in: doneDuplicateIds } },
+      });
+    }
+    await this.prisma.listItemMemory.deleteMany({
+      where: { listId, titleNormalized },
+    });
     return this.getOne(listId);
   }
 
@@ -301,11 +324,15 @@ export class ListsService {
     return ranked.filter((mem) => mem.title.toLowerCase().includes(q));
   }
 
+  /**
+   * Forget a memory entry. Also removes done items with the same normalized
+   * title, so history and memory stay in sync. Active items are kept.
+   */
   async removeMemory(
     listId: number,
     memoryId: number,
   ): Promise<ListDetailView> {
-    await this.load(listId);
+    const list = await this.load(listId);
     const existing = await this.prisma.listItemMemory.findFirst({
       where: { id: memoryId, listId },
     });
@@ -313,7 +340,20 @@ export class ListsService {
       throw new NotFoundException(`Memory #${memoryId} not found`);
     }
 
+    const titleNormalized = this.normalizeTitle(existing.title);
+    const doneIds = list.items
+      .filter(
+        (item) =>
+          item.done && this.normalizeTitle(item.title) === titleNormalized,
+      )
+      .map((item) => item.id);
+
     await this.prisma.listItemMemory.delete({ where: { id: memoryId } });
+    if (doneIds.length) {
+      await this.prisma.listItem.deleteMany({
+        where: { listId, id: { in: doneIds } },
+      });
+    }
     return this.getOne(listId);
   }
 

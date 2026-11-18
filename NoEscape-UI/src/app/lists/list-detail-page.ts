@@ -8,6 +8,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Title } from '@angular/platform-browser';
+import { RuneCheck } from '../shared/rune-check';
 import { UiConfirm } from '../shared/ui/ui-confirm';
 import {
   DEFAULT_LIST_ICON,
@@ -18,13 +20,24 @@ import {
 } from './lists.model';
 import { ListsService } from './lists.service';
 
+/** One row of the unified history: a done item and/or its memory entry. */
+export interface HistoryRow {
+  key: string;
+  title: string;
+  doneItem: ListItemView | null;
+  memory: ListItemMemoryView | null;
+  active: boolean;
+}
+
 type ItemConfirm =
   | { kind: 'delete-item'; item: ListItemView }
-  | { kind: 'delete-memory'; memory: ListItemMemoryView };
+  | { kind: 'delete-history'; row: HistoryRow };
+
+const norm = (title: string): string => title.trim().toLowerCase();
 
 @Component({
   selector: 'app-list-detail-page',
-  imports: [RouterLink, FormsModule, UiConfirm],
+  imports: [RouterLink, FormsModule, UiConfirm, RuneCheck],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './list-detail-page.html',
   styleUrl: './list-detail-page.css',
@@ -33,6 +46,7 @@ export class ListDetailPage implements OnInit {
   private readonly api = inject(ListsService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly title = inject(Title);
 
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
@@ -79,13 +93,53 @@ export class ListDetailPage implements OnInit {
       .slice(0, 5);
   });
 
-  protected readonly filteredMemory = computed(() => {
-    const query = this.memoryQuery().trim().toLowerCase();
-    const memories = this.list()?.memory ?? [];
-    if (!query) {
-      return memories;
+  /** Done items and memory entries merged by normalized title. */
+  protected readonly historyRows = computed<HistoryRow[]>(() => {
+    const list = this.list();
+    if (!list) {
+      return [];
     }
-    return memories.filter((mem) => mem.title.toLowerCase().includes(query));
+    const activeKeys = new Set(
+      list.items.filter((i) => !i.done).map((i) => norm(i.title)),
+    );
+    const rows = new Map<string, HistoryRow>();
+    for (const item of list.items.filter((i) => i.done)) {
+      const key = norm(item.title);
+      if (!rows.has(key)) {
+        rows.set(key, {
+          key,
+          title: item.title,
+          doneItem: item,
+          memory: null,
+          active: activeKeys.has(key),
+        });
+      }
+    }
+    for (const mem of list.memory) {
+      const key = norm(mem.title);
+      const row = rows.get(key);
+      if (row) {
+        row.memory = mem;
+      } else {
+        rows.set(key, {
+          key,
+          title: mem.title,
+          doneItem: null,
+          memory: mem,
+          active: activeKeys.has(key),
+        });
+      }
+    }
+    // Items that are back on the list live in Active; history shows the rest.
+    return [...rows.values()].filter((row) => row.doneItem || !row.active);
+  });
+
+  protected readonly filteredHistory = computed(() => {
+    const query = this.memoryQuery().trim().toLowerCase();
+    const rows = this.historyRows();
+    return query
+      ? rows.filter((row) => row.title.toLowerCase().includes(query))
+      : rows;
   });
 
   ngOnInit(): void {
@@ -117,6 +171,7 @@ export class ListDetailPage implements OnInit {
     this.api.getOne(id).subscribe({
       next: (data) => {
         this.list.set(data);
+        this.title.setTitle(`${data.name} — Inventarium — No Escape`);
         this.loading.set(false);
         this.error.set(null);
       },
@@ -283,8 +338,8 @@ export class ListDetailPage implements OnInit {
     this.confirm.set({ kind: 'delete-item', item });
   }
 
-  protected askDeleteMemory(memory: ListItemMemoryView): void {
-    this.confirm.set({ kind: 'delete-memory', memory });
+  protected askDeleteHistory(row: HistoryRow): void {
+    this.confirm.set({ kind: 'delete-history', row });
   }
 
   protected cancelConfirm(): void {
@@ -301,8 +356,13 @@ export class ListDetailPage implements OnInit {
     }
     if (pending.kind === 'delete-item') {
       this.deleteItem(pending.item);
-    } else if (pending.kind === 'delete-memory') {
-      this.deleteMemory(pending.memory);
+    } else if (pending.kind === 'delete-history') {
+      // The API removes the memory entry and done rows together either way.
+      if (pending.row.memory) {
+        this.deleteMemory(pending.row.memory);
+      } else if (pending.row.doneItem) {
+        this.deleteItem(pending.row.doneItem);
+      }
     }
   }
 
@@ -403,8 +463,8 @@ export class ListDetailPage implements OnInit {
     if (pending && pending.kind === 'delete-item') {
       return `Delete "${pending.item.title}"?`;
     }
-    if (pending && pending.kind === 'delete-memory') {
-      return `Delete "${pending.memory.title}"?`;
+    if (pending && pending.kind === 'delete-history') {
+      return `Delete "${pending.row.title}" from history?`;
     }
     return '';
   }
@@ -412,10 +472,10 @@ export class ListDetailPage implements OnInit {
   protected get confirmMessage(): string {
     const pending = this.confirm();
     if (pending && pending.kind === 'delete-item') {
-      return 'This item will be removed from the list';
+      return 'The item is removed and forgotten (it leaves history and suggestions).';
     }
-    if (pending && pending.kind === 'delete-memory') {
-      return 'This memory entry will be permanently deleted';
+    if (pending && pending.kind === 'delete-history') {
+      return 'Its done entries and memory are deleted, so it is no longer suggested.';
     }
     return '';
   }
