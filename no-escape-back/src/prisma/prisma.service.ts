@@ -1,14 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-
-/** One PM2 process. Two Postgres backends are enough and stay off a small Supabase compute. */
-function withConnectionLimit(url: string | undefined): string | undefined {
-  if (!url || /[?&]connection_limit=/.test(url)) {
-    return url;
-  }
-  const join = url.includes('?') ? '&' : '?';
-  return `${url}${join}connection_limit=2&pool_timeout=20`;
-}
+import { runtimeDatabaseUrl } from './runtime-database-url';
 
 @Injectable()
 export class PrismaService
@@ -16,7 +8,7 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   constructor() {
-    const url = withConnectionLimit(process.env.DATABASE_URL);
+    const url = runtimeDatabaseUrl(process.env.DATABASE_URL);
     super(url ? { datasources: { db: { url } } } : undefined);
   }
 

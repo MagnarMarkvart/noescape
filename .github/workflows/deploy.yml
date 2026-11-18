@@ -61,6 +61,41 @@ jobs:
           cd "$HOME/dev/noescape/no-escape-back"
           npm ci
           npx prisma generate
+          # Prisma loads .env itself. Override with a rewritten URL so db push
+          # uses session port 5432 even if the server file still says 6543.
+          # The file is deleted before the step ends and is never printed.
+          node <<'NODE'
+          const fs = require('fs');
+          const text = fs.readFileSync('.env', 'utf8');
+          function val(key) {
+            const line = text.split(/\r?\n/).find((l) => l.startsWith(key + '='));
+            if (!line) return '';
+            let v = line.slice(key.length + 1).trim();
+            if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+              v = v.slice(1, -1);
+            }
+            return v;
+          }
+          function fix(u) {
+            if (!u) return '';
+            let n = u.replace(/:6543(?=\/|\?|$)/, ':5432');
+            if (!/[?&]connection_limit=/.test(n)) {
+              n += (n.includes('?') ? '&' : '?') + 'connection_limit=2&pool_timeout=20';
+            }
+            return n;
+          }
+          function sh(v) {
+            return "'" + v.replace(/'/g, "'\\''") + "'";
+          }
+          const db = fix(val('DATABASE_URL'));
+          const direct = fix(val('DIRECT_URL') || val('DATABASE_URL'));
+          fs.writeFileSync('.pg-runtime.env', `DATABASE_URL=${sh(db)}\nDIRECT_URL=${sh(direct)}\n`, { mode: 0o600 });
+          NODE
+          set -a
+          # shellcheck disable=SC1091
+          . ./.pg-runtime.env
+          set +a
+          rm -f .pg-runtime.env
           npx prisma db push
           npm run build
 

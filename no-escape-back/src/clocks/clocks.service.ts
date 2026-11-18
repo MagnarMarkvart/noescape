@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
@@ -31,6 +33,7 @@ const FOCUS_KINDS: ClockKind[] = ['sessio', 'track', 'consuetudo'];
 
 @Injectable()
 export class ClocksService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ClocksService.name);
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
@@ -342,45 +345,65 @@ export class ClocksService implements OnModuleInit, OnModuleDestroy {
     if (kind === 'sessio' || kind === 'track') {
       const payload = this.sessioPayload(row);
       await this.syncLinkedWatch(payload, false);
-      if (payload.taskCompleted) {
-        extra = {
-          complete: await this.horologium.closeEarly({
-            workMinutes: payload.workMinutes,
-            restMinutes: payload.restMinutes,
-            iterations: payload.mode === 'adhoc' ? 1 : payload.iterations,
-            elapsedMinutes: this.elapsedMinutes(payload),
-            completedBlocks: payload.completedBlocks,
-            questRunId:
-              payload.boundDaily?.source === 'quest'
-                ? payload.boundDaily.runId
-                : undefined,
-            taskLabel:
-              payload.boundDaily?.journeyLabel?.trim() ||
-              payload.boundDaily?.name,
-            presetId: payload.presetId,
-            startedAt: payload.sessionStartedAt,
-            watchName: payload.watchName ?? undefined,
-          }),
-          toast: 'Sessio closed — task was already done, no penalty',
-        };
-      } else if (kind === 'sessio') {
-        const unfinished = Math.max(
-          0,
-          payload.iterations - payload.completedBlocks,
-        );
-        if (unfinished > 0) {
+      try {
+        if (payload.taskCompleted) {
           extra = {
-            complete: await this.horologium.abandonSession({
+            complete: await this.horologium.closeEarly({
               workMinutes: payload.workMinutes,
               restMinutes: payload.restMinutes,
-              iterations: payload.iterations,
+              iterations: payload.mode === 'adhoc' ? 1 : payload.iterations,
+              elapsedMinutes: this.elapsedMinutes(payload),
               completedBlocks: payload.completedBlocks,
+              questRunId:
+                payload.boundDaily?.source === 'quest'
+                  ? payload.boundDaily.runId
+                  : undefined,
+              taskLabel:
+                payload.boundDaily?.journeyLabel?.trim() ||
+                payload.boundDaily?.name,
               presetId: payload.presetId,
               startedAt: payload.sessionStartedAt,
               watchName: payload.watchName ?? undefined,
             }),
+            toast: 'Sessio closed — task was already done, no penalty',
           };
+        } else if (kind === 'sessio') {
+          const unfinished = Math.max(
+            0,
+            payload.iterations - payload.completedBlocks,
+          );
+          if (unfinished > 0) {
+            extra = {
+              complete: await this.horologium.abandonSession({
+                workMinutes: payload.workMinutes,
+                restMinutes: payload.restMinutes,
+                iterations: payload.iterations,
+                completedBlocks: payload.completedBlocks,
+                presetId: payload.presetId,
+                startedAt: payload.sessionStartedAt,
+                watchName: payload.watchName ?? undefined,
+              }),
+            };
+          }
         }
+      } catch (err) {
+        if (err instanceof HttpException) {
+          throw err;
+        }
+        this.logger.error(
+          `Stopping ${kind} failed before the clock could be cleared`,
+          err instanceof Error ? err.stack : String(err),
+        );
+        await this.prisma.liveClock
+          .delete({ where: { id: row.id } })
+          .catch(() => undefined);
+        const event: ClockEvent = {
+          snapshot: null,
+          kind,
+          toast: 'Sessio stopped. The Focus penalty was not saved.',
+        };
+        this.events.emit(this.owner(), event);
+        return event;
       }
     }
     await this.prisma.liveClock.delete({ where: { id: row.id } });

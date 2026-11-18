@@ -32,7 +32,15 @@ import { boostsWealth, parseRewardCents } from '../wealth/money.util';
 import { WorkIntervalsService } from '../work-intervals/work-intervals.service';
 import { QuestsService } from '../quests/quests.service';
 import { findActiveScriptoriumDailies } from '../scriptorium/scriptorium-lock.util';
-import { scoreDailyTasks, toneFromGrade, type DayGrade, type DayScore } from './day-score.util';
+import {
+  DAY_TASK_GOAL,
+  DAY_TIME_GOAL_MINUTES,
+  gradeFromScore,
+  scoreDailyTasks,
+  toneFromGrade,
+  type DayGrade,
+  type DayScore,
+} from './day-score.util';
 import { CopyIncompleteDto } from './dto/copy-incomplete.dto';
 import { UpsertDailyTaskDto } from './dto/upsert-daily-task.dto';
 
@@ -191,6 +199,20 @@ export class DailiesService {
     const logs = await this.prisma.dailyLog.findMany({
       orderBy: { date: 'desc' },
       take: 60,
+      select: {
+        id: true,
+        date: true,
+        sealedAt: true,
+        filledCount: true,
+        completedCount: true,
+        earnedXp: true,
+        projectedXp: true,
+        score: true,
+        grade: true,
+        verdict: true,
+        assignedMinutes: true,
+        trackedCount: true,
+      },
     });
     return logs.map((log) => {
       const verdict = this.verdictFromLog(log);
@@ -388,7 +410,6 @@ export class DailiesService {
           verdict: true,
           assignedMinutes: true,
           trackedCount: true,
-          snapshotJson: true,
         },
       }),
       this.prisma.dailyTask.findMany({
@@ -1479,7 +1500,8 @@ export class DailiesService {
     if (!task) {
       throw new NotFoundException(`Daily task #${id} not found`);
     }
-    await this.assertMutableDay(task.date);
+    // A sealed day blocks plan edits. The running clock still has to flush
+    // time already spent, including when the day seals mid-session.
     const ms = Math.max(0, Math.round(Number(elapsedMs) || 0));
     const previousMs = Number(task.elapsedMs ?? 0);
     const delta = ms - previousMs;
@@ -1775,25 +1797,45 @@ export class DailiesService {
   }): DayScore {
     const live = log.snapshotJson
       ? this.scoreBoard(this.parseSnapshot(log.snapshotJson).board)
-      : scoreDailyTasks([]);
-    if (!log.verdict) {
-      return live;
-    }
+      : null;
     const grade: DayGrade =
       log.grade === 'peak' ||
       log.grade === 'strong' ||
       log.grade === 'average' ||
       log.grade === 'poor'
         ? log.grade
-        : live.grade;
+        : (live?.grade ?? gradeFromScore(Number(log.score) || 0));
+    if (!log.verdict && live) {
+      return live;
+    }
+    const stored: DayScore = {
+      score: Number(log.score) || 0,
+      grade,
+      tone: toneFromGrade(grade),
+      label: log.verdict ?? '',
+      summary: '',
+      filledCount: log.filledCount,
+      completedCount: log.completedCount,
+      leftoverCount: Math.max(0, log.filledCount - log.completedCount),
+      assignedMinutes: Number(log.assignedMinutes) || 0,
+      trackedCount: Number(log.trackedCount) || 0,
+      loadMet:
+        log.filledCount >= DAY_TASK_GOAL ||
+        (Number(log.assignedMinutes) || 0) >= DAY_TIME_GOAL_MINUTES,
+      allDone: log.filledCount > 0 && log.completedCount >= log.filledCount,
+    };
+    if (!log.verdict) {
+      return stored;
+    }
+    const base = live ?? stored;
     return {
-      ...live,
-      score: Number(log.score) || live.score,
+      ...base,
+      score: Number(log.score) || base.score,
       grade,
       tone: toneFromGrade(grade),
       label: log.verdict,
-      assignedMinutes: Number(log.assignedMinutes) || live.assignedMinutes,
-      trackedCount: Number(log.trackedCount) || live.trackedCount,
+      assignedMinutes: Number(log.assignedMinutes) || base.assignedMinutes,
+      trackedCount: Number(log.trackedCount) || base.trackedCount,
     };
   }
 

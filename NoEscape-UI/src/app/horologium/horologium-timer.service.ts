@@ -408,6 +408,12 @@ export class HorologiumTimerService {
     }
     this.clockApi.pause(kind).subscribe({
       next: (event) => this.applyEvent(event),
+      error: (err: { error?: { message?: string | string[] } }) => {
+        const message = err.error?.message;
+        this.setToast(
+          Array.isArray(message) ? message.join(', ') : (message ?? 'Could not pause'),
+        );
+      },
     });
   }
 
