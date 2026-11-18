@@ -23,24 +23,8 @@ UPDATE "ListItemMemory"
 SET "titleNormalized" = lower(btrim(title))
 WHERE "titleNormalized" IS NULL;
 
--- Step 3: Handle duplicates - keep the one with highest useCount, then latest lastUsedAt
--- Delete duplicates, keeping only the "best" row per (listId, titleNormalized)
-DELETE FROM "ListItemMemory" m1
-USING "ListItemMemory" m2
-WHERE m1.id < m2.id
-  AND m1."listId" = m2."listId"
-  AND m1."titleNormalized" = m2."titleNormalized";
-
--- For any remaining duplicates (same useCount and lastUsedAt), keep the one with lower id
-DELETE FROM "ListItemMemory" m1
-USING "ListItemMemory" m2
-WHERE m1.id > m2.id
-  AND m1."listId" = m2."listId"
-  AND m1."titleNormalized" = m2."titleNormalized"
-  AND m1."useCount" = m2."useCount"
-  AND m1."lastUsedAt" = m2."lastUsedAt";
-
--- Merge duplicates before deletion: update the "keeper" with max useCount and latest lastUsedAt
+-- Step 3: Handle duplicates - keep the one with highest useCount and latest lastUsedAt
+-- For each duplicate group, update the keeper (MIN id) with MAX values, then delete the rest
 DO $$
 DECLARE
     dup_record RECORD;
@@ -56,16 +40,21 @@ BEGIN
         GROUP BY "listId", "titleNormalized"
         HAVING COUNT(*) > 1
     LOOP
+        -- Update the keeper with the max values from all duplicates
         UPDATE "ListItemMemory"
         SET 
             "useCount" = dup_record.max_use_count,
             "lastUsedAt" = dup_record.max_last_used_at
         WHERE id = dup_record.keeper_id;
         
+        -- Delete all other rows in this duplicate group
         DELETE FROM "ListItemMemory"
         WHERE "listId" = dup_record."listId"
           AND "titleNormalized" = dup_record."titleNormalized"
           AND id != dup_record.keeper_id;
+          
+        RAISE NOTICE 'Merged duplicates for listId=%, titleNormalized=% (kept id=%)',
+            dup_record."listId", dup_record."titleNormalized", dup_record.keeper_id;
     END LOOP;
 END $$;
 
