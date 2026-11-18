@@ -33,9 +33,11 @@ import { findActiveScriptoriumDailies } from '../scriptorium/scriptorium-lock.ut
 import {
   DAY_TASK_GOAL,
   DAY_TIME_GOAL_MINUTES,
+  actualTimeSummary,
   gradeFromScore,
   scoreDailyTasks,
   toneFromGrade,
+  type ActualTimeSummary,
   type DayGrade,
   type DayScore,
 } from './day-score.util';
@@ -188,6 +190,7 @@ export class DailiesService {
         (board.tiers.find((t) => t.importance === 'REGULAR')?.capacity ?? 0) <
           DAILY_SLOT_MAXIMUMS.REGULAR,
       verdict: sealed ? this.verdictFromLog(sealed) : this.scoreBoard(board),
+      actualTime: this.actualTimeOfBoard(board),
     };
   }
 
@@ -208,6 +211,7 @@ export class DailiesService {
         verdict: true,
         assignedMinutes: true,
         trackedCount: true,
+        snapshotJson: true,
       },
     });
     return logs.map((log) => {
@@ -227,6 +231,9 @@ export class DailiesService {
         tone: verdict.tone,
         verdict: verdict.label,
         summary: verdict.summary,
+        actualTime: this.actualTimeOfBoard(
+          this.parseSnapshot(log.snapshotJson).board,
+        ),
       };
     });
   }
@@ -253,6 +260,9 @@ export class DailiesService {
       tone: verdict.tone,
       verdict: verdict.label,
       summary: verdict.summary,
+      actualTime: this.actualTimeOfBoard(
+        this.parseSnapshot(log.snapshotJson).board,
+      ),
       snapshot: this.parseSnapshot(log.snapshotJson),
     };
   }
@@ -1796,6 +1806,22 @@ export class DailiesService {
 
   private parseSnapshot(json: string): LogSnapshot {
     return JSON.parse(json) as LogSnapshot;
+  }
+
+  /** Planned vs actually spent time for the filled tasks of a board. */
+  private actualTimeOfBoard(
+    board: BoardSnapshot | null | undefined,
+  ): ActualTimeSummary {
+    const tasks = (board?.tiers ?? [])
+      .flatMap((tier) => tier.slots ?? [])
+      .filter((slot) => slot.isFilled);
+    return actualTimeSummary(
+      tasks.map((slot) => ({
+        completed: slot.completed,
+        durationMinutes: slot.durationMinutes,
+        elapsedMs: slot.elapsedMs,
+      })),
+    );
   }
 
   private scoreBoard(board: BoardSnapshot): DayScore {

@@ -22,6 +22,9 @@ export const ELAPSED_MINUTE_PRESETS = [15, 30, 45, 60, 90, 120];
       [presets]="presets"
       (minutesChange)="minutesChange.emit($event)"
     />
+    @if (plannedMinutes() != null) {
+      <p class="hint">Leave on None to count the planned {{ plannedLabel() }}.</p>
+    }
     <div class="actions">
       <button
         type="button"
@@ -47,6 +50,11 @@ export const ELAPSED_MINUTE_PRESETS = [15, 30, 45, 60, 90, 120];
       gap: 0.55rem;
       flex: 1 1 100%;
       min-width: 0;
+    }
+    .hint {
+      margin: 0;
+      font-size: 0.78rem;
+      color: #b8a878;
     }
     .actions {
       display: flex;
@@ -80,10 +88,18 @@ export const ELAPSED_MINUTE_PRESETS = [15, 30, 45, 60, 90, 120];
 })
 export class ElapsedComplete {
   readonly minutes = input<number | null>(null);
+  /** When set, explains that "None" falls back to the planned duration. */
+  readonly plannedMinutes = input<number | null>(null);
   readonly busy = input(false);
   readonly confirmLabel = input('Complete');
   readonly minutesChange = output<number | null>();
   readonly confirm = output<void>();
   readonly cancel = output<void>();
   protected readonly presets = ELAPSED_MINUTE_PRESETS;
+  protected plannedLabel(): string {
+    const n = Math.max(0, Math.round(Number(this.plannedMinutes()) || 0));
+    const h = Math.floor(n / 60);
+    const m = n % 60;
+    return h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`;
+  }
 }

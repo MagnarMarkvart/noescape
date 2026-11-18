@@ -1,4 +1,8 @@
-import { scoreDailyTasks } from './day-score.util';
+import {
+  actualTaskMinutes,
+  actualTimeSummary,
+  scoreDailyTasks,
+} from './day-score.util';
 
 function regular(completed: boolean, minutes: number) {
   return {
@@ -48,5 +52,62 @@ describe('scoreDailyTasks', () => {
     const result = scoreDailyTasks([]);
     expect(result.score).toBe(0);
     expect(result.grade).toBe('poor');
+  });
+});
+
+describe('actualTimeSummary', () => {
+  it('uses recorded time when present', () => {
+    expect(
+      actualTaskMinutes({
+        completed: true,
+        durationMinutes: 45,
+        elapsedMs: 30 * 60_000,
+      }),
+    ).toEqual({ minutes: 30, assumed: false });
+  });
+
+  it('assumes planned time for a completed task with no recorded time', () => {
+    expect(
+      actualTaskMinutes({ completed: true, durationMinutes: 45, elapsedMs: 0 }),
+    ).toEqual({ minutes: 45, assumed: true });
+  });
+
+  it('counts only recorded time for unfinished tasks', () => {
+    expect(
+      actualTaskMinutes({ completed: false, durationMinutes: 60 }),
+    ).toEqual({ minutes: 0, assumed: false });
+    expect(
+      actualTaskMinutes({
+        completed: false,
+        durationMinutes: 60,
+        elapsedMs: '1200000',
+      }),
+    ).toEqual({ minutes: 20, assumed: false });
+  });
+
+  it('totals planned vs actual vs the 6h goal', () => {
+    const summary = actualTimeSummary([
+      { completed: true, durationMinutes: 90, elapsedMs: 120 * 60_000 },
+      { completed: true, durationMinutes: 60 },
+      { completed: true, durationMinutes: 45, elapsedMs: 20 * 60_000 },
+      { completed: false, durationMinutes: 60 },
+    ]);
+    expect(summary).toEqual({
+      plannedMinutes: 255,
+      actualMinutes: 200,
+      goalMinutes: 360,
+      deltaGoalMinutes: -160,
+      deltaPlannedMinutes: -55,
+      recordedCount: 2,
+      assumedCount: 1,
+    });
+  });
+
+  it('reports overtime as a positive delta', () => {
+    const summary = actualTimeSummary([
+      { completed: true, durationMinutes: 240, elapsedMs: 405 * 60_000 },
+    ]);
+    expect(summary.deltaGoalMinutes).toBe(45);
+    expect(summary.deltaPlannedMinutes).toBe(165);
   });
 });

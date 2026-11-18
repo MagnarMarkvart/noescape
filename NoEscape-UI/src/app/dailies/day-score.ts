@@ -223,3 +223,91 @@ export function formatAssignedHours(minutes: number): string {
   const m = n % 60;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
+
+export interface ActualTimeTask {
+  completed: boolean;
+  durationMinutes: number;
+  elapsedMs?: number | null;
+}
+
+export interface ActualTimeSummary {
+  /** Sum of planned durations of all filled tasks. */
+  plannedMinutes: number;
+  /** Time actually spent: tracked time, else planned time for completed tasks. */
+  actualMinutes: number;
+  /** The daily time goal (6h). */
+  goalMinutes: number;
+  /** actualMinutes − goalMinutes (negative = short of the goal). */
+  deltaGoalMinutes: number;
+  /** actualMinutes − plannedMinutes. */
+  deltaPlannedMinutes: number;
+  /** Completed tasks with recorded time. */
+  recordedCount: number;
+  /** Completed tasks without recorded time, counted at their planned duration. */
+  assumedCount: number;
+}
+
+/**
+ * Minutes actually spent on one task. Recorded time (Horologium or the
+ * "Time spent" field on complete) wins. A completed task with no recorded
+ * time is assumed to have taken its planned duration. An unfinished task only
+ * counts time that was actually recorded.
+ */
+export function actualTaskMinutes(task: ActualTimeTask): {
+  minutes: number;
+  assumed: boolean;
+} {
+  const recorded = Math.max(0, Math.round(Number(task.elapsedMs ?? 0) / 60_000));
+  if (recorded > 0) {
+    return { minutes: recorded, assumed: false };
+  }
+  if (task.completed) {
+    return {
+      minutes: Math.max(0, Math.round(Number(task.durationMinutes) || 0)),
+      assumed: true,
+    };
+  }
+  return { minutes: 0, assumed: false };
+}
+
+export function actualTimeSummary(
+  tasks: ActualTimeTask[],
+  goalMinutes = DAY_TIME_GOAL_MINUTES,
+): ActualTimeSummary {
+  let plannedMinutes = 0;
+  let actualMinutes = 0;
+  let recordedCount = 0;
+  let assumedCount = 0;
+  for (const task of tasks) {
+    plannedMinutes += Math.max(0, Math.round(Number(task.durationMinutes) || 0));
+    const actual = actualTaskMinutes(task);
+    actualMinutes += actual.minutes;
+    if (task.completed) {
+      if (actual.assumed) {
+        assumedCount += 1;
+      } else {
+        recordedCount += 1;
+      }
+    }
+  }
+  return {
+    plannedMinutes,
+    actualMinutes,
+    goalMinutes,
+    deltaGoalMinutes: actualMinutes - goalMinutes,
+    deltaPlannedMinutes: actualMinutes - plannedMinutes,
+    recordedCount,
+    assumedCount,
+  };
+}
+
+/** "1h 40m short", "+45m over" or "on target". */
+export function formatTimeDelta(deltaMinutes: number, shortWord = 'short'): string {
+  const n = Math.round(Number(deltaMinutes) || 0);
+  if (n === 0) {
+    return 'on target';
+  }
+  return n < 0
+    ? `${formatAssignedHours(-n)} ${shortWord}`
+    : `+${formatAssignedHours(n)} over`;
+}
