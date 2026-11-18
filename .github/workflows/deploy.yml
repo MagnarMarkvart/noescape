@@ -97,7 +97,7 @@ jobs:
           set +a
           rm -f .pg-runtime.env
           npx prisma db push
-          npx prisma db execute --file scripts/repair-id-sequences.sql
+          npx prisma db execute --schema prisma/schema.prisma --file scripts/repair-id-sequences.sql
           npm run build
 
       - name: Frontend — install and build

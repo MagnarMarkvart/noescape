@@ -38,6 +38,9 @@ import { AppShellService } from './app-shell.service';
       [class.drawer]="drawerOpen()"
       aria-label="App"
     >
+      <a class="brand" routerLink="/status" aria-label="Dashboard" (click)="onBrandClick()">
+        <img src="centura-logo.svg" alt="" width="64" height="64" />
+      </a>
       <button
         type="button"
         class="toggle"
@@ -194,6 +197,24 @@ import { AppShellService } from './app-shell.service';
         box-shadow: 12px 0 36px rgba(0, 0, 0, 0.55);
         overscroll-behavior: contain;
       }
+    }
+
+    .brand {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 0.15rem;
+      text-decoration: none;
+    }
+
+    .brand img {
+      width: 4.75rem;
+      height: auto;
+      display: block;
+    }
+
+    .sidebar.collapsed .brand img {
+      width: 1.7rem;
     }
 
     .toggle {
@@ -366,6 +387,12 @@ export class AppSidebar implements OnInit {
         this.consuetudoUnlocked.set(false);
       },
     });
+  }
+
+  protected onBrandClick(): void {
+    if (this.shell.isCompact()) {
+      this.shell.collapse();
+    }
   }
 
   protected onEscape(): void {
