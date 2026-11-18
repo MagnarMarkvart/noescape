@@ -5,9 +5,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import {
-  CharacterService,
-} from '../character/character.service';
+import { CharacterService } from '../character/character.service';
 import { HabitsService } from '../habits/habits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SkillsService } from '../skills/skills.service';
@@ -140,14 +138,14 @@ export class DailiesService {
       await this.findOldestPendingSealBefore(requestedDate);
 
     // Landing on today still forces an unsealed prior day; picking a past date stays there.
-    const sealRequired = Boolean(
-      pendingSealDate && requestedDate === today,
-    );
+    const sealRequired = Boolean(pendingSealDate && requestedDate === today);
     const day =
       sealRequired && pendingSealDate ? pendingSealDate : requestedDate;
 
     const board = await this.buildBoard(day);
-    const sealed = await this.prisma.dailyLog.findUnique({ where: { date: day } });
+    const sealed = await this.prisma.dailyLog.findUnique({
+      where: { date: day },
+    });
     const lastLog = await this.prisma.dailyLog.findFirst({
       where: { date: { lt: day } },
       orderBy: { date: 'desc' },
@@ -189,9 +187,7 @@ export class DailiesService {
         isEditable &&
         (board.tiers.find((t) => t.importance === 'REGULAR')?.capacity ?? 0) <
           DAILY_SLOT_MAXIMUMS.REGULAR,
-      verdict: sealed
-        ? this.verdictFromLog(sealed)
-        : this.scoreBoard(board),
+      verdict: sealed ? this.verdictFromLog(sealed) : this.scoreBoard(board),
     };
   }
 
@@ -280,7 +276,7 @@ export class DailiesService {
     const targetDate = this.normalizeDate(dto.date);
     await this.assertMutableDay(targetDate);
 
-    let sourceLog = dto.sourceDate
+    const sourceLog = dto.sourceDate
       ? await this.prisma.dailyLog.findUnique({
           where: { date: this.normalizeDate(dto.sourceDate) },
         })
@@ -296,7 +292,9 @@ export class DailiesService {
     const snap = this.parseSnapshot(sourceLog.snapshotJson);
     const incomplete = this.collectIncomplete(snap);
     if (incomplete.length === 0) {
-      throw new BadRequestException('Last log has no incomplete dailies to copy');
+      throw new BadRequestException(
+        'Last log has no incomplete dailies to copy',
+      );
     }
 
     let copied = 0;
@@ -342,7 +340,9 @@ export class DailiesService {
           fixedXp: null,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
-          elapsedMs: BigInt(Math.max(0, Math.round(Number(task.elapsedMs) || 0))),
+          elapsedMs: BigInt(
+            Math.max(0, Math.round(Number(task.elapsedMs) || 0)),
+          ),
           completed: false,
           xpAwarded: null,
           completedAt: null,
@@ -364,7 +364,9 @@ export class DailiesService {
           fixedXp: null,
           effortLevel: task.effortLevel,
           durationMinutes: task.durationMinutes,
-          elapsedMs: BigInt(Math.max(0, Math.round(Number(task.elapsedMs) || 0))),
+          elapsedMs: BigInt(
+            Math.max(0, Math.round(Number(task.elapsedMs) || 0)),
+          ),
           completed: false,
           xpAwarded: null,
           completedAt: null,
@@ -663,7 +665,9 @@ export class DailiesService {
     if (!Number.isFinite(questId) || questId < 1) {
       throw new BadRequestException('questId is required');
     }
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) {
       throw new NotFoundException(`Quest #${questId} not found`);
     }
@@ -734,7 +738,7 @@ export class DailiesService {
         skillWeightsJson: JSON.stringify(plan.weights),
         effortLevel: 5,
         durationMinutes,
-        wealthCents: boostsWealth(plan.weights) ? quest.wealthCents ?? 0 : 0,
+        wealthCents: boostsWealth(plan.weights) ? (quest.wealthCents ?? 0) : 0,
         questId,
         questRunId: run.id,
         questSubtaskId: subtask?.id ?? null,
@@ -833,7 +837,9 @@ export class DailiesService {
     completed: boolean;
   }): Promise<void> {
     const day = this.normalizeDate(input.date);
-    const sealed = await this.prisma.dailyLog.findUnique({ where: { date: day } });
+    const sealed = await this.prisma.dailyLog.findUnique({
+      where: { date: day },
+    });
     if (sealed) {
       return;
     }
@@ -1002,8 +1008,7 @@ export class DailiesService {
 
     const plan = await this.resolveSkillPlan({
       skillId: input.skillId ?? row.skillId,
-      skillWeights:
-        input.skillWeights ?? this.parseJson(row.skillWeightsJson),
+      skillWeights: input.skillWeights ?? this.parseJson(row.skillWeightsJson),
     });
 
     const habitId =
@@ -1015,8 +1020,7 @@ export class DailiesService {
       where: { id },
       data: {
         name,
-        icon:
-          input.icon != null ? input.icon.trim() || '◆' : row.icon,
+        icon: input.icon != null ? input.icon.trim() || '◆' : row.icon,
         skillId: plan.skillId,
         skillWeightsJson: JSON.stringify(plan.weights),
         habitId,
@@ -1044,7 +1048,9 @@ export class DailiesService {
   }
 
   async removeTemplate(id: number) {
-    const row = await this.prisma.dailyTaskTemplate.findUnique({ where: { id } });
+    const row = await this.prisma.dailyTaskTemplate.findUnique({
+      where: { id },
+    });
     if (!row) {
       throw new NotFoundException(`Template #${id} not found`);
     }
@@ -1069,7 +1075,9 @@ export class DailiesService {
     templateId?: number | null;
     wealthCents?: number | null;
   }) {
-    const title = String(input.title ?? '').trim().slice(0, 120);
+    const title = String(input.title ?? '')
+      .trim()
+      .slice(0, 120);
     if (!title) {
       throw new BadRequestException('Title is required');
     }
@@ -1077,7 +1085,10 @@ export class DailiesService {
       skillId: input.skillId,
       skillWeights: input.skillWeights,
     });
-    const effortLevel = Math.min(10, Math.max(1, Math.round(Number(input.effortLevel) || 5)));
+    const effortLevel = Math.min(
+      10,
+      Math.max(1, Math.round(Number(input.effortLevel) || 5)),
+    );
     const durationMinutes = billedDurationMinutes(
       Math.max(1, Math.round(Number(input.durationMinutes) || 5)),
     );
@@ -1138,7 +1149,9 @@ export class DailiesService {
         effortLevel,
         durationMinutes,
         xpAwarded: xp,
-        activityIdsJson: activityIds.length ? JSON.stringify(activityIds) : null,
+        activityIdsJson: activityIds.length
+          ? JSON.stringify(activityIds)
+          : null,
         wealthCents,
       },
     });
@@ -1186,7 +1199,9 @@ export class DailiesService {
     },
     catalog: Map<string, { name: string; icon: string | null }>,
   ) {
-    const weights = this.taskWeights({ skillWeightsJson: row.skillWeightsJson });
+    const weights = this.taskWeights({
+      skillWeightsJson: row.skillWeightsJson,
+    });
     const skillShares = splitQuestXp(row.xpAwarded, weights).map((share) => ({
       ...share,
       name: catalog.get(share.slug)?.name ?? share.slug,
@@ -1252,7 +1267,10 @@ export class DailiesService {
     return this.getBoard(day);
   }
 
-  async complete(id: number, opts?: { skipQuest?: boolean; elapsedMs?: number }) {
+  async complete(
+    id: number,
+    opts?: { skipQuest?: boolean; elapsedMs?: number },
+  ) {
     const task = await this.prisma.dailyTask.findUnique({
       where: { id },
       include: { skill: { select: this.skillSelect() } },
@@ -1328,7 +1346,9 @@ export class DailiesService {
         completed: true,
         xpAwarded: xp,
         activityId: activityIds[0] ?? null,
-        activityIdsJson: activityIds.length ? JSON.stringify(activityIds) : null,
+        activityIdsJson: activityIds.length
+          ? JSON.stringify(activityIds)
+          : null,
         completedAt: new Date(),
         wealthAwardedCents: wealthCents > 0 ? wealthCents : null,
       },
@@ -1650,7 +1670,9 @@ export class DailiesService {
   }
 
   /** Oldest prior day that still has filled tasks and is not sealed. */
-  private async findOldestPendingSealBefore(day: string): Promise<string | null> {
+  private async findOldestPendingSealBefore(
+    day: string,
+  ): Promise<string | null> {
     const distinct = await this.prisma.dailyTask.findMany({
       where: { date: { lt: day } },
       distinct: ['date'],
@@ -1674,7 +1696,9 @@ export class DailiesService {
   }
 
   private async sealDate(day: string, requireFilled: boolean) {
-    const existing = await this.prisma.dailyLog.findUnique({ where: { date: day } });
+    const existing = await this.prisma.dailyLog.findUnique({
+      where: { date: day },
+    });
     if (existing) {
       return this.getLog(day);
     }
@@ -1739,7 +1763,10 @@ export class DailiesService {
         capacity,
         filled: slots.filter((slot) => slot.isFilled).length,
         completed: slots.filter((slot) => slot.completed).length,
-        projectedXp: slots.reduce((sum, slot) => sum + (slot.projectedXp ?? 0), 0),
+        projectedXp: slots.reduce(
+          (sum, slot) => sum + (slot.projectedXp ?? 0),
+          0,
+        ),
         earnedXp: slots.reduce((sum, slot) => sum + (slot.xpAwarded ?? 0), 0),
         slots,
       };
@@ -1840,7 +1867,9 @@ export class DailiesService {
   }
 
   private async assertMutableDay(day: string) {
-    const sealed = await this.prisma.dailyLog.findUnique({ where: { date: day } });
+    const sealed = await this.prisma.dailyLog.findUnique({
+      where: { date: day },
+    });
     if (sealed) {
       throw new BadRequestException('Day is sealed. Unseal to edit.');
     }
@@ -1894,7 +1923,9 @@ export class DailiesService {
   ): EnrichedTask {
     const importance = task.importance as TaskImportance;
     const skillWeights = this.taskWeights(task);
-    const isFilled = Boolean(task.title.trim() && (task.skillId || skillWeights.length));
+    const isFilled = Boolean(
+      task.title.trim() && (task.skillId || skillWeights.length),
+    );
     const projectedXp = isFilled
       ? calculateDailyTaskXp({
           importance,
@@ -1902,12 +1933,14 @@ export class DailiesService {
           durationMinutes: task.durationMinutes,
         })
       : 0;
-    const skillShares = splitQuestXp(projectedXp, skillWeights).map((share) => ({
-      ...share,
-      name:
-        catalog?.get(share.slug)?.name ??
-        (task.skill?.slug === share.slug ? task.skill.name : share.slug),
-    }));
+    const skillShares = splitQuestXp(projectedXp, skillWeights).map(
+      (share) => ({
+        ...share,
+        name:
+          catalog?.get(share.slug)?.name ??
+          (task.skill?.slug === share.slug ? task.skill.name : share.slug),
+      }),
+    );
 
     return {
       ...task,
@@ -2029,26 +2062,27 @@ export class DailiesService {
     } as const;
   }
 
-  private serializeTemplate(row: {
-    id: number;
-    name: string;
-    icon: string | null;
-    skillId: number;
-    skill: SkillSnap;
-    skillWeightsJson?: string | null;
-    habitId: number | null;
-    habit: {
+  private serializeTemplate(
+    row: {
       id: number;
       name: string;
       icon: string | null;
-      active: boolean;
-    } | null;
-    effortLevel: number;
-    durationMinutes: number;
-    sortOrder: number;
-    createdByUser: boolean;
-    wealthCents?: number | null;
-  },
+      skillId: number;
+      skill: SkillSnap;
+      skillWeightsJson?: string | null;
+      habitId: number | null;
+      habit: {
+        id: number;
+        name: string;
+        icon: string | null;
+        active: boolean;
+      } | null;
+      effortLevel: number;
+      durationMinutes: number;
+      sortOrder: number;
+      createdByUser: boolean;
+      wealthCents?: number | null;
+    },
     catalog?: Map<string, SkillSnap>,
   ) {
     const habitActive = row.habit?.active === true;
@@ -2069,9 +2103,10 @@ export class DailiesService {
       skillId: row.skillId,
       skill: row.skill,
       habitId: habitActive ? row.habitId : null,
-      habit: habitActive && row.habit
-        ? { id: row.habit.id, name: row.habit.name, icon: row.habit.icon }
-        : null,
+      habit:
+        habitActive && row.habit
+          ? { id: row.habit.id, name: row.habit.name, icon: row.habit.icon }
+          : null,
       effortLevel: row.effortLevel,
       durationMinutes: row.durationMinutes,
       sortOrder: row.sortOrder,
@@ -2115,7 +2150,9 @@ export class DailiesService {
   }
 
   /** Archived or missing habits become no-habit — never cascade-delete the default. */
-  private async resolveHabitId(habitId?: number | null): Promise<number | null> {
+  private async resolveHabitId(
+    habitId?: number | null,
+  ): Promise<number | null> {
     if (habitId == null || !Number.isInteger(habitId) || habitId < 1) {
       return null;
     }
@@ -2123,7 +2160,11 @@ export class DailiesService {
       where: { id: habitId },
       select: { id: true, active: true, allowInDailies: true, kind: true },
     });
-    if (!habit?.active || habit.allowInDailies === false || habit.kind === 'tally') {
+    if (
+      !habit?.active ||
+      habit.allowInDailies === false ||
+      habit.kind === 'tally'
+    ) {
       return null;
     }
     return habit.id;
@@ -2163,7 +2204,9 @@ export class DailiesService {
 
   private assertEffort(effortLevel: number) {
     if (!Number.isInteger(effortLevel) || effortLevel < 1 || effortLevel > 10) {
-      throw new BadRequestException('effortLevel must be an integer from 1 to 10');
+      throw new BadRequestException(
+        'effortLevel must be an integer from 1 to 10',
+      );
     }
     return effortLevel;
   }
@@ -2174,7 +2217,9 @@ export class DailiesService {
       durationMinutes < 1 ||
       durationMinutes > 24 * 60
     ) {
-      throw new BadRequestException('durationMinutes must be between 1 and 1440');
+      throw new BadRequestException(
+        'durationMinutes must be between 1 and 1440',
+      );
     }
     return Math.floor(durationMinutes);
   }

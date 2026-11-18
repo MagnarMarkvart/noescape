@@ -10,7 +10,9 @@ export async function findActiveScriptoriumDailies(
   prisma: PrismaService,
   workIds: number[],
 ): Promise<Map<number, ScriptoriumDailyBind>> {
-  const ids = [...new Set(workIds.filter((id) => Number.isInteger(id) && id > 0))];
+  const ids = [
+    ...new Set(workIds.filter((id) => Number.isInteger(id) && id > 0)),
+  ];
   const result = new Map<number, ScriptoriumDailyBind>();
   if (ids.length === 0) {
     return result;

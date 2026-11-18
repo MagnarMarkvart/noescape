@@ -31,10 +31,7 @@ export class ListsController {
   }
 
   @Patch(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: ListUpsertInput,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() body: ListUpsertInput) {
     return this.lists.update(id, body ?? {});
   }
 

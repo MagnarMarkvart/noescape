@@ -74,18 +74,12 @@ export class HabitsController {
   }
 
   @Post()
-  create(
-    @Body() body: HabitWriteInput,
-    @Query('dev') dev?: string,
-  ) {
+  create(@Body() body: HabitWriteInput, @Query('dev') dev?: string) {
     return this.habitsService.create(body ?? {}, this.isDev(dev));
   }
 
   @Get(':id')
-  getOne(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('dev') dev?: string,
-  ) {
+  getOne(@Param('id', ParseIntPipe) id: number, @Query('dev') dev?: string) {
     return this.habitsService.getOne(id, this.isDev(dev));
   }
 
@@ -193,35 +187,23 @@ export class HabitsController {
   }
 
   @Post(':id/undo')
-  undo(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('dev') dev?: string,
-  ) {
+  undo(@Param('id', ParseIntPipe) id: number, @Query('dev') dev?: string) {
     void this.habitsService.assertUnlocked(this.isDev(dev));
     return this.habitsService.undo(id);
   }
 
   @Patch(':id/archive')
-  archive(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('dev') dev?: string,
-  ) {
+  archive(@Param('id', ParseIntPipe) id: number, @Query('dev') dev?: string) {
     return this.habitsService.setArchived(id, true, this.isDev(dev));
   }
 
   @Patch(':id/unarchive')
-  unarchive(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('dev') dev?: string,
-  ) {
+  unarchive(@Param('id', ParseIntPipe) id: number, @Query('dev') dev?: string) {
     return this.habitsService.setArchived(id, false, this.isDev(dev));
   }
 
   @Delete(':id')
-  remove(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('dev') dev?: string,
-  ) {
+  remove(@Param('id', ParseIntPipe) id: number, @Query('dev') dev?: string) {
     return this.habitsService.remove(id, this.isDev(dev));
   }
 }

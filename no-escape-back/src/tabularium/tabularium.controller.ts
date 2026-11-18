@@ -34,10 +34,7 @@ export class TabulariumController {
   }
 
   @Get(':id')
-  getOne(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('date') date?: string,
-  ) {
+  getOne(@Param('id', ParseIntPipe) id: number, @Query('date') date?: string) {
     return this.tabularium.getOne(id, date);
   }
 

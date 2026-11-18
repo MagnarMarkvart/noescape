@@ -57,9 +57,7 @@ export function xpProgress(xp: number, level = levelFromXp(xp)) {
   const safeLevel = Math.min(MAX_SKILL_LEVEL, Math.max(1, level));
   const currentLevelXp = xpForLevel(safeLevel);
   const nextLevelXp =
-    safeLevel >= MAX_SKILL_LEVEL
-      ? currentLevelXp
-      : xpForLevel(safeLevel + 1);
+    safeLevel >= MAX_SKILL_LEVEL ? currentLevelXp : xpForLevel(safeLevel + 1);
   const intoLevel = Math.max(0, Math.floor(xp) - currentLevelXp);
   const needed = Math.max(1, nextLevelXp - currentLevelXp);
   const percent =

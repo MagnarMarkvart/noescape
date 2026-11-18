@@ -8,10 +8,7 @@ import {
   FEATURE_CONSUETUDO,
 } from '../character/character.service';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  QUEST_ORDO_DIEI_SLUG,
-  QuestsService,
-} from '../quests/quests.service';
+import { QUEST_ORDO_DIEI_SLUG, QuestsService } from '../quests/quests.service';
 import { SkillsService } from '../skills/skills.service';
 import { TimeService } from '../time/time.service';
 import { calculateConsuetudoXp } from '../xp/consuetudo-xp.util';
@@ -59,9 +56,8 @@ export class RoutinesService {
     const unlocked =
       devBypass ||
       (await this.characterService.isFeatureUnlocked(FEATURE_CONSUETUDO));
-    const questActive = await this.quests.hasActiveRunBySlug(
-      QUEST_ORDO_DIEI_SLUG,
-    );
+    const questActive =
+      await this.quests.hasActiveRunBySlug(QUEST_ORDO_DIEI_SLUG);
     const open = unlocked || questActive || devBypass;
     const count = await this.prisma.routine.count({ where: { active: true } });
     return {
@@ -134,12 +130,7 @@ export class RoutinesService {
     return this.toView(created);
   }
 
-  async listRuns(
-    date?: string,
-    limit = 50,
-    offset = 0,
-    devBypass = false,
-  ) {
+  async listRuns(date?: string, limit = 50, offset = 0, devBypass = false) {
     await this.assertOpen(devBypass);
     const day = date?.trim();
     if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
@@ -262,9 +253,7 @@ export class RoutinesService {
       .filter((s) => s.outcome === 'COMPLETED')
       .reduce((sum, s) => sum + Math.round(s.plannedSeconds / 60), 0);
 
-    const weights = parseSkillWeights(
-      this.parseJson(routine.skillWeightsJson),
-    );
+    const weights = parseSkillWeights(this.parseJson(routine.skillWeightsJson));
     const { baseXp, bonusXp, totalXp } = calculateConsuetudoXp({
       effortLevel: routine.effortLevel,
       completedPlannedMinutes,
@@ -322,7 +311,9 @@ export class RoutinesService {
         activityIdsJson: activityIds.length
           ? JSON.stringify(activityIds)
           : null,
-        notes: String(input.notes ?? '').trim().slice(0, 4000),
+        notes: String(input.notes ?? '')
+          .trim()
+          .slice(0, 4000),
         steps: {
           create: logs.map((step, i) => ({
             stepId: this.resolveStepId(routine.steps, step.stepId),
@@ -370,7 +361,9 @@ export class RoutinesService {
         throw new BadRequestException('Each step needs a title');
       }
       const outcome =
-        row?.outcome === 'SKIPPED' ? ('SKIPPED' as const) : ('COMPLETED' as const);
+        row?.outcome === 'SKIPPED'
+          ? ('SKIPPED' as const)
+          : ('COMPLETED' as const);
       const plannedSeconds = Math.max(
         0,
         Math.round(Number(row?.plannedSeconds) || 0),
@@ -394,13 +387,17 @@ export class RoutinesService {
     }
     const effortLevel = Math.round(Number(input?.effortLevel) || 5);
     if (!Number.isInteger(effortLevel) || effortLevel < 1 || effortLevel > 10) {
-      throw new BadRequestException('effortLevel must be an integer from 1 to 10');
+      throw new BadRequestException(
+        'effortLevel must be an integer from 1 to 10',
+      );
     }
     const { weights, error } = validateSkillWeights(input.skillWeights);
     if (error) {
       throw new BadRequestException(error);
     }
-    const catalog = await this.prisma.skill.findMany({ select: { slug: true } });
+    const catalog = await this.prisma.skill.findMany({
+      select: { slug: true },
+    });
     const slugs = new Set(catalog.map((s) => s.slug));
     for (const weight of weights) {
       if (!slugs.has(weight.slug)) {

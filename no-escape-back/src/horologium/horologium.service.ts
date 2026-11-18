@@ -223,7 +223,12 @@ export class HorologiumService {
 
     const special =
       dto.specialDrops === false
-        ? { awards: [] as Award[], total: 0, noteSuffix: '', taskLabel: null as string | null }
+        ? {
+            awards: [] as Award[],
+            total: 0,
+            noteSuffix: '',
+            taskLabel: null as string | null,
+          }
         : await this.awardSpecialLap({
             questRunId: dto.questRunId,
             questSubtaskId: dto.questSubtaskId,
@@ -280,7 +285,9 @@ export class HorologiumService {
 
     this.assertDurations(workMinutes, restMinutes);
     if (!Number.isFinite(iterations) || iterations < 2 || iterations > 20) {
-      throw new BadRequestException('Sessio requires between 2 and 20 iterations');
+      throw new BadRequestException(
+        'Sessio requires between 2 and 20 iterations',
+      );
     }
 
     const discipline = await this.requireSkill(DISCIPLINE_SKILL_SLUG);
@@ -313,7 +320,13 @@ export class HorologiumService {
         },
         include: { skill: { select: SKILL_SELECT } },
       });
-      return { session, award: null, awards: [], breakdown: calc, kind: 'goal' as const };
+      return {
+        session,
+        award: null,
+        awards: [],
+        breakdown: calc,
+        kind: 'goal' as const,
+      };
     }
 
     const award = await this.skillsService.awardXp(discipline.id, {
@@ -343,7 +356,13 @@ export class HorologiumService {
       include: { skill: { select: SKILL_SELECT } },
     });
 
-    return { session, award, awards: [award], breakdown: calc, kind: 'goal' as const };
+    return {
+      session,
+      award,
+      awards: [award],
+      breakdown: calc,
+      kind: 'goal' as const,
+    };
   }
 
   /**
@@ -358,7 +377,9 @@ export class HorologiumService {
 
     this.assertDurations(workMinutes, restMinutes);
     if (!Number.isFinite(iterations) || iterations < 2 || iterations > 20) {
-      throw new BadRequestException('Sessio requires between 2 and 20 iterations');
+      throw new BadRequestException(
+        'Sessio requires between 2 and 20 iterations',
+      );
     }
     if (
       !Number.isFinite(completedBlocks) ||
@@ -445,16 +466,25 @@ export class HorologiumService {
     const workMinutes = Math.round(Number(dto.workMinutes));
     const restMinutes = Math.round(Number(dto.restMinutes));
     const iterations = Math.round(Number(dto.iterations));
-    const completedBlocks = Math.max(0, Math.round(Number(dto.completedBlocks)));
-    const elapsedMinutes = Math.max(0, Math.round(Number(dto.elapsedMinutes) || 0));
+    const completedBlocks = Math.max(
+      0,
+      Math.round(Number(dto.completedBlocks)),
+    );
+    const elapsedMinutes = Math.max(
+      0,
+      Math.round(Number(dto.elapsedMinutes) || 0),
+    );
     const questRunId = Math.round(Number(dto.questRunId) || 0);
-    const questSubtaskId = Math.round(Number(dto.questSubtaskId) || 0) || undefined;
+    const questSubtaskId =
+      Math.round(Number(dto.questSubtaskId) || 0) || undefined;
     const mode: HorologiumMode = dto.mode === 'adhoc' ? 'adhoc' : 'planned';
     const billedLaps = mode === 'adhoc' ? 1 : iterations;
 
     this.assertDurations(workMinutes, restMinutes);
     if (mode === 'planned' && (billedLaps < 2 || billedLaps > 20)) {
-      throw new BadRequestException('Sessio requires between 2 and 20 iterations');
+      throw new BadRequestException(
+        'Sessio requires between 2 and 20 iterations',
+      );
     }
     if (completedBlocks > billedLaps && mode === 'planned') {
       throw new BadRequestException('completedBlocks exceeds iterations');
@@ -499,8 +529,7 @@ export class HorologiumService {
     awards.push(...special.awards);
 
     const totalXp = awards.reduce((n, a) => n + a.activity.xpGained, 0);
-    const elapsedLabel =
-      elapsedMinutes < 1 ? 'under 1m' : `${elapsedMinutes}m`;
+    const elapsedLabel = elapsedMinutes < 1 ? 'under 1m' : `${elapsedMinutes}m`;
     const plannedWork = workMinutes * billedLaps;
     const early = Boolean(dto.endSession);
     const note = early
@@ -554,13 +583,18 @@ export class HorologiumService {
     const workMinutes = Math.round(Number(dto.workMinutes));
     const restMinutes = Math.round(Number(dto.restMinutes));
     const iterations = Math.max(1, Math.round(Number(dto.iterations) || 1));
-    const completedBlocks = Math.max(0, Math.round(Number(dto.completedBlocks) || 0));
-    const elapsedMinutes = Math.max(0, Math.round(Number(dto.elapsedMinutes) || 0));
+    const completedBlocks = Math.max(
+      0,
+      Math.round(Number(dto.completedBlocks) || 0),
+    );
+    const elapsedMinutes = Math.max(
+      0,
+      Math.round(Number(dto.elapsedMinutes) || 0),
+    );
     this.assertDurations(workMinutes, restMinutes);
 
     const label = dto.taskLabel?.trim() || 'task';
-    const elapsedLabel =
-      elapsedMinutes < 1 ? 'under 1m' : `${elapsedMinutes}m`;
+    const elapsedLabel = elapsedMinutes < 1 ? 'under 1m' : `${elapsedMinutes}m`;
     const note = `Ended after task — ${label} was already done (${elapsedLabel} elapsed, ${completedBlocks}/${iterations} splits)`;
 
     const session = await this.prisma.horologiumSession.create({
@@ -569,7 +603,10 @@ export class HorologiumService {
         workMinutes,
         restMinutes,
         iterations,
-        durationMinutes: Math.max(elapsedMinutes, workMinutes * completedBlocks),
+        durationMinutes: Math.max(
+          elapsedMinutes,
+          workMinutes * completedBlocks,
+        ),
         presetId: dto.presetId?.trim() || null,
         skillId: null,
         xpAwarded: 0,
@@ -578,9 +615,7 @@ export class HorologiumService {
         outcome: 'task_early',
         endedEarly: true,
         elapsedMinutes,
-        questRunId: dto.questRunId
-          ? Math.round(Number(dto.questRunId))
-          : null,
+        questRunId: dto.questRunId ? Math.round(Number(dto.questRunId)) : null,
         taskLabel: dto.taskLabel?.trim() || null,
         focusXpAwarded: 0,
         disciplineXpAwarded: 0,
@@ -662,7 +697,10 @@ export class HorologiumService {
     if (input.remainingLaps <= 0) {
       return empty;
     }
-    const ctx = await this.specialContext(input.questRunId, input.questSubtaskId);
+    const ctx = await this.specialContext(
+      input.questRunId,
+      input.questSubtaskId,
+    );
     if (!ctx) {
       return empty;
     }
@@ -728,10 +766,7 @@ export class HorologiumService {
       ? run.quest.subtasks.find((s) => s.id === subtaskId)
       : null;
     return {
-      label:
-        sub?.title ||
-        run.quest.journeyLabel?.trim() ||
-        run.quest.name,
+      label: sub?.title || run.quest.journeyLabel?.trim() || run.quest.name,
       shares: splitQuestXp(pool, weights),
     };
   }
@@ -741,7 +776,10 @@ export class HorologiumService {
       return [];
     }
     try {
-      const parsed = JSON.parse(raw) as Array<{ slug?: string; weight?: number }>;
+      const parsed = JSON.parse(raw) as Array<{
+        slug?: string;
+        weight?: number;
+      }>;
       if (!Array.isArray(parsed)) {
         return [];
       }
@@ -788,9 +826,7 @@ export class HorologiumService {
   private async requireSkill(slug: string) {
     const skill = await this.prisma.skill.findUnique({ where: { slug } });
     if (!skill) {
-      throw new NotFoundException(
-        `${slug} skill not found — run prisma seed`,
-      );
+      throw new NotFoundException(`${slug} skill not found — run prisma seed`);
     }
     return skill;
   }
@@ -969,8 +1005,7 @@ export class HorologiumService {
           row.skill?.slug === DISCIPLINE_SKILL_SLUG
             ? row.skill.name
             : 'Discipline',
-        icon:
-          row.skill?.slug === DISCIPLINE_SKILL_SLUG ? row.skill.icon : '⚖️',
+        icon: row.skill?.slug === DISCIPLINE_SKILL_SLUG ? row.skill.icon : '⚖️',
         xp: row.disciplineXpAwarded,
       });
     }

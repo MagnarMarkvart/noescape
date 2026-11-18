@@ -132,8 +132,7 @@ export class QuestsService {
         return views.filter((v) => v.run?.status === 'ACTIVE');
       case 'completed':
         return views.filter(
-          (v) =>
-            v.run?.status === 'COMPLETED' || completedSlugs.has(v.slug),
+          (v) => v.run?.status === 'COMPLETED' || completedSlugs.has(v.slug),
         );
       default:
         return views;
@@ -333,17 +332,13 @@ export class QuestsService {
         questReqsJson: input.questReqs?.length
           ? JSON.stringify(input.questReqs)
           : null,
-        rewardJson: input.rewards
-          ? JSON.stringify(input.rewards)
-          : null,
+        rewardJson: input.rewards ? JSON.stringify(input.rewards) : null,
         xpPlanJson: completionBonus
           ? JSON.stringify({ dayXp: [0], completionBonus })
           : null,
         createdByUser: true,
         sortOrder: 100,
-        dailyWorkMinutes: this.normalizeEstimateMinutes(
-          input.dailyWorkMinutes,
-        ),
+        dailyWorkMinutes: this.normalizeEstimateMinutes(input.dailyWorkMinutes),
         dailyWorkTitle: input.dailyWorkTitle?.trim() || null,
         subtasks: subtasks.length
           ? {
@@ -535,7 +530,10 @@ export class QuestsService {
     }
 
     if (input.coverDataUrl?.trim()) {
-      const coverImage = await this.saveCover(questId, input.coverDataUrl.trim());
+      const coverImage = await this.saveCover(
+        questId,
+        input.coverDataUrl.trim(),
+      );
       await this.prisma.quest.update({
         where: { id: questId },
         data: { coverImage },
@@ -627,7 +625,9 @@ export class QuestsService {
       throw new BadRequestException('Quest is not active');
     }
     if (run.quest.kind !== 'STREAK_LOG') {
-      throw new BadRequestException('This quest does not use daily streak logs');
+      throw new BadRequestException(
+        'This quest does not use daily streak logs',
+      );
     }
     if (!input.fromHabitus && !input.fromDaily) {
       if (await this.habitusJourneyLink(run.questId)) {
@@ -778,7 +778,9 @@ export class QuestsService {
 
     if (!done) {
       if (existing) {
-        await this.prisma.questJourneyLog.delete({ where: { id: existing.id } });
+        await this.prisma.questJourneyLog.delete({
+          where: { id: existing.id },
+        });
       }
       if (!input.skipDaily) {
         await this.mirrorLinkedDaily({
@@ -1100,7 +1102,12 @@ export class QuestsService {
       Number(existing?.elapsedMs ?? 0) <= 0 &&
       (opts?.elapsedMs ?? 0) > 0
     ) {
-      await this.addSubtaskElapsed(runId, subtaskId, opts!.elapsedMs!, 'manual');
+      await this.addSubtaskElapsed(
+        runId,
+        subtaskId,
+        opts!.elapsedMs!,
+        'manual',
+      );
       existing = await this.prisma.questSubtaskCompletion.findUnique({
         where: { runId_subtaskId: { runId, subtaskId } },
       });
@@ -1322,8 +1329,7 @@ export class QuestsService {
       quest.skillWeightsJson ?? null,
       plan.completionBonus,
     );
-    const completionBonus =
-      sharesToBonus(shares) ?? plan.completionBonus;
+    const completionBonus = sharesToBonus(shares) ?? plan.completionBonus;
     const awards: Awaited<ReturnType<SkillsService['awardXp']>>[] = [];
     const unlocked: string[] = [];
 
@@ -1420,8 +1426,7 @@ export class QuestsService {
     today: string,
   ) {
     const presented = links.map((link) => this.presentHabitLink(link, today));
-    const journey =
-      presented.find((row) => row.target === 'JOURNEY') ?? null;
+    const journey = presented.find((row) => row.target === 'JOURNEY') ?? null;
     const bySubtask = new Map(
       presented
         .filter((row) => row.target === 'SUBTASK' && row.subtaskId)
@@ -1486,9 +1491,7 @@ export class QuestsService {
     };
   }
 
-  private toHabitLinkView(
-    link: ReturnType<QuestsService['presentHabitLink']>,
-  ) {
+  private toHabitLinkView(link: ReturnType<QuestsService['presentHabitLink']>) {
     return {
       habitId: link.habitId,
       habitName: link.habitName,
@@ -1525,7 +1528,7 @@ export class QuestsService {
           questSubtaskId: watch.questSubtaskId ?? undefined,
           questId:
             watch.bindKind === 'quest_daily_work'
-              ? watch.questId ?? undefined
+              ? (watch.questId ?? undefined)
               : undefined,
         });
         if (watch.bindKind === 'quest') {
@@ -1632,7 +1635,9 @@ export class QuestsService {
       habitLinks: {
         include: {
           habit: { select: { id: true, name: true, icon: true } },
-          events: { orderBy: [{ date: 'asc' as const }, { id: 'asc' as const }] },
+          events: {
+            orderBy: [{ date: 'asc' as const }, { id: 'asc' as const }],
+          },
         },
       },
       runs: {
@@ -1744,7 +1749,10 @@ export class QuestsService {
     skillLevels: Map<string, { level: number; name: string }>,
     completedSlugs: Set<string>,
     features: Map<string, boolean>,
-    unlocksBySlug: Map<string, Array<{ id: number; slug: string; name: string }>>,
+    unlocksBySlug: Map<
+      string,
+      Array<{ id: number; slug: string; name: string }>
+    >,
   ) {
     const skillReqs = this.parseJson<SkillReq[]>(quest.skillReqsJson) ?? [];
     const unlockReqs = this.parseJson<string[]>(quest.unlockReqsJson) ?? [];
@@ -1803,7 +1811,8 @@ export class QuestsService {
       [...doneRows]
         .sort(
           (a, b) =>
-            new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime(),
+            new Date(a.completedAt).getTime() -
+            new Date(b.completedAt).getTime(),
         )
         .map((c, i) => [c.subtaskId, i + 1]),
     );
@@ -1831,9 +1840,7 @@ export class QuestsService {
         completedAt: stamp?.iso ?? null,
         completedAtLabel: stamp?.label ?? null,
         completedDate: stamp?.date ?? null,
-        completionOrder: completed
-          ? (completionOrder.get(s.id) ?? null)
-          : null,
+        completionOrder: completed ? (completionOrder.get(s.id) ?? null) : null,
         elapsedMs,
         estimateMinutes: s.estimateMinutes ?? null,
         habitLink: habitLink ? this.toHabitLinkView(habitLink) : null,
@@ -1842,11 +1849,12 @@ export class QuestsService {
     const gateSubtasks = subtasks.filter((s) => s.gatesJourney);
     const journeyUnlocked =
       gateSubtasks.length === 0 || gateSubtasks.every((s) => s.completed);
-    const gateUnlockAt = gateSubtasks
-      .map((s) => s.completedAt)
-      .filter((v): v is string => Boolean(v))
-      .sort()
-      .at(-1) ?? null;
+    const gateUnlockAt =
+      gateSubtasks
+        .map((s) => s.completedAt)
+        .filter((v): v is string => Boolean(v))
+        .sort()
+        .at(-1) ?? null;
     const destinationDone = Boolean(latestRun?.destinationDone);
     const progressPercent = this.computeProgress(
       quest.kind,
@@ -1878,9 +1886,7 @@ export class QuestsService {
         ? (latestRun?.logs ?? []).map((l) => l.date)
         : journeyLogs.map((l) => l.date);
     const journeyUnlockDate = journeyUnlocked
-      ? this.time.stamp(
-          gateUnlockAt ?? latestRun?.startedAt ?? new Date(),
-        ).date
+      ? this.time.stamp(gateUnlockAt ?? latestRun?.startedAt ?? new Date()).date
       : null;
     const endDate =
       latestRun?.status === 'COMPLETED' && latestRun.completedAt
@@ -2048,8 +2054,9 @@ export class QuestsService {
       return false;
     }
     const weekDates = this.time.weekDates(date);
-    const loggedThisWeek = journeyDates.filter((d) => weekDates.includes(d))
-      .length;
+    const loggedThisWeek = journeyDates.filter((d) =>
+      weekDates.includes(d),
+    ).length;
     return loggedThisWeek < this.clampCommitment(commitmentLevel);
   }
 
@@ -2072,9 +2079,7 @@ export class QuestsService {
     };
   }
 
-  private normalizeSubtasks(
-    raw?: Array<string | SubtaskInput>,
-  ): Array<{
+  private normalizeSubtasks(raw?: Array<string | SubtaskInput>): Array<{
     id?: number;
     title: string;
     gatesJourney: boolean;
@@ -2171,7 +2176,10 @@ export class QuestsService {
       }
       const empty = elapsed.filter((d) => !logged.has(d)).slice(-shortfall);
       for (const d of empty) {
-        missed.push({ date: d, reason: `Below ${commitmentLevel}× weekly commitment` });
+        missed.push({
+          date: d,
+          reason: `Below ${commitmentLevel}× weekly commitment`,
+        });
       }
     }
     return missed;
@@ -2371,7 +2379,9 @@ export class QuestsService {
       select: { slug: true, name: true },
     });
     this._questNames = new Map(quests.map((q) => [q.slug, q.name]));
-    return new Map(skills.map((s) => [s.slug, { level: s.level, name: s.name }]));
+    return new Map(
+      skills.map((s) => [s.slug, { level: s.level, name: s.name }]),
+    );
   }
 
   private async completedQuestSlugs() {
@@ -2408,7 +2418,9 @@ export class QuestsService {
     const weights = raw.filter((w) => w.slug && w.weight > 0);
     const slugs = new Set(weights.map((w) => w.slug));
     if (slugs.size !== weights.length) {
-      throw new BadRequestException('Each integrated skill can appear only once');
+      throw new BadRequestException(
+        'Each integrated skill can appear only once',
+      );
     }
     if (weights.length === 0) {
       if (input.completionBonus) {

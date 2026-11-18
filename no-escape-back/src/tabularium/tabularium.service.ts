@@ -207,7 +207,9 @@ export class TabulariumService {
   }
 
   private async parseInput(input: TabulaUpsertInput, creating: boolean) {
-    const name = String(input.name ?? '').trim().slice(0, 80);
+    const name = String(input.name ?? '')
+      .trim()
+      .slice(0, 80);
     if (creating && !name) {
       throw new BadRequestException('Name is required');
     }
@@ -230,13 +232,17 @@ export class TabulariumService {
       data.name = name;
     }
     if (input.icon !== undefined) {
-      const icon = String(input.icon ?? '').trim().slice(0, 8);
+      const icon = String(input.icon ?? '')
+        .trim()
+        .slice(0, 8);
       data.icon = icon || null;
     }
     if (input.period != null) {
       const period = String(input.period);
       if (!isTabulaPeriod(period)) {
-        throw new BadRequestException('period must be day, week, month, or year');
+        throw new BadRequestException(
+          'period must be day, week, month, or year',
+        );
       }
       data.period = period;
     }
@@ -253,7 +259,11 @@ export class TabulariumService {
     if (input.normMax != null) {
       data.normMax = Math.max(0, Math.round(Number(input.normMax) || 0));
     }
-    if (data.normMin != null && data.normMax != null && data.normMax < data.normMin) {
+    if (
+      data.normMin != null &&
+      data.normMax != null &&
+      data.normMax < data.normMin
+    ) {
       data.normMax = data.normMin;
     }
     if (input.step != null) {

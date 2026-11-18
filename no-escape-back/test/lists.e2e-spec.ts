@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
@@ -118,9 +121,7 @@ describe('ListsController (e2e)', () => {
     });
 
     it('should return 404 for non-existent list', async () => {
-      await request(app.getHttpServer())
-        .get('/lists/999')
-        .expect(404);
+      await request(app.getHttpServer()).get('/lists/999').expect(404);
     });
   });
 
@@ -164,13 +165,9 @@ describe('ListsController (e2e)', () => {
 
       const listId = createRes.body.id;
 
-      await request(app.getHttpServer())
-        .delete(`/lists/${listId}`)
-        .expect(200);
+      await request(app.getHttpServer()).delete(`/lists/${listId}`).expect(200);
 
-      await request(app.getHttpServer())
-        .get(`/lists/${listId}`)
-        .expect(404);
+      await request(app.getHttpServer()).get(`/lists/${listId}`).expect(404);
     });
   });
 
@@ -431,12 +428,12 @@ describe('ListsController (e2e)', () => {
         data: { listId, title: 'Bread', useCount: 1, lastUsedAt: new Date() },
       });
 
-      await request(app.getHttpServer())
-        .delete(`/lists/${listId}`)
-        .expect(200);
+      await request(app.getHttpServer()).delete(`/lists/${listId}`).expect(200);
 
       const items = await prisma.listItem.findMany({ where: { listId } });
-      const memory = await prisma.listItemMemory.findMany({ where: { listId } });
+      const memory = await prisma.listItemMemory.findMany({
+        where: { listId },
+      });
 
       expect(items).toHaveLength(0);
       expect(memory).toHaveLength(0);

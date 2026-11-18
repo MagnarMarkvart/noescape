@@ -4,7 +4,9 @@
  * interactive transactions — sessio stop uses one to reverse Focus XP.
  * The same pooler host accepts session mode on port 5432.
  */
-export function runtimeDatabaseUrl(url: string | undefined): string | undefined {
+export function runtimeDatabaseUrl(
+  url: string | undefined,
+): string | undefined {
   if (!url) {
     return url;
   }

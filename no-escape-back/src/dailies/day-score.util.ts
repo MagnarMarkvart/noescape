@@ -77,15 +77,22 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
   const leftover = filled.filter((task) => !task.completed);
   const leftoverCount = leftover.length;
   const assignedMinutes = filled.reduce(
-    (sum, task) => sum + Math.max(0, Math.round(Number(task.durationMinutes) || 0)),
+    (sum, task) =>
+      sum + Math.max(0, Math.round(Number(task.durationMinutes) || 0)),
     0,
   );
-  const trackedCount = filled.filter((task) => Number(task.elapsedMs) > 0).length;
+  const trackedCount = filled.filter(
+    (task) => Number(task.elapsedMs) > 0,
+  ).length;
   const loadFrac = Math.min(
     1,
-    Math.max(filledCount / DAY_TASK_GOAL, assignedMinutes / DAY_TIME_GOAL_MINUTES),
+    Math.max(
+      filledCount / DAY_TASK_GOAL,
+      assignedMinutes / DAY_TIME_GOAL_MINUTES,
+    ),
   );
-  const loadMet = filledCount >= DAY_TASK_GOAL || assignedMinutes >= DAY_TIME_GOAL_MINUTES;
+  const loadMet =
+    filledCount >= DAY_TASK_GOAL || assignedMinutes >= DAY_TIME_GOAL_MINUTES;
   const allDone = filledCount > 0 && leftoverCount === 0;
 
   if (filledCount === 0) {
@@ -125,13 +132,17 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
       trackedCount,
       loadMet,
       allDone,
-      summary: 'Every task done, though the day was set light of the 9-task / 6h bar.',
+      summary:
+        'Every task done, though the day was set light of the 9-task / 6h bar.',
     });
   }
 
   const missPenalty = Math.min(
     80,
-    leftover.reduce((sum, task) => sum + (MISS_PENALTY[task.importance] ?? 12), 0),
+    leftover.reduce(
+      (sum, task) => sum + (MISS_PENALTY[task.importance] ?? 12),
+      0,
+    ),
   );
   const volumeGap = Math.round((1 - completedCount / filledCount) * 20);
   const underload = loadMet ? 0 : 8;

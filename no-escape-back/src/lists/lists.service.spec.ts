@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/unbound-method */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
@@ -62,11 +65,7 @@ describe('ListsService', () => {
           sortOrder: 0,
           createdAt: new Date(),
           updatedAt: new Date(),
-          items: [
-            { done: false },
-            { done: false },
-            { done: true },
-          ],
+          items: [{ done: false }, { done: false }, { done: true }],
         },
         {
           id: 2,
@@ -77,13 +76,11 @@ describe('ListsService', () => {
           sortOrder: 1,
           createdAt: new Date(),
           updatedAt: new Date(),
-          items: [
-            { done: true },
-          ],
+          items: [{ done: true }],
         },
       ];
 
-      jest.spyOn(prisma.list, 'findMany').mockResolvedValue(mockLists as any);
+      jest.spyOn(prisma.list, 'findMany').mockResolvedValue(mockLists);
 
       const result = await service.list();
 
@@ -109,7 +106,7 @@ describe('ListsService', () => {
         items: [],
       };
 
-      jest.spyOn(prisma.list, 'create').mockResolvedValue(mockList as any);
+      jest.spyOn(prisma.list, 'create').mockResolvedValue(mockList);
 
       const result = await service.create({ name: 'Shopping', icon: '🛒' });
 
@@ -136,9 +133,7 @@ describe('ListsService', () => {
       await expect(service.create({ name: '  ' })).rejects.toThrow(
         BadRequestException,
       );
-      await expect(service.create({})).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.create({})).rejects.toThrow(BadRequestException);
     });
 
     it('should clear other main lists when creating a new main list', async () => {
@@ -154,8 +149,8 @@ describe('ListsService', () => {
         items: [],
       };
 
-      jest.spyOn(prisma.list, 'updateMany').mockResolvedValue({ count: 1 } as any);
-      jest.spyOn(prisma.list, 'create').mockResolvedValue(mockList as any);
+      jest.spyOn(prisma.list, 'updateMany').mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.list, 'create').mockResolvedValue(mockList);
 
       await service.create({ name: 'New Main', isMain: true });
 
@@ -187,8 +182,8 @@ describe('ListsService', () => {
         icon: '🥕',
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(existingList as any);
-      jest.spyOn(prisma.list, 'update').mockResolvedValue(updatedList as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(existingList);
+      jest.spyOn(prisma.list, 'update').mockResolvedValue(updatedList);
 
       const result = await service.update(1, { name: 'Groceries', icon: '🥕' });
 
@@ -210,9 +205,11 @@ describe('ListsService', () => {
         itemMemory: [],
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(existingList as any);
-      jest.spyOn(prisma.list, 'updateMany').mockResolvedValue({ count: 1 } as any);
-      jest.spyOn(prisma.list, 'update').mockResolvedValue({ ...existingList, isMain: true, items: [] } as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(existingList);
+      jest.spyOn(prisma.list, 'updateMany').mockResolvedValue({ count: 1 });
+      jest
+        .spyOn(prisma.list, 'update')
+        .mockResolvedValue({ ...existingList, isMain: true, items: [] } as any);
 
       await service.update(2, { isMain: true });
 
@@ -235,12 +232,19 @@ describe('ListsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         items: [
-          { id: 1, title: 'Milk', done: false, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
+          {
+            id: 1,
+            title: 'Milk',
+            done: false,
+            sortOrder: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         itemMemory: [],
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
       jest.spyOn(prisma.listItem, 'create').mockResolvedValue({
         id: 2,
         listId: 1,
@@ -249,7 +253,7 @@ describe('ListsService', () => {
         sortOrder: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
-      } as any);
+      });
 
       await service.addItem(1, 'Bread');
 
@@ -272,11 +276,9 @@ describe('ListsService', () => {
         itemMemory: [],
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
 
-      await expect(service.addItem(1, '')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.addItem(1, '')).rejects.toThrow(BadRequestException);
     });
 
     it('should update item and add to memory when marked done', async () => {
@@ -290,7 +292,14 @@ describe('ListsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         items: [
-          { id: 1, title: 'Milk', done: false, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
+          {
+            id: 1,
+            title: 'Milk',
+            done: false,
+            sortOrder: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         itemMemory: [],
       };
@@ -305,9 +314,11 @@ describe('ListsService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
-      jest.spyOn(prisma.listItem, 'findFirst').mockResolvedValue(mockItem as any);
-      jest.spyOn(prisma.listItem, 'update').mockResolvedValue({ ...mockItem, done: true } as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
+      jest.spyOn(prisma.listItem, 'findFirst').mockResolvedValue(mockItem);
+      jest
+        .spyOn(prisma.listItem, 'update')
+        .mockResolvedValue({ ...mockItem, done: true });
       jest.spyOn(prisma.listItemMemory, 'findUnique').mockResolvedValue(null);
       jest.spyOn(prisma.listItemMemory, 'create').mockResolvedValue({} as any);
 
@@ -334,7 +345,14 @@ describe('ListsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         items: [
-          { id: 2, title: 'Milk', done: false, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
+          {
+            id: 2,
+            title: 'Milk',
+            done: false,
+            sortOrder: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         itemMemory: [],
       };
@@ -359,10 +377,14 @@ describe('ListsService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
-      jest.spyOn(prisma.listItem, 'findFirst').mockResolvedValue(mockItem as any);
-      jest.spyOn(prisma.listItem, 'update').mockResolvedValue({ ...mockItem, done: true } as any);
-      jest.spyOn(prisma.listItemMemory, 'findUnique').mockResolvedValue(mockMemory as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
+      jest.spyOn(prisma.listItem, 'findFirst').mockResolvedValue(mockItem);
+      jest
+        .spyOn(prisma.listItem, 'update')
+        .mockResolvedValue({ ...mockItem, done: true });
+      jest
+        .spyOn(prisma.listItemMemory, 'findUnique')
+        .mockResolvedValue(mockMemory);
       jest.spyOn(prisma.listItemMemory, 'update').mockResolvedValue({} as any);
 
       await service.updateItem(1, 2, { done: true });
@@ -387,7 +409,14 @@ describe('ListsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         items: [
-          { id: 1, title: 'Milk', done: false, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
+          {
+            id: 1,
+            title: 'Milk',
+            done: false,
+            sortOrder: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         itemMemory: [],
       };
@@ -402,9 +431,11 @@ describe('ListsService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
-      jest.spyOn(prisma.listItem, 'findFirst').mockResolvedValue(mockItem as any);
-      jest.spyOn(prisma.listItem, 'update').mockResolvedValue({ ...mockItem, done: true } as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
+      jest.spyOn(prisma.listItem, 'findFirst').mockResolvedValue(mockItem);
+      jest
+        .spyOn(prisma.listItem, 'update')
+        .mockResolvedValue({ ...mockItem, done: true });
       jest.spyOn(prisma.listItemMemory, 'create').mockResolvedValue({} as any);
 
       await service.updateItem(1, 1, { done: true });
@@ -425,14 +456,35 @@ describe('ListsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         items: [
-          { id: 1, title: 'A', done: false, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
-          { id: 2, title: 'B', done: false, sortOrder: 1, createdAt: new Date(), updatedAt: new Date() },
-          { id: 3, title: 'C', done: false, sortOrder: 2, createdAt: new Date(), updatedAt: new Date() },
+          {
+            id: 1,
+            title: 'A',
+            done: false,
+            sortOrder: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            id: 2,
+            title: 'B',
+            done: false,
+            sortOrder: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            id: 3,
+            title: 'C',
+            done: false,
+            sortOrder: 2,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         itemMemory: [],
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
       jest.spyOn(prisma, '$transaction').mockResolvedValue([]);
 
       await service.reorderItems(1, [3, 1, 2]);
@@ -451,13 +503,27 @@ describe('ListsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         items: [
-          { id: 1, title: 'A', done: false, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
-          { id: 2, title: 'B', done: false, sortOrder: 1, createdAt: new Date(), updatedAt: new Date() },
+          {
+            id: 1,
+            title: 'A',
+            done: false,
+            sortOrder: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            id: 2,
+            title: 'B',
+            done: false,
+            sortOrder: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         itemMemory: [],
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
 
       await expect(service.reorderItems(1, [1])).rejects.toThrow(
         BadRequestException,
@@ -520,8 +586,10 @@ describe('ListsService', () => {
         },
       ];
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
-      jest.spyOn(prisma.listItemMemory, 'findMany').mockResolvedValue(mockMemories as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
+      jest
+        .spyOn(prisma.listItemMemory, 'findMany')
+        .mockResolvedValue(mockMemories);
 
       const result = await service.getMemory(1);
 
@@ -565,8 +633,10 @@ describe('ListsService', () => {
         },
       ];
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
-      jest.spyOn(prisma.listItemMemory, 'findMany').mockResolvedValue(mockMemories as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
+      jest
+        .spyOn(prisma.listItemMemory, 'findMany')
+        .mockResolvedValue(mockMemories);
 
       const result = await service.getMemory(1, 'mil');
 
@@ -587,7 +657,14 @@ describe('ListsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         items: [
-          { id: 1, title: 'Milk', done: false, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
+          {
+            id: 1,
+            title: 'Milk',
+            done: false,
+            sortOrder: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ],
         itemMemory: [],
       };
@@ -602,8 +679,10 @@ describe('ListsService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
-      jest.spyOn(prisma.listItemMemory, 'findFirst').mockResolvedValue(mockMemory as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
+      jest
+        .spyOn(prisma.listItemMemory, 'findFirst')
+        .mockResolvedValue(mockMemory);
       jest.spyOn(prisma.listItem, 'create').mockResolvedValue({} as any);
 
       await service.restoreMemory(1, 1);
@@ -629,8 +708,8 @@ describe('ListsService', () => {
         itemMemory: [],
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList as any);
-      jest.spyOn(prisma.list, 'delete').mockResolvedValue(mockList as any);
+      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
+      jest.spyOn(prisma.list, 'delete').mockResolvedValue(mockList);
 
       const result = await service.remove(1);
 

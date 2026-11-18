@@ -38,8 +38,7 @@ export function weekDates(iso: string, weekStartsOn: 0 | 1 = 1): string[] {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   const day = dt.getUTCDay();
-  const offset =
-    weekStartsOn === 0 ? -day : day === 0 ? -6 : 1 - day;
+  const offset = weekStartsOn === 0 ? -day : day === 0 ? -6 : 1 - day;
   dt.setUTCDate(dt.getUTCDate() + offset);
   return Array.from({ length: 7 }, (_, i) => {
     const n = new Date(dt);

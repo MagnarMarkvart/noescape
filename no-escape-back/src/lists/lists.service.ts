@@ -236,10 +236,7 @@ export class ListsService {
     return this.getOne(listId);
   }
 
-  async reorderItems(
-    listId: number,
-    ids: number[],
-  ): Promise<ListDetailView> {
+  async reorderItems(listId: number, ids: number[]): Promise<ListDetailView> {
     const list = await this.load(listId);
     const existing = new Set(list.items.map((item) => item.id));
 
@@ -401,19 +398,17 @@ export class ListsService {
       .sort((a, b) => b.score - a.score);
   }
 
-  private toListView(
-    row: {
-      id: number;
-      name: string;
-      icon: string | null;
-      isMain: boolean;
-      suggestionsEnabled: boolean;
-      sortOrder: number;
-      createdAt: Date;
-      updatedAt: Date;
-      items: Array<{ done: boolean }>;
-    },
-  ): ListView {
+  private toListView(row: {
+    id: number;
+    name: string;
+    icon: string | null;
+    isMain: boolean;
+    suggestionsEnabled: boolean;
+    sortOrder: number;
+    createdAt: Date;
+    updatedAt: Date;
+    items: Array<{ done: boolean }>;
+  }): ListView {
     const activeCount = row.items.filter((item) => !item.done).length;
     const doneCount = row.items.filter((item) => item.done).length;
     return {
