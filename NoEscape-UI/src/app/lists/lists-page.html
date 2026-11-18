@@ -88,11 +88,12 @@
 @if (confirm(); as c) {
   <app-ui-confirm
     [title]="confirmTitle"
-    [message]="confirmMessage"
+    [body]="confirmMessage"
     [confirmLabel]="'Delete'"
-    [danger]="true"
+    [tone]="'danger'"
     [busy]="!!busyId()"
     (confirm)="runConfirm()"
-    (cancel)="cancelConfirm()"
+    (dismiss)="cancelConfirm()"
+    (secondary)="cancelConfirm()"
   />
 }

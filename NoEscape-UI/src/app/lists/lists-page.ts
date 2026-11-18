@@ -8,7 +8,6 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { UiConfirm } from '../shared/ui/ui-confirm';
-import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import { DEFAULT_LIST_ICON, ListView } from './lists.model';
 import { ListsService } from './lists.service';
 
@@ -16,7 +15,7 @@ type ListConfirm = { kind: 'delete'; list: ListView };
 
 @Component({
   selector: 'app-lists-page',
-  imports: [RouterLink, UiConfirm, UiIconBtn],
+  imports: [RouterLink, UiConfirm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './lists-page.html',
   styleUrl: './lists-page.css',

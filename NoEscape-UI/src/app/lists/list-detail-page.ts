@@ -9,7 +9,6 @@ import {
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { UiConfirm } from '../shared/ui/ui-confirm';
-import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import {
   DEFAULT_LIST_ICON,
   ListDetailView,
@@ -22,7 +21,7 @@ type ItemConfirm = { kind: 'delete-item'; item: ListItemView };
 
 @Component({
   selector: 'app-list-detail-page',
-  imports: [RouterLink, FormsModule, UiConfirm, UiIconBtn],
+  imports: [RouterLink, FormsModule, UiConfirm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './list-detail-page.html',
   styleUrl: './list-detail-page.css',
