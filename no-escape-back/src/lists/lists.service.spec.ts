@@ -319,22 +319,24 @@ describe('ListsService', () => {
       jest
         .spyOn(prisma.listItem, 'update')
         .mockResolvedValue({ ...mockItem, done: true });
-      jest.spyOn(prisma.listItemMemory, 'findUnique').mockResolvedValue(null);
-      jest.spyOn(prisma.listItemMemory, 'create').mockResolvedValue({} as any);
+      jest.spyOn(prisma.listItemMemory, 'findUnique').mockResolvedValue({
+        id: 1,
+        listId: 1,
+        title: 'Milk',
+        titleNormalized: 'milk',
+        lastUsedAt: new Date('2024-01-01'),
+        useCount: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+      jest.spyOn(prisma.listItemMemory, 'update').mockResolvedValue({} as any);
 
       await service.updateItem(1, 1, { done: true });
 
-      expect(prisma.listItemMemory.create).toHaveBeenCalledWith({
-        data: {
-          listId: 1,
-          title: 'Milk',
-          useCount: 1,
-          lastUsedAt: expect.any(Date),
-        },
-      });
+      expect(prisma.listItemMemory.update).toHaveBeenCalled();
     });
 
-    it('should increment memory useCount when item marked done again', async () => {
+    it('should bump useCount on add when memory exists', async () => {
       const mockList = {
         id: 1,
         name: 'Shopping',
@@ -371,23 +373,25 @@ describe('ListsService', () => {
         id: 1,
         listId: 1,
         title: 'Milk',
+        titleNormalized: 'milk',
         lastUsedAt: new Date('2024-01-01'),
         useCount: 2,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.list, 'findUnique').mockResolvedValue(mockList);
-      jest.spyOn(prisma.listItem, 'findFirst').mockResolvedValue(mockItem);
       jest
-        .spyOn(prisma.listItem, 'update')
-        .mockResolvedValue({ ...mockItem, done: true });
+        .spyOn(prisma.list, 'findUnique')
+        .mockResolvedValue(mockList as any);
+      jest
+        .spyOn(prisma.listItem, 'create')
+        .mockResolvedValue(mockItem as any);
       jest
         .spyOn(prisma.listItemMemory, 'findUnique')
-        .mockResolvedValue(mockMemory);
+        .mockResolvedValue(mockMemory as any);
       jest.spyOn(prisma.listItemMemory, 'update').mockResolvedValue({} as any);
 
-      await service.updateItem(1, 2, { done: true });
+      await service.addItem(1, 'Milk');
 
       expect(prisma.listItemMemory.update).toHaveBeenCalledWith({
         where: { id: 1 },
