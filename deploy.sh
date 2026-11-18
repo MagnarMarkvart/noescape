@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# NoEscape deploy script — tõmbab GitHubist uusima versiooni, buildib, deployb.
-# Jooksuta: ./deploy.sh (või ütle Hermesele "deploy noescape")
+# Manual deploy on the live machine. Pushing to main is the normal path
+# (.github/workflows/deploy.yml does the same build).
+# Credentials stay in no-escape-back/.env on this machine. Never commit them.
 set -euo pipefail
 
 cd ~/dev/noescape
@@ -8,10 +9,22 @@ cd ~/dev/noescape
 echo "📦 Pulling latest from GitHub..."
 git pull origin main
 
+db_url=$(grep -E '^DATABASE_URL=' no-escape-back/.env || true)
+case "$db_url" in
+  *127.0.0.1*|*localhost*|*file:*)
+    echo "Refusing to deploy: no-escape-back/.env points at a local database."
+    exit 1
+    ;;
+  "")
+    echo "Refusing to deploy: DATABASE_URL is missing from no-escape-back/.env."
+    exit 1
+    ;;
+esac
+
 echo ""
 echo "🔧 Backend — installing deps..."
 cd no-escape-back
-npm ci 2>/dev/null || npm install
+npm ci
 
 echo "🗄️ Running Prisma push..."
 npx prisma generate
@@ -26,7 +39,7 @@ npm run build
 echo ""
 echo "🎨 Frontend — installing deps..."
 cd ../NoEscape-UI
-npm ci 2>/dev/null || npm install
+npm ci
 
 echo "🏗️ Building frontend (production)..."
 npx ng build --configuration production

@@ -25,15 +25,30 @@ jobs:
             no-escape-back/package-lock.json
             NoEscape-UI/package-lock.json
 
+      # Server .env only. Never .env.example — that file is the local Docker database.
       - name: Copy .env from live deployment
         run: cp ~/dev/noescape/no-escape-back/.env no-escape-back/.env
+
+      - name: Refuse a local database URL
+        run: |
+          db_url=$(grep -E '^DATABASE_URL=' no-escape-back/.env || true)
+          case "$db_url" in
+            *127.0.0.1*|*localhost*|*file:*)
+              echo "Refusing to deploy: DATABASE_URL points at a local database."
+              exit 1
+              ;;
+            "")
+              echo "Refusing to deploy: DATABASE_URL is missing from the server .env."
+              exit 1
+              ;;
+          esac
 
       - name: Backend — install deps
         run: |
           cd no-escape-back
           npm ci
 
-      - name: Backend — Prisma generate & push
+      - name: Backend — Prisma generate and push
         run: |
           cd no-escape-back
           npx prisma generate

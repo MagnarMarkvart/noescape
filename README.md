@@ -4,15 +4,24 @@ Life RPG — real-world skills, RuneScape-shaped progression, daily quest log.
 
 ## Quick start
 
+Local development runs Supabase in Docker. That database is empty until you push the Prisma schema into it. It is not the hosted production database.
+
+Production credentials live only in the server `.env`. `.env.example` has the local Docker defaults and is the only env file that belongs in git.
+
+Schema changes are applied with `prisma db push` locally and on the GitHub runner. The old SQLite migration files cannot run on Postgres and are not the schema source anymore.
+
 ```bash
 npm install
 npm install --prefix no-escape-back
 npm install --prefix NoEscape-UI
 cp no-escape-back/.env.example no-escape-back/.env
-npm run db:migrate
+npm run db:up
+npm run db:push
 npm run db:seed
 npm run dev
 ```
+
+Stop the local stack with `npm run db:down`.
 
 - Backend: `http://localhost:3000`
 - UI Dashboard: `http://localhost:4200/status`

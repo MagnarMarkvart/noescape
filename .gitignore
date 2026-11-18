@@ -27,6 +27,13 @@ Thumbs.db
 *.db
 *.db-journal
 
+# One-time SQLite dump of personal data. Already imported to the hosted database.
+supabase-seed.sql
+
+# Supabase CLI local state (config.toml itself is committed)
+supabase/.temp/
+supabase/.branches/
+
 # User-uploaded quest covers
 no-escape-back/uploads/quests/*
 !no-escape-back/uploads/quests/.gitkeep

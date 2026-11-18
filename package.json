@@ -21,7 +21,9 @@
     "dev": "concurrently -n back,front -c cyan,magenta \"npm run start:dev --prefix no-escape-back\" \"npm start --prefix NoEscape-UI\"",
     "dev:back": "npm run start:dev --prefix no-escape-back",
     "dev:front": "npm start --prefix NoEscape-UI",
-    "db:migrate": "npm run prisma:migrate --prefix no-escape-back",
+    "db:up": "supabase start",
+    "db:down": "supabase stop",
+    "db:push": "npm run prisma:push --prefix no-escape-back",
     "db:seed": "npm run prisma:seed --prefix no-escape-back",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -29,6 +31,7 @@
     "@angular/cli": "^21.2.20"
   },
   "devDependencies": {
-    "concurrently": "^10.0.4"
+    "concurrently": "^10.0.4",
+    "supabase": "3.2.0"
   }
 }
