@@ -498,9 +498,27 @@ describe('ListsController (e2e)', () => {
 
       await prisma.listItemMemory.createMany({
         data: [
-          { listId, title: 'Milk', titleNormalized: 'milk', useCount: 1, lastUsedAt: new Date() },
-          { listId, title: 'Bread', titleNormalized: 'bread', useCount: 1, lastUsedAt: new Date() },
-          { listId, title: 'Eggs', titleNormalized: 'eggs', useCount: 1, lastUsedAt: new Date() },
+          {
+            listId,
+            title: 'Milk',
+            titleNormalized: 'milk',
+            useCount: 1,
+            lastUsedAt: new Date(),
+          },
+          {
+            listId,
+            title: 'Bread',
+            titleNormalized: 'bread',
+            useCount: 1,
+            lastUsedAt: new Date(),
+          },
+          {
+            listId,
+            title: 'Eggs',
+            titleNormalized: 'eggs',
+            useCount: 1,
+            lastUsedAt: new Date(),
+          },
         ],
       });
 
@@ -520,7 +538,13 @@ describe('ListsController (e2e)', () => {
       const listId = createRes.body.id;
 
       const memEntry = await prisma.listItemMemory.create({
-        data: { listId, title: 'Milk', titleNormalized: 'milk', useCount: 1, lastUsedAt: new Date() },
+        data: {
+          listId,
+          title: 'Milk',
+          titleNormalized: 'milk',
+          useCount: 1,
+          lastUsedAt: new Date(),
+        },
       });
 
       await request(app.getHttpServer())
@@ -542,7 +566,13 @@ describe('ListsController (e2e)', () => {
       const listId = createRes.body.id;
 
       const memEntry = await prisma.listItemMemory.create({
-        data: { listId, title: 'Milk', titleNormalized: 'milk', useCount: 2, lastUsedAt: new Date() },
+        data: {
+          listId,
+          title: 'Milk',
+          titleNormalized: 'milk',
+          useCount: 2,
+          lastUsedAt: new Date(),
+        },
       });
 
       const restoreRes = await request(app.getHttpServer())
@@ -568,7 +598,13 @@ describe('ListsController (e2e)', () => {
         .send({ title: 'Milk' });
 
       await prisma.listItemMemory.create({
-        data: { listId, title: 'Bread', titleNormalized: 'bread', useCount: 1, lastUsedAt: new Date() },
+        data: {
+          listId,
+          title: 'Bread',
+          titleNormalized: 'bread',
+          useCount: 1,
+          lastUsedAt: new Date(),
+        },
       });
 
       await request(app.getHttpServer()).delete(`/lists/${listId}`).expect(200);
