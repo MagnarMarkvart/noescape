@@ -10,6 +10,7 @@ import { Router, RouterLink } from '@angular/router';
 import { RuneCheck } from '../shared/rune-check';
 import { DEFAULT_LIST_ICON, ListDetailView, ListView } from './lists.model';
 import { ListsService } from './lists.service';
+import { onRemoteChange } from '../core/data-sync';
 
 @Component({
   selector: 'app-lists-page',
@@ -19,6 +20,11 @@ import { ListsService } from './lists.service';
   styleUrl: './lists-page.css',
 })
 export class ListsPage implements OnInit {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['lists'], () => {
+    this.reload();
+  });
+
   private readonly api = inject(ListsService);
   private readonly router = inject(Router);
 

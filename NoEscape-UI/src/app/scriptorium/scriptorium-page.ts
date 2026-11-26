@@ -21,6 +21,7 @@ import {
   workLocked,
 } from './scriptorium.model';
 import { ScriptoriumService } from './scriptorium.service';
+import { onRemoteChange } from '../core/data-sync';
 
 type CatalogConfirm =
   | { kind: 'erase'; work: ScriptoriumWorkView }
@@ -34,6 +35,11 @@ type CatalogConfirm =
   styleUrl: './scriptorium-page.css',
 })
 export class ScriptoriumPage implements OnInit {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['scriptorium', 'dailies', 'quests'], () => {
+    this.reload();
+  });
+
   private readonly api = inject(ScriptoriumService);
   private readonly character = inject(CharacterService);
   private readonly router = inject(Router);

@@ -1,6 +1,7 @@
 import {
   actualTaskMinutes,
   actualTimeSummary,
+  isWeekendIso,
   scoreDailyTasks,
 } from './day-score.util';
 
@@ -109,5 +110,41 @@ describe('actualTimeSummary', () => {
     ]);
     expect(summary.deltaGoalMinutes).toBe(45);
     expect(summary.deltaPlannedMinutes).toBe(165);
+  });
+});
+
+describe('weekend leniency', () => {
+  const task = (completed: boolean, minutes: number) => ({
+    importance: 'REGULAR' as const,
+    completed,
+    durationMinutes: minutes,
+  });
+
+  it('detects Saturday and Sunday', () => {
+    expect(isWeekendIso('2026-11-28')).toBe(true);
+    expect(isWeekendIso('2026-11-29')).toBe(true);
+    expect(isWeekendIso('2026-11-27')).toBe(false);
+    expect(isWeekendIso(undefined)).toBe(false);
+  });
+
+  it('uses a lighter 6-task / 4h bar on weekends', () => {
+    const tasks = Array.from({ length: 6 }, () => task(true, 40));
+    const weekday = scoreDailyTasks(tasks, '2026-11-27');
+    const weekend = scoreDailyTasks(tasks, '2026-11-28');
+    expect(weekday.loadMet).toBe(false);
+    expect(weekend.loadMet).toBe(true);
+    expect(weekend.score).toBe(100);
+    expect(weekend.weekend).toBe(true);
+    expect(weekend.timeGoalMinutes).toBe(240);
+  });
+
+  it('softens penalties for missed tasks on weekends', () => {
+    const tasks = [
+      ...Array.from({ length: 8 }, () => task(true, 45)),
+      { importance: 'IMPORTANT' as const, completed: false, durationMinutes: 60 },
+    ];
+    const weekday = scoreDailyTasks(tasks, '2026-11-27');
+    const weekend = scoreDailyTasks(tasks, '2026-11-28');
+    expect(weekend.score).toBeGreaterThan(weekday.score);
   });
 });

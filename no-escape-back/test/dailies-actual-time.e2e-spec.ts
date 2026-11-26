@@ -5,7 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /** Isolated, far-past day so the test never collides with real boards. */
-const DAY = '2001-02-03';
+const DAY = '2001-02-05'; // a Monday (weekday goals)
 
 describe('Dailies actual time after seal (e2e)', () => {
   let app: INestApplication;
@@ -32,9 +32,10 @@ describe('Dailies actual time after seal (e2e)', () => {
     skillId = skill.id;
   });
 
+  const DAYS = [DAY, '2001-03-05', '2001-03-06'];
   const cleanup = async () => {
-    await prisma.dailyLog.deleteMany({ where: { date: DAY } });
-    await prisma.dailyTask.deleteMany({ where: { date: DAY } });
+    await prisma.dailyLog.deleteMany({ where: { date: { in: DAYS } } });
+    await prisma.dailyTask.deleteMany({ where: { date: { in: DAYS } } });
   };
 
   beforeEach(cleanup);
@@ -48,11 +49,12 @@ describe('Dailies actual time after seal (e2e)', () => {
     slotIndex: number,
     title: string,
     durationMinutes: number,
+    date = DAY,
   ): Promise<number> {
     const res = await request(app.getHttpServer())
       .put('/dailies/slots')
       .send({
-        date: DAY,
+        date,
         importance,
         slotIndex,
         title,
@@ -66,7 +68,7 @@ describe('Dailies actual time after seal (e2e)', () => {
       return id;
     }
     const row = await prisma.dailyTask.findFirstOrThrow({
-      where: { date: DAY, importance, slotIndex },
+      where: { date, importance, slotIndex },
     });
     return row.id;
   }
@@ -119,5 +121,38 @@ describe('Dailies actual time after seal (e2e)', () => {
       logs.body as Array<{ date: string; actualTime: unknown }>
     ).find((entry) => entry.date === DAY);
     expect(row?.actualTime).toEqual(expected);
+  });
+
+  it('offers carry-over only once per day, even after deleting the copy', async () => {
+    const src = '2001-03-05';
+    const target = '2001-03-06';
+    await slot('IMPORTANT', 0, 'Left undone', 30, src);
+    await request(app.getHttpServer())
+      .post('/dailies/seal')
+      .send({ date: src })
+      .expect(201);
+
+    const before = await request(app.getHttpServer())
+      .get('/dailies')
+      .query({ date: target })
+      .expect(200);
+    expect(before.body.canCopyIncomplete).toBe(true);
+
+    await request(app.getHttpServer())
+      .post('/dailies/copy-incomplete')
+      .send({ date: target, sourceDate: src })
+      .expect(201);
+    const copied = await prisma.dailyTask.findFirstOrThrow({
+      where: { date: target },
+    });
+    await request(app.getHttpServer())
+      .delete(`/dailies/${copied.id}`)
+      .expect(200);
+
+    const after = await request(app.getHttpServer())
+      .get('/dailies')
+      .query({ date: target })
+      .expect(200);
+    expect(after.body.canCopyIncomplete).toBe(false);
   });
 });

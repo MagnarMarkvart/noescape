@@ -143,6 +143,26 @@ import { monthRange, shiftIsoDays } from './time';
       top: calc(100% + 0.4rem);
       left: 0;
     }
+
+    /* Narrow screens: anchor the calendar to the whole nav row so it can
+       never run off the right edge. */
+    @media (max-width: 640px) {
+      .nav {
+        position: relative;
+      }
+      .picker {
+        position: static;
+      }
+      .pop {
+        left: 0;
+        right: 0;
+        max-width: 100%;
+      }
+      .pop app-rune-calendar {
+        display: block;
+        width: 100%;
+      }
+    }
   `,
 })
 export class DateNav implements OnInit {

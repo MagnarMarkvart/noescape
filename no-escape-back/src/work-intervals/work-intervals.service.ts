@@ -43,6 +43,39 @@ export class WorkIntervalsService {
     if (!hasTarget) {
       return;
     }
+    const startedAt = new Date(endedAt.getTime() - ms);
+    const same = {
+      clockKind,
+      watchId: targets.watchId ?? null,
+      dailyTaskId: targets.dailyTaskId ?? null,
+      questRunId: targets.questRunId ?? null,
+      questSubtaskId: targets.questSubtaskId ?? null,
+      questId: targets.questId ?? null,
+      scriptoriumWorkId: targets.scriptoriumWorkId ?? null,
+    };
+    // A running clock flushes periodically; contiguous flushes of the same
+    // clock/target extend one row so a session reads as one log line. A pause
+    // or stop leaves a gap, so the next run starts a new row.
+    const prev = await this.prisma.workInterval.findFirst({
+      where: {
+        ...same,
+        endedAt: {
+          gte: new Date(startedAt.getTime() - CONTIGUOUS_GAP_MS),
+          lte: new Date(endedAt.getTime()),
+        },
+      },
+      orderBy: { endedAt: 'desc' },
+    });
+    if (prev) {
+      await this.prisma.workInterval.update({
+        where: { id: prev.id },
+        data: {
+          endedAt,
+          elapsedMs: { increment: ms },
+        },
+      });
+      return;
+    }
     await this.prisma.workInterval.create({
       data: {
         clockKind,
@@ -91,11 +124,12 @@ export class WorkIntervalsService {
     if (Object.keys(where).length === 0) {
       return [];
     }
-    const rows = await this.prisma.workInterval.findMany({
+    const raw = await this.prisma.workInterval.findMany({
       where,
       orderBy: { endedAt: 'desc' },
-      take,
+      take: Math.min(2000, take * 40),
     });
+    const rows = mergeContiguous(raw).slice(0, take);
     return rows.map((row) => ({
       id: row.id,
       clockKind: row.clockKind,
@@ -110,4 +144,52 @@ export class WorkIntervalsService {
       elapsedMs: row.elapsedMs,
     }));
   }
+}
+
+/** Max gap between two flushes that still count as one running session. */
+export const CONTIGUOUS_GAP_MS = 5_000;
+
+type IntervalRow = {
+  id: number;
+  clockKind: string;
+  watchId: number | null;
+  dailyTaskId: number | null;
+  questRunId: number | null;
+  questSubtaskId: number | null;
+  questId: number | null;
+  scriptoriumWorkId: number | null;
+  startedAt: Date;
+  endedAt: Date;
+  elapsedMs: number;
+};
+
+/**
+ * Display-side merge for rows written before flush coalescing existed:
+ * newest-first rows of the same clock/target that touch each other become one.
+ */
+export function mergeContiguous<T extends IntervalRow>(rows: T[]): T[] {
+  const out: T[] = [];
+  for (const row of rows) {
+    const last = out[out.length - 1];
+    if (
+      last &&
+      last.clockKind === row.clockKind &&
+      last.watchId === row.watchId &&
+      last.dailyTaskId === row.dailyTaskId &&
+      last.questRunId === row.questRunId &&
+      last.questSubtaskId === row.questSubtaskId &&
+      last.questId === row.questId &&
+      last.scriptoriumWorkId === row.scriptoriumWorkId &&
+      last.startedAt.getTime() - row.endedAt.getTime() <= CONTIGUOUS_GAP_MS
+    ) {
+      out[out.length - 1] = {
+        ...last,
+        startedAt: row.startedAt,
+        elapsedMs: Number(last.elapsedMs) + Number(row.elapsedMs),
+      };
+      continue;
+    }
+    out.push({ ...row });
+  }
+  return out;
 }

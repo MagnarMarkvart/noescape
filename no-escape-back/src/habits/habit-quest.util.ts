@@ -15,7 +15,7 @@ export function parseHabitQuestRule(raw?: string | null): HabitQuestRule {
 }
 
 export function parseHabitQuestTarget(raw?: string | null): HabitQuestTarget {
-  return raw === 'SUBTASK' ? 'SUBTASK' : 'JOURNEY';
+  return String(raw ?? '').toUpperCase() === 'SUBTASK' ? 'SUBTASK' : 'JOURNEY';
 }
 
 function addDays(iso: string, days: number): string {

@@ -1582,7 +1582,13 @@ export class HabitsService {
   ): Array<{ id: number; icon: string | null; done: boolean }> {
     const done = doneByDate.get(date) ?? new Set<number>();
     return habits
-      .filter((h) => h.kind !== 'tally' && this.checkAssignedOn(h, date, today))
+      // A logged completion always shows, even on a day before the habit
+      // was created (backfilled logs) or off its cadence.
+      .filter(
+        (h) =>
+          h.kind !== 'tally' &&
+          (done.has(h.id) || this.checkAssignedOn(h, date, today)),
+      )
       .map((h) => ({
         id: h.id,
         icon: h.icon,

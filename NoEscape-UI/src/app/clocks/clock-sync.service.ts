@@ -9,6 +9,7 @@ import { HorologiumWatchService } from '../horologium/horologium-watch.service';
 import { ClockApiService } from './clock-api.service';
 import { ClockEvent, ClockKind, ClockSnapshot } from './clock.model';
 import { clockSkewMs } from './clock-now';
+import { DataSyncService } from '../core/data-sync';
 
 @Injectable({ providedIn: 'root' })
 export class ClockSyncService {
@@ -17,6 +18,7 @@ export class ClockSyncService {
   private readonly consuetudo = inject(ConsuetudoClockService);
   private readonly notes = inject(HorologiumNotesService);
   private readonly watches = inject(HorologiumWatchService);
+  private readonly dataSync = inject(DataSyncService);
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly skills = inject(SkillsService);
   private readonly ngZone = inject(NgZone);
@@ -108,6 +110,15 @@ export class ClockSyncService {
       });
     };
     es.addEventListener('clock.snapshot', onSnapshot);
+    es.addEventListener('data.changed', (raw: MessageEvent) => {
+      this.ngZone.run(() => {
+        try {
+          this.dataSync.push(JSON.parse(String(raw.data)));
+        } catch {
+          /* ignore malformed */
+        }
+      });
+    });
     es.onmessage = onSnapshot;
     es.onopen = () => {
       this.ngZone.run(() => this.hydrate());
@@ -153,14 +164,8 @@ export class ClockSyncService {
 
 function parseClockEvent(raw: unknown): ClockEvent | null {
   try {
-    let parsed: unknown =
-      typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      'data' in parsed &&
-      !('kind' in parsed)
-    ) {
+    let parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (parsed && typeof parsed === 'object' && 'data' in parsed && !('kind' in parsed)) {
       parsed = (parsed as { data: unknown }).data;
     }
     if (parsed && typeof parsed === 'object' && 'kind' in parsed) {

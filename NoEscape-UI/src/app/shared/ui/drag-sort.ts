@@ -275,6 +275,13 @@ export class DragItem {
       return;
     }
     this.coord.moved = true;
+    // Edge auto-scroll so long boards can be reordered on small screens.
+    const edge = 56;
+    if (event.clientY < edge) {
+      window.scrollBy(0, -18);
+    } else if (event.clientY > window.innerHeight - edge) {
+      window.scrollBy(0, 18);
+    }
     const hit = document.elementFromPoint(event.clientX, event.clientY);
     const item = hit?.closest('[data-drag-item]') as HTMLElement | null;
     const listEl = hit?.closest('[data-drop-list]') as HTMLElement | null;

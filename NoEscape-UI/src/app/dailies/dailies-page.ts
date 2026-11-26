@@ -72,6 +72,7 @@ import {
   DropGroup,
   DropList,
 } from '../shared/ui/drag-sort';
+import { onRemoteChange } from '../core/data-sync';
 
 @Component({
   selector: 'app-dailies-page',
@@ -101,6 +102,16 @@ import {
   styleUrl: './dailies-page.css',
 })
 export class DailiesPage implements OnInit {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(
+    ['dailies', 'quests', 'habits', 'scriptorium', 'routines'],
+    () => {
+      if (!this.editingKey() && !this.editingSlot()) {
+        this.loadBoard(this.selectedDate(), false, true);
+      }
+    },
+  );
+
   private readonly dailiesService = inject(DailiesService);
   private readonly skillsService = inject(SkillsService);
   private readonly habitsService = inject(HabitsService);
@@ -260,7 +271,7 @@ export class DailiesPage implements OnInit {
     if (!board) {
       return null;
     }
-    return board.verdict ?? scoreFromSlots(this.filledTasks());
+    return board.verdict ?? scoreFromSlots(this.filledTasks(), board.date);
   });
 
   ngOnInit(): void {

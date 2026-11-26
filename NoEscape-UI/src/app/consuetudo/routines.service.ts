@@ -36,6 +36,8 @@ export interface RoutineRunView {
   bonusXp: number;
   xpAwarded: number;
   notes?: string;
+  /** Marked done without Horologium; no time recorded. */
+  untracked?: boolean;
   steps: RoutineStepLogView[];
 }
 
@@ -89,6 +91,8 @@ export interface RoutineCompletePayload {
     outcome: 'COMPLETED' | 'SKIPPED';
   }>;
   notes?: string;
+  /** Done without the timer: steps are filled from the routine, no time. */
+  untracked?: boolean;
 }
 
 export interface RoutineCompleteResponse {

@@ -676,6 +676,8 @@ model RoutineRun {
   xpAwarded       Int              @default(0)
   activityIdsJson String?
   notes           String           @default("")
+  /// Marked done without Horologium; excluded from time averages.
+  untracked       Boolean          @default(false)
   steps           RoutineStepLog[]
 
   @@index([routineId])
