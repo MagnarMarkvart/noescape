@@ -8,6 +8,49 @@ import {
 export const DAY_TASK_GOAL = 9;
 export const DAY_TIME_GOAL_MINUTES = 6 * 60;
 
+/** Weekends get a lighter bar and softer penalties. */
+export const WEEKEND_TASK_GOAL = 6;
+export const WEEKEND_TIME_GOAL_MINUTES = 4 * 60;
+export const WEEKEND_PENALTY_FACTOR = 0.6;
+
+export interface DayGoals {
+  weekend: boolean;
+  taskGoal: number;
+  timeGoalMinutes: number;
+  penaltyFactor: number;
+}
+
+/** True for Saturday/Sunday of an ISO yyyy-mm-dd date. */
+export function isWeekendIso(date?: string | null): boolean {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return false;
+  }
+  const [y, m, d] = date.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 0 || day === 6;
+}
+
+export function dayGoals(date?: string | null): DayGoals {
+  const weekend = isWeekendIso(date);
+  return weekend
+    ? {
+        weekend,
+        taskGoal: WEEKEND_TASK_GOAL,
+        timeGoalMinutes: WEEKEND_TIME_GOAL_MINUTES,
+        penaltyFactor: WEEKEND_PENALTY_FACTOR,
+      }
+    : {
+        weekend,
+        taskGoal: DAY_TASK_GOAL,
+        timeGoalMinutes: DAY_TIME_GOAL_MINUTES,
+        penaltyFactor: 1,
+      };
+}
+
+function barLabel(goals: DayGoals): string {
+  return `${goals.taskGoal}-task / ${goals.timeGoalMinutes / 60}h`;
+}
+
 export type DayGrade = 'poor' | 'average' | 'strong' | 'peak';
 export type DayTone = 'bad' | 'warn' | 'ok';
 
@@ -31,6 +74,10 @@ export interface DayScore {
   trackedCount: number;
   loadMet: boolean;
   allDone: boolean;
+  /** Weekend scoring (lighter bar) was applied. */
+  weekend?: boolean;
+  taskGoal?: number;
+  timeGoalMinutes?: number;
 }
 
 const MISS_PENALTY: Record<TaskImportance, number> = {
@@ -73,7 +120,11 @@ export function toneFromGrade(grade: DayGrade): DayTone {
   return 'ok';
 }
 
-export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
+export function scoreDailyTasks(
+  tasks: DayScoreTask[],
+  date?: string | null,
+): DayScore {
+  const goals = dayGoals(date);
   const filled = tasks;
   const filledCount = filled.length;
   const completedCount = filled.filter((task) => task.completed).length;
@@ -86,14 +137,15 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
   const trackedCount = filled.filter((task) => Number(task.elapsedMs) > 0).length;
   const loadFrac = Math.min(
     1,
-    Math.max(filledCount / DAY_TASK_GOAL, assignedMinutes / DAY_TIME_GOAL_MINUTES),
+    Math.max(filledCount / goals.taskGoal, assignedMinutes / goals.timeGoalMinutes),
   );
   const loadMet =
-    filledCount >= DAY_TASK_GOAL || assignedMinutes >= DAY_TIME_GOAL_MINUTES;
+    filledCount >= goals.taskGoal ||
+    assignedMinutes >= goals.timeGoalMinutes;
   const allDone = filledCount > 0 && leftoverCount === 0;
 
   if (filledCount === 0) {
-    return finalize({
+    return finalize(goals, {
       score: 0,
       filledCount,
       completedCount,
@@ -108,7 +160,7 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
 
   if (allDone) {
     if (loadMet) {
-      return finalize({
+      return finalize(goals, {
         score: 100,
         filledCount,
         completedCount,
@@ -117,10 +169,10 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
         trackedCount,
         loadMet,
         allDone,
-        summary: 'Every task done, and the 9-task / 6h bar was met.',
+        summary: `Every task done, and the ${barLabel(goals)} bar was met.`,
       });
     }
-    return finalize({
+    return finalize(goals, {
       score: 86 + Math.round(loadFrac * 9),
       filledCount,
       completedCount,
@@ -129,7 +181,7 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
       trackedCount,
       loadMet,
       allDone,
-      summary: 'Every task done, though the day was set light of the 9-task / 6h bar.',
+      summary: `Every task done, though the day was set light of the ${barLabel(goals)} bar.`,
     });
   }
 
@@ -137,8 +189,10 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
     80,
     leftover.reduce((sum, task) => sum + (MISS_PENALTY[task.importance] ?? 12), 0),
   );
-  const volumeGap = Math.round((1 - completedCount / filledCount) * 20);
-  const underload = loadMet ? 0 : 8;
+  const volumeGap = Math.round(
+    (1 - completedCount / filledCount) * 20 * goals.penaltyFactor,
+  );
+  const underload = loadMet ? 0 : goals.weekend ? 4 : 8;
   const score = clampScore(100 - missPenalty - volumeGap - underload);
   const missLabel = leftoverCount === 1 ? leftover[0].importance : null;
   let summary = `${completedCount}/${filledCount} done.`;
@@ -152,10 +206,10 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
     summary = `${leftoverCount} tasks left undone.`;
   }
   if (!loadMet) {
-    summary += ' Load sat under the 9-task / 6h bar.';
+    summary += ` Load sat under the ${barLabel(goals)} bar.`;
   }
 
-  return finalize({
+  return finalize(goals, {
     score,
     filledCount,
     completedCount,
@@ -169,12 +223,19 @@ export function scoreDailyTasks(tasks: DayScoreTask[]): DayScore {
 }
 
 function finalize(
+  goals: DayGoals,
   partial: Omit<DayScore, 'grade' | 'tone' | 'label'> & { summary: string },
 ): DayScore {
   const score = clampScore(partial.score);
   const grade = gradeFromScore(score);
   return {
     ...partial,
+    summary: goals.weekend
+      ? `${partial.summary} Weekend: lighter bar.`
+      : partial.summary,
+    weekend: goals.weekend,
+    taskGoal: goals.taskGoal,
+    timeGoalMinutes: goals.timeGoalMinutes,
     score,
     grade,
     tone: toneFromGrade(grade),
@@ -190,7 +251,10 @@ export function filledSlotsFromBoard(board: {
   );
 }
 
-export function scoreFromSlots(slots: DailyTaskSlot[]): DayScore {
+export function scoreFromSlots(
+  slots: DailyTaskSlot[],
+  date?: string | null,
+): DayScore {
   return scoreDailyTasks(
     slots.map((slot) => ({
       importance: slot.importance,
@@ -198,11 +262,12 @@ export function scoreFromSlots(slots: DailyTaskSlot[]): DayScore {
       durationMinutes: slot.durationMinutes,
       elapsedMs: slot.elapsedMs,
     })),
+    date,
   );
 }
 
 export function verdictFromLog(log: DailyLogDetail): DailyVerdict {
-  const live = scoreFromSlots(filledSlotsFromBoard(log.snapshot.board));
+  const live = scoreFromSlots(filledSlotsFromBoard(log.snapshot.board), log.date);
   const grade = log.grade ?? live.grade;
   return {
     ...live,

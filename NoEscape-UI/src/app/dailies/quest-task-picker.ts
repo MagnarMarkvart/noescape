@@ -83,7 +83,7 @@ export interface QuestTaskPick {
                       </span>
                     </button>
                   }
-                  @for (s of q.subtasks; track s.id) {
+                  @for (s of openSubtasks(q); track s.id) {
                     <button
                       type="button"
                       class="quest-hit"
@@ -233,6 +233,11 @@ export class QuestTaskPicker implements OnInit {
     return Boolean(q.dailyWorkMinutes) || q.subtasks.length > 0;
   }
 
+  /** Done subtasks are never offered as dailies. */
+  protected openSubtasks(q: QuestView): QuestView['subtasks'] {
+    return q.subtasks.filter((s) => !s.completed);
+  }
+
   protected dailyWorkTitle(q: QuestView): string {
     return q.dailyWorkTitle || q.journeyLabel || q.name;
   }
@@ -266,7 +271,7 @@ export class QuestTaskPicker implements OnInit {
         this.chooseDailyWork(first);
         return;
       }
-      const sub = first.subtasks[0];
+      const sub = this.openSubtasks(first)[0];
       if (sub) {
         this.chooseSubtask(first, sub);
       }
@@ -327,7 +332,7 @@ export class QuestTaskPicker implements OnInit {
   private matches(q: QuestView, query: string): boolean {
     const hay = [
       q.name,
-      ...q.subtasks.map((s) => s.title),
+      ...this.openSubtasks(q).map((s) => s.title),
       ...(q.skillShares ?? []).map((s) => s.name),
     ]
       .join(' ')

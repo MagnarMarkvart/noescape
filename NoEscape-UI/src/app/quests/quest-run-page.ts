@@ -32,6 +32,7 @@ import {
   DropList,
   moveIndex,
 } from '../shared/ui/drag-sort';
+import { onRemoteChange } from '../core/data-sync';
 
 @Component({
   selector: 'app-quest-run-page',
@@ -44,6 +45,14 @@ import {
   },
 })
 export class QuestRunPage {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['quests', 'dailies', 'habits', 'horologium'], () => {
+    const q = this.quest();
+    if (q) {
+      this.load(q.id);
+    }
+  });
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly questsService = inject(QuestsService);

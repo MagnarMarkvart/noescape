@@ -34,6 +34,7 @@ import {
   HabitsService,
   HabitView,
 } from './habits.service';
+import { onRemoteChange } from '../core/data-sync';
 
 type CatalogView = 'cards' | 'calendar';
 type DueFilter = 'all' | 'today';
@@ -49,6 +50,11 @@ type DueFilter = 'all' | 'today';
   },
 })
 export class HabitusPage implements OnInit {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['habits', 'dailies', 'quests'], () => {
+    this.reload();
+  });
+
   private readonly habitsService = inject(HabitsService);
   private readonly character = inject(CharacterService);
   private readonly route = inject(ActivatedRoute);

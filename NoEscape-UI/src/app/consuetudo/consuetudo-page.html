@@ -68,6 +68,11 @@
               <p class="meta">{{ plannedLabel(r) }} · effort {{ r.effortLevel }}</p>
             </div>
             @if (!demo()) {
+              <app-ui-icon-btn
+                icon="check"
+                label="Mark walked without timer"
+                (clicked)="askUntracked(r)"
+              />
               <a class="edit" [routerLink]="['/consuetudo', r.id]">Edit</a>
             }
           </header>
@@ -93,6 +98,9 @@
                   <span>
                     Last walk {{ formatDate(run.date) }}
                     · +{{ run.xpAwarded }} XP
+                    @if (run.untracked) {
+                      <span class="bonus">· untracked</span>
+                    }
                     @if (run.bonusXp > 0) {
                       <span class="bonus">incl. {{ run.bonusXp }} bonus</span>
                     }
@@ -137,4 +145,18 @@
   >
     <p class="notes-body">{{ notes }}</p>
   </app-ui-scroll>
+}
+
+@if (untrackedTarget(); as target) {
+  <app-ui-confirm
+    kicker="Consuetudo"
+    [title]="'Mark ' + target.name + ' walked?'"
+    body="All steps count as done and you get the walk XP. No time is recorded, so this walk never counts toward average step times."
+    confirmLabel="Mark walked"
+    tone="accent"
+    [busy]="untrackedBusy()"
+    (confirm)="confirmUntracked()"
+    (dismiss)="untrackedTarget.set(null)"
+    (secondary)="untrackedTarget.set(null)"
+  />
 }

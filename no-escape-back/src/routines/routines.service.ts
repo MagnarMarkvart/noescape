@@ -230,7 +230,11 @@ export class RoutinesService {
 
   async completeRun(
     id: number,
-    input: { steps: RoutineStepLogInput[]; notes?: string },
+    input: {
+      steps: RoutineStepLogInput[];
+      notes?: string;
+      untracked?: boolean;
+    },
     devBypass = false,
   ) {
     await this.assertOpen(devBypass);
@@ -241,7 +245,19 @@ export class RoutinesService {
     if (!routine) {
       throw new NotFoundException(`Routine #${id} not found`);
     }
-    const logs = this.normalizeLogs(input.steps);
+    const untracked = input.untracked === true;
+    // Untracked walk: every step counts as done at its planned length, but no
+    // time is recorded (elapsed 0) so it never skews time averages.
+    const logs = untracked
+      ? routine.steps.map((step) => ({
+          stepId: step.id,
+          title: step.title,
+          icon: step.icon,
+          plannedSeconds: step.durationMinutes * 60,
+          elapsedMs: 0,
+          outcome: 'COMPLETED' as const,
+        }))
+      : this.normalizeLogs(input.steps);
     if (logs.length === 0) {
       throw new BadRequestException('Complete at least one step');
     }
@@ -314,6 +330,7 @@ export class RoutinesService {
         notes: String(input.notes ?? '')
           .trim()
           .slice(0, 4000),
+        untracked,
         steps: {
           create: logs.map((step, i) => ({
             stepId: this.resolveStepId(routine.steps, step.stepId),
@@ -322,7 +339,9 @@ export class RoutinesService {
             plannedSeconds: step.plannedSeconds,
             elapsedMs: BigInt(step.elapsedMs),
             outcome: step.outcome,
-            deltaMs: step.elapsedMs - step.plannedSeconds * 1000,
+            deltaMs: untracked
+              ? 0
+              : step.elapsedMs - step.plannedSeconds * 1000,
             sortOrder: i,
           })),
         },
@@ -521,6 +540,7 @@ export class RoutinesService {
     bonusXp: number;
     xpAwarded: number;
     notes?: string;
+    untracked?: boolean;
     steps: Array<{
       id: number;
       stepId?: number | null;
@@ -546,6 +566,7 @@ export class RoutinesService {
       bonusXp: run.bonusXp,
       xpAwarded: run.xpAwarded,
       notes: run.notes ?? '',
+      untracked: run.untracked === true,
       steps: run.steps.map((s) => ({
         id: s.id,
         stepId: s.stepId ?? null,

@@ -26,6 +26,7 @@ import {
   weekdayLabel,
 } from './quest.model';
 import { QuestsService } from './quests.service';
+import { onRemoteChange } from '../core/data-sync';
 
 type QuestBoard = 'all' | 'today' | 'progress' | 'schedule' | 'ready' | 'done';
 
@@ -67,6 +68,11 @@ function saveQuestBoard(id: QuestBoard): void {
   styleUrl: './quests-page.css',
 })
 export class QuestsPage implements OnInit {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['quests', 'dailies', 'habits'], () => {
+    this.reload();
+  });
+
   private readonly questsService = inject(QuestsService);
   private readonly images = inject(ImageWarmService);
   private readonly character = inject(CharacterService);

@@ -102,6 +102,9 @@ export interface DailyVerdict {
   trackedCount: number;
   loadMet: boolean;
   allDone: boolean;
+  weekend?: boolean;
+  taskGoal?: number;
+  timeGoalMinutes?: number;
 }
 
 export interface UpsertDailyTaskPayload {

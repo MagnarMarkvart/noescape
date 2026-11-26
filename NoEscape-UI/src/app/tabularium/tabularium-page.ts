@@ -11,6 +11,7 @@ import { TimedToast } from '../shared/timed-toast';
 import { TabulaClicker } from './tabula-clicker';
 import { TabulaView } from './tabularium.model';
 import { TabulariumService } from './tabularium.service';
+import { onRemoteChange } from '../core/data-sync';
 
 @Component({
   selector: 'app-tabularium-page',
@@ -20,6 +21,11 @@ import { TabulariumService } from './tabularium.service';
   styleUrl: './tabularium-page.css',
 })
 export class TabulariumPage implements OnInit {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['tabularium'], () => {
+    this.reload();
+  });
+
   private readonly api = inject(TabulariumService);
   private readonly timed = new TimedToast();
 

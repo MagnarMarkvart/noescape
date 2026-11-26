@@ -19,6 +19,7 @@ import {
   ListItemView,
 } from './lists.model';
 import { ListsService } from './lists.service';
+import { onRemoteChange } from '../core/data-sync';
 
 /** One row of the unified history: a done item and/or its memory entry. */
 export interface HistoryRow {
@@ -43,6 +44,11 @@ const norm = (title: string): string => title.trim().toLowerCase();
   styleUrl: './list-detail-page.css',
 })
 export class ListDetailPage implements OnInit {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['lists'], () => {
+    this.reload();
+  });
+
   private readonly api = inject(ListsService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -253,10 +259,8 @@ export class ListDetailPage implements OnInit {
 
     if (!this.list()) {
       this.api.create(payload).subscribe({
-        next: (created) => {
-          void this.router.navigate(['/lists', created.id], {
-            replaceUrl: true,
-          });
+        next: () => {
+          void this.router.navigate(['/lists'], { replaceUrl: true });
         },
         error: (err: { error?: { message?: string } }) => {
           this.error.set(err?.error?.message ?? 'Could not create list');

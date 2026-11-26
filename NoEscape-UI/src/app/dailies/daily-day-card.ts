@@ -35,7 +35,12 @@ const IMPORTANCE_LABEL: Record<TaskImportance, string> = {
   template: `
     <article class="card" [attr.data-grade]="verdict().grade">
       <header class="head">
-        <p class="kicker">{{ kicker() }}</p>
+        <p class="kicker">
+          {{ kicker() }}
+          @if (verdict().weekend) {
+            · Weekend
+          }
+        </p>
         <h2>{{ verdict().label }}</h2>
         <p class="score">{{ verdict().score }}</p>
       </header>
@@ -44,7 +49,7 @@ const IMPORTANCE_LABEL: Record<TaskImportance, string> = {
       <dl class="facts">
         <div>
           <dt>Tasks set</dt>
-          <dd>{{ verdict().filledCount }} / {{ taskGoal }}</dd>
+          <dd>{{ verdict().filledCount }} / {{ verdict().taskGoal ?? taskGoal }}</dd>
         </div>
         <div>
           <dt>Timed</dt>
@@ -58,7 +63,7 @@ const IMPORTANCE_LABEL: Record<TaskImportance, string> = {
           <dt>Assigned</dt>
           <dd>
             {{ formatHours(verdict().assignedMinutes) }}
-            / {{ formatHours(timeGoal) }}
+            / {{ formatHours(verdict().timeGoalMinutes ?? timeGoal) }}
           </dd>
         </div>
         <div>
@@ -337,7 +342,12 @@ export class DailyDayCard {
   protected readonly formatDuration = formatTaskDuration;
   protected readonly skillLine = dailySkillLine;
 
-  protected readonly actual = computed(() => actualTimeSummary(this.tasks()));
+  protected readonly actual = computed(() =>
+    actualTimeSummary(
+      this.tasks(),
+      this.verdict().timeGoalMinutes ?? DAY_TIME_GOAL_MINUTES,
+    ),
+  );
   protected readonly goalDelta = computed(() =>
     formatTimeDelta(this.actual().deltaGoalMinutes),
   );

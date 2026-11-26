@@ -84,12 +84,21 @@ export class RoutinesController {
   @Post(':id/complete')
   complete(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { steps?: RoutineStepLogInput[]; notes?: string },
+    @Body()
+    body: {
+      steps?: RoutineStepLogInput[];
+      notes?: string;
+      untracked?: boolean;
+    },
     @Query('dev') dev?: string,
   ) {
     return this.routines.completeRun(
       id,
-      { steps: body?.steps ?? [], notes: body?.notes },
+      {
+        steps: body?.steps ?? [],
+        notes: body?.notes,
+        untracked: body?.untracked === true,
+      },
       this.isDev(dev),
     );
   }

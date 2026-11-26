@@ -20,10 +20,12 @@ import {
 } from './consuetudo-demo';
 import { formatSignedDelta } from './consuetudo-xp';
 import { RoutineAccess, RoutineView, RoutinesService } from './routines.service';
+import { UiConfirm } from '../shared/ui/ui-confirm';
+import { onRemoteChange } from '../core/data-sync';
 
 @Component({
   selector: 'app-consuetudo-page',
-  imports: [RouterLink, UiIcon, UiIconBtn, UiScroll],
+  imports: [RouterLink, UiIcon, UiIconBtn, UiScroll, UiConfirm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './consuetudo-page.html',
   styleUrl: './consuetudo-page.css',
@@ -32,6 +34,11 @@ import { RoutineAccess, RoutineView, RoutinesService } from './routines.service'
   },
 })
 export class ConsuetudoPage implements OnInit {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['routines'], () => {
+    this.reload();
+  });
+
   private readonly routines = inject(RoutinesService);
   private readonly character = inject(CharacterService);
   private readonly quests = inject(QuestsService);
@@ -51,6 +58,8 @@ export class ConsuetudoPage implements OnInit {
   protected readonly formatDelta = formatSignedDelta;
   protected readonly openWalks = signal<Record<number, boolean>>({});
   protected readonly notesText = signal<string | null>(null);
+  protected readonly untrackedTarget = signal<RoutineView | null>(null);
+  protected readonly untrackedBusy = signal(false);
 
   ngOnInit(): void {
     this.quests.list('all').subscribe({
@@ -93,6 +102,35 @@ export class ConsuetudoPage implements OnInit {
 
   protected closeNotes(): void {
     this.notesText.set(null);
+  }
+
+  protected askUntracked(routine: RoutineView): void {
+    this.untrackedTarget.set(routine);
+  }
+
+  protected confirmUntracked(): void {
+    const target = this.untrackedTarget();
+    if (!target || this.untrackedBusy()) {
+      return;
+    }
+    this.untrackedBusy.set(true);
+    this.routines
+      .complete(target.id, { steps: [], untracked: true })
+      .subscribe({
+        next: (res) => {
+          this.untrackedBusy.set(false);
+          this.untrackedTarget.set(null);
+          this.timed.set(
+            `${target.name} walked · +${res.xpAwarded} XP (untracked)`,
+          );
+          this.reload();
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.untrackedBusy.set(false);
+          this.untrackedTarget.set(null);
+          this.timed.set(err.error?.message ?? 'Could not mark the walk');
+        },
+      });
   }
 
   protected openPractice(event: Event, routine: RoutineView): void {

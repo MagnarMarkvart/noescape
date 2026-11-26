@@ -36,6 +36,7 @@ import {
   moveIndex,
 } from '../shared/ui/drag-sort';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
+import { onRemoteChange } from '../core/data-sync';
 
 @Component({
   selector: 'app-quest-detail-page',
@@ -46,6 +47,14 @@ import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
   host: { class: 'quest-slide-host' },
 })
 export class QuestDetailPage {
+  /** Refetch when another device changes this data (server SSE). */
+  private readonly remoteSync = onRemoteChange(['quests', 'dailies', 'habits', 'horologium'], () => {
+    const q = this.quest();
+    if (q) {
+      this.load(q.id);
+    }
+  });
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly questsService = inject(QuestsService);

@@ -728,7 +728,7 @@ export class QuestForgePage implements OnInit {
         next: (q) => {
           this.saveHabitLink(q, () => {
             this.saving.set(false);
-            void this.router.navigate(['/quests', q.id]);
+            void this.router.navigate(['/quests']);
           });
         },
         error: (err: { error?: { message?: string } }) => {

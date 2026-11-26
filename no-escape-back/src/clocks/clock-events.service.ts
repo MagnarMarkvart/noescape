@@ -4,6 +4,15 @@ import { ClockEvent } from './clock.types';
 
 export type ClockSsePayload = { type?: string; data: unknown };
 
+/** Non-clock data changed on the server (any device); pages refetch. */
+export type DataChangedEvent = {
+  resource: string;
+  method: string;
+  path: string;
+  origin: string | null;
+  at: number;
+};
+
 function jsonSafe(event: ClockEvent): ClockEvent {
   try {
     return JSON.parse(
@@ -30,6 +39,16 @@ function jsonSafe(event: ClockEvent): ClockEvent {
 @Injectable()
 export class ClockEventsService {
   private readonly rooms = new Map<string, Subject<ClockEvent>>();
+  private readonly dataRooms = new Map<string, Subject<DataChangedEvent>>();
+
+  emitData(ownerId: string, event: DataChangedEvent): void {
+    let subj = this.dataRooms.get(ownerId);
+    if (!subj) {
+      subj = new Subject<DataChangedEvent>();
+      this.dataRooms.set(ownerId, subj);
+    }
+    subj.next(event);
+  }
 
   emit(ownerId: string, event: ClockEvent): void {
     this.room(ownerId).next(jsonSafe(event));
@@ -43,11 +62,20 @@ export class ClockEventsService {
           data: event,
         });
       });
+      let dataRoom = this.dataRooms.get(ownerId);
+      if (!dataRoom) {
+        dataRoom = new Subject<DataChangedEvent>();
+        this.dataRooms.set(ownerId, dataRoom);
+      }
+      const dataSub = dataRoom.subscribe((event) => {
+        subscriber.next({ type: 'data.changed', data: event });
+      });
       const ping = setInterval(() => {
         subscriber.next({ type: 'ping', data: { t: Date.now() } });
       }, 25_000);
       return () => {
         sub.unsubscribe();
+        dataSub.unsubscribe();
         clearInterval(ping);
       };
     });

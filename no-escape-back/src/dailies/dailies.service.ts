@@ -31,9 +31,8 @@ import { WorkIntervalsService } from '../work-intervals/work-intervals.service';
 import { QuestsService } from '../quests/quests.service';
 import { findActiveScriptoriumDailies } from '../scriptorium/scriptorium-lock.util';
 import {
-  DAY_TASK_GOAL,
-  DAY_TIME_GOAL_MINUTES,
   actualTimeSummary,
+  dayGoals,
   gradeFromScore,
   scoreDailyTasks,
   toneFromGrade,
@@ -527,6 +526,23 @@ export class DailiesService {
       });
       questRunId = run?.id ?? null;
     }
+    if (
+      questRunId &&
+      questSubtaskId &&
+      existing?.questSubtaskId !== questSubtaskId
+    ) {
+      const done = await this.prisma.questSubtaskCompletion.findUnique({
+        where: {
+          runId_subtaskId: { runId: questRunId, subtaskId: questSubtaskId },
+        },
+        select: { done: true },
+      });
+      if (done?.done) {
+        throw new BadRequestException(
+          'This quest subtask is already done and cannot be set as a daily',
+        );
+      }
+    }
 
     const task = await this.prisma.dailyTask.upsert({
       where: {
@@ -702,6 +718,15 @@ export class DailiesService {
       if (!subtask) {
         throw new NotFoundException(
           `Subtask #${subtaskId} not found on this quest`,
+        );
+      }
+      const done = await this.prisma.questSubtaskCompletion.findUnique({
+        where: { runId_subtaskId: { runId: run.id, subtaskId } },
+        select: { done: true },
+      });
+      if (done?.done) {
+        throw new BadRequestException(
+          'This quest subtask is already done and cannot be set as a daily',
         );
       }
     }
@@ -1821,6 +1846,7 @@ export class DailiesService {
         durationMinutes: slot.durationMinutes,
         elapsedMs: slot.elapsedMs,
       })),
+      dayGoals(board?.date).timeGoalMinutes,
     );
   }
 
@@ -1835,10 +1861,12 @@ export class DailiesService {
         durationMinutes: slot.durationMinutes,
         elapsedMs: slot.elapsedMs,
       })),
+      board.date,
     );
   }
 
   private verdictFromLog(log: {
+    date?: string;
     verdict?: string | null;
     score?: number | null;
     grade?: string | null;
@@ -1873,8 +1901,9 @@ export class DailiesService {
       assignedMinutes: Number(log.assignedMinutes) || 0,
       trackedCount: Number(log.trackedCount) || 0,
       loadMet:
-        log.filledCount >= DAY_TASK_GOAL ||
-        (Number(log.assignedMinutes) || 0) >= DAY_TIME_GOAL_MINUTES,
+        log.filledCount >= dayGoals(log.date).taskGoal ||
+        (Number(log.assignedMinutes) || 0) >=
+          dayGoals(log.date).timeGoalMinutes,
       allDone: log.filledCount > 0 && log.completedCount >= log.filledCount,
     };
     if (!log.verdict) {
