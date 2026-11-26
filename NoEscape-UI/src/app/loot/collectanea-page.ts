@@ -1,11 +1,11 @@
-import { DatePipe, DecimalPipe, PercentPipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { onRemoteChange } from '../core/data-sync';
 import { LootCollection, LootService, TIER_ORDER } from './loot';
 
 @Component({
   selector: 'app-collectanea-page',
-  imports: [DecimalPipe, PercentPipe, DatePipe],
+  imports: [DecimalPipe, DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: '../level-ups/level-ups-page.css',
   styles: `
@@ -33,12 +33,12 @@ import { LootCollection, LootService, TIER_ORDER } from './loot';
         </div>
       </header>
       <p class="lede">
-        Every XP drop rolls 1–{{ (data()?.rollMax ?? 100000) | number }}. The higher the roll, the
-        rarer the find — even a one-XP task can roll the top prize. Collectibles are separate from XP.
+        Now and then, earning XP turns up something. Most days nothing does — keep living, keep
+        playing, and the rare ones find you. Collectibles are separate from XP.
       </p>
       @if (data(); as d) {
         <p class="stats">
-          <span>Rolls <b>{{ d.totalRolls | number }}</b></span>
+          <span>Finds <b>{{ d.totalFinds | number }}</b></span>
           <span>Found <b>{{ foundCount() }}/{{ d.items.length }}</b></span>
         </p>
         @for (t of tiers(); track t.tier) {
@@ -48,10 +48,9 @@ import { LootCollection, LootService, TIER_ORDER } from './loot';
               <article class="item" [class.missing]="i.count === 0">
                 <span class="icon" aria-hidden="true">{{ i.count ? i.icon : '❔' }}</span>
                 <span class="name">{{ i.count ? i.name : '???' }}</span>
-                <small>
-                  <span class="count">×{{ i.count }}</span> ·
-                  {{ i.odds | percent: '1.0-3' }} · {{ i.from | number }}–{{ i.to | number }}
-                </small>
+                @if (i.count) {
+                  <small><span class="count">×{{ i.count }}</span></small>
+                }
                 @if (i.count) {
                   <small>{{ i.flavor }}</small>
                 }
@@ -61,14 +60,14 @@ import { LootCollection, LootService, TIER_ORDER } from './loot';
         }
         <h2 class="tier">Recent finds</h2>
         @if (d.recent.length === 0) {
-          <p class="lede">No rolls yet — earn XP anywhere to roll.</p>
+          <p class="lede">Nothing found yet.</p>
         } @else {
           <ul class="recent">
             @for (r of d.recent; track r.id) {
               <li>
                 <span aria-hidden="true">{{ r.icon }}</span>
                 <span>{{ r.name }}</span>
-                <span class="when">{{ r.tier }} · roll {{ r.roll | number }} · +{{ r.xpGained }} XP · {{ r.createdAt | date: 'd.MM HH:mm' }}</span>
+                <span class="when">{{ r.tier }} · +{{ r.xpGained }} XP · {{ r.createdAt | date: 'd.MM HH:mm' }}</span>
               </li>
             }
           </ul>
