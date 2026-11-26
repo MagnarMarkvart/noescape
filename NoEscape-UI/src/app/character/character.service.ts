@@ -21,6 +21,7 @@ import {
   formatMoney,
   isCurrency,
 } from '../shared/money';
+import { AUTO_CAPITALIZE } from '../core/auto-capitalize';
 
 export interface CharacterProfile {
   title: string;
@@ -34,6 +35,7 @@ export interface CharacterProfile {
   menuAutoToggleDesktop: boolean;
   pomodoroAutoContinue: boolean;
   consuetudoStartInScenery: boolean;
+  autoCapitalize?: boolean;
   vigiliaTrackQuests: boolean;
   vigiliaTrackDailies: boolean;
   vigiliaTrackScriptorium: boolean;
@@ -90,6 +92,8 @@ export class CharacterService {
   readonly menuAutoToggleDesktop = signal(true);
   readonly pomodoroAutoContinue = signal(true);
   readonly consuetudoStartInScenery = signal(true);
+  /** Shared with the HTTP interceptor (core/auto-capitalize). */
+  readonly autoCapitalize = AUTO_CAPITALIZE;
   readonly vigiliaTrackQuests = signal(true);
   readonly vigiliaTrackDailies = signal(false);
   readonly vigiliaTrackScriptorium = signal(false);
@@ -136,6 +140,7 @@ export class CharacterService {
     menuAutoToggleDesktop?: boolean;
     pomodoroAutoContinue?: boolean;
     consuetudoStartInScenery?: boolean;
+    autoCapitalize?: boolean;
     vigiliaTrackQuests?: boolean;
     vigiliaTrackDailies?: boolean;
     vigiliaTrackScriptorium?: boolean;
@@ -180,6 +185,7 @@ export class CharacterService {
     this.menuAutoToggleDesktop.set(p.menuAutoToggleDesktop !== false);
     this.pomodoroAutoContinue.set(p.pomodoroAutoContinue !== false);
     this.consuetudoStartInScenery.set(p.consuetudoStartInScenery !== false);
+    this.autoCapitalize.set(p.autoCapitalize === true);
     this.vigiliaTrackQuests.set(p.vigiliaTrackQuests !== false);
     this.vigiliaTrackDailies.set(p.vigiliaTrackDailies === true);
     this.vigiliaTrackScriptorium.set(p.vigiliaTrackScriptorium === true);

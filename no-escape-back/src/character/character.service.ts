@@ -89,6 +89,7 @@ export class CharacterService implements OnModuleInit {
       menuAutoToggleDesktop: character.menuAutoToggleDesktop !== false,
       pomodoroAutoContinue: character.pomodoroAutoContinue !== false,
       consuetudoStartInScenery: character.consuetudoStartInScenery !== false,
+      autoCapitalize: character.autoCapitalize === true,
       vigiliaTrackQuests: character.vigiliaTrackQuests !== false,
       vigiliaTrackDailies: character.vigiliaTrackDailies === true,
       vigiliaTrackScriptorium: character.vigiliaTrackScriptorium === true,
@@ -122,6 +123,7 @@ export class CharacterService implements OnModuleInit {
     menuAutoToggleDesktop?: boolean;
     pomodoroAutoContinue?: boolean;
     consuetudoStartInScenery?: boolean;
+    autoCapitalize?: boolean;
     vigiliaTrackQuests?: boolean;
     vigiliaTrackDailies?: boolean;
     vigiliaTrackScriptorium?: boolean;
@@ -139,6 +141,7 @@ export class CharacterService implements OnModuleInit {
       menuAutoToggleDesktop?: boolean;
       pomodoroAutoContinue?: boolean;
       consuetudoStartInScenery?: boolean;
+      autoCapitalize?: boolean;
       vigiliaTrackQuests?: boolean;
       vigiliaTrackDailies?: boolean;
       vigiliaTrackScriptorium?: boolean;
@@ -198,6 +201,9 @@ export class CharacterService implements OnModuleInit {
     }
     if (input.consuetudoStartInScenery !== undefined) {
       data.consuetudoStartInScenery = Boolean(input.consuetudoStartInScenery);
+    }
+    if (input.autoCapitalize !== undefined) {
+      data.autoCapitalize = Boolean(input.autoCapitalize);
     }
     if (input.vigiliaTrackQuests !== undefined) {
       data.vigiliaTrackQuests = Boolean(input.vigiliaTrackQuests);

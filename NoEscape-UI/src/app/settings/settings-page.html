@@ -59,6 +59,19 @@
       </p>
     </fieldset>
     <fieldset class="option-group">
+      <legend>Auto-capitalisation</legend>
+      <app-rune-check
+        label="Capitalise titles and names"
+        [checked]="autoCapitalize()"
+        (checkedChange)="setAutoCapitalize($event)"
+      />
+      <p class="hint">
+        On save, every word is capitalised except small joining words
+        (a, an, the, and, of, in…) unless they come first — e.g.
+        “Fire in the Hole”, “A Black Cat”. Notes are left as typed.
+      </p>
+    </fieldset>
+    <fieldset class="option-group">
       <legend>Consuetudo start</legend>
       <app-rune-check
         label="Scenery view"

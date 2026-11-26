@@ -68,6 +68,7 @@ import { ScriptoriumService } from '../scriptorium/scriptorium.service';
 import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
 import { XpFeedbackService } from '../xp-feedback/xp-feedback.service';
 import { WorkIntervalLog } from '../shared/work-interval-log';
+import { ConfirmService } from '../shared/ui/confirm-host';
 
 @Component({
   selector: 'app-horologium-page',
@@ -87,6 +88,7 @@ import { WorkIntervalLog } from '../shared/work-interval-log';
   styleUrl: './horologium-page.css',
 })
 export class HorologiumPage implements OnInit {
+  private readonly confirmDialog = inject(ConfirmService);
   private readonly timer = inject(HorologiumTimerService);
   private readonly watches = inject(HorologiumWatchService);
   private readonly taskClock = inject(HorologiumTaskClockService);
@@ -1045,11 +1047,14 @@ export class HorologiumPage implements OnInit {
     this.watches.toggleWidget();
   }
 
-  protected archiveWatch(id: number): void {
+  protected async archiveWatch(id: number): Promise<void> {
     const row = this.projectWatches().find((w) => w.id === id);
-    const ok = window.confirm(
-      `Archive ${row?.name ?? 'this watch'}? It leaves the active list.`,
-    );
+    const ok = await this.confirmDialog.ask({
+      kicker: 'Vigilia',
+      title: `Archive ${row?.name ?? 'this watch'}?`,
+      body: 'It leaves the active list. Tracked time stays in the logs.',
+      confirmLabel: 'Archive',
+    });
     if (!ok) {
       return;
     }

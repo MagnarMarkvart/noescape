@@ -33,6 +33,7 @@ import {
   parseHabitQuestRule,
   parseHabitQuestTarget,
 } from '../habits/habit-quest.util';
+import { assertKnownSkillSlugs } from '../skills/known-skills.util';
 
 type SkillReq = { slug: string; level: number };
 type XpPlan = {
@@ -267,6 +268,10 @@ export class QuestsService {
     const journeyNote = input.journeyNote?.trim() || null;
     const deadline = this.parseDeadline(input.deadline);
     const { totalXp, weights, completionBonus } = this.normalizeSkillXp(input);
+    await assertKnownSkillSlugs(
+      this.prisma,
+      weights.map((w) => w.slug),
+    );
     const description =
       input.description?.trim() ||
       [rules, stakes, howToWin, destination].filter(Boolean).join('\n\n') ||
@@ -399,6 +404,10 @@ export class QuestsService {
         this.parseJson<QuestSkillWeight[]>(quest.skillWeightsJson) ??
         [],
     });
+    await assertKnownSkillSlugs(
+      this.prisma,
+      weights.map((w) => w.slug),
+    );
     const name = input.name?.trim() || quest.name;
     const rules =
       input.rules !== undefined ? input.rules.trim() || null : quest.rules;

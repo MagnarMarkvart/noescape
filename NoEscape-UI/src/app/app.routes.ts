@@ -67,6 +67,14 @@ export const routes: Routes = [
           ),
         title: 'Vigilia — Settings',
       },
+      {
+        path: 'logs',
+        loadComponent: () =>
+          import('./settings/settings-logs-page').then(
+            (m) => m.SettingsLogsPage,
+          ),
+        title: 'Logs — Settings',
+      },
     ],
   },
   {

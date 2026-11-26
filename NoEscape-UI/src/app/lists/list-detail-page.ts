@@ -20,6 +20,7 @@ import {
 } from './lists.model';
 import { ListsService } from './lists.service';
 import { onRemoteChange } from '../core/data-sync';
+import { ConfirmService } from '../shared/ui/confirm-host';
 
 /** One row of the unified history: a done item and/or its memory entry. */
 export interface HistoryRow {
@@ -44,6 +45,7 @@ const norm = (title: string): string => title.trim().toLowerCase();
   styleUrl: './list-detail-page.css',
 })
 export class ListDetailPage implements OnInit {
+  private readonly confirmDialog = inject(ConfirmService);
   /** Refetch when another device changes this data (server SSE). */
   private readonly remoteSync = onRemoteChange(['lists'], () => {
     this.reload();
@@ -212,14 +214,17 @@ export class ListDetailPage implements OnInit {
     this.editIcon.set(icon);
   }
 
-  protected deleteList(): void {
+  protected async deleteList(): Promise<void> {
     const list = this.list();
     if (!list || this.deleting()) {
       return;
     }
-    const ok = window.confirm(
-      `Delete "${list.name}"? All items and memory will be permanently deleted.`,
-    );
+    const ok = await this.confirmDialog.ask({
+      kicker: 'Inventarium',
+      title: `Delete “${list.name}”?`,
+      body: 'All items and memory will be permanently deleted.',
+      confirmLabel: 'Delete',
+    });
     if (!ok) {
       return;
     }

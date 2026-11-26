@@ -32,6 +32,7 @@ import {
   parseActivityIds,
   reverseHabitBoardXp,
 } from './habits.xp';
+import { assertKnownSkillSlugs } from '../skills/known-skills.util';
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -1150,6 +1151,10 @@ export class HabitsService {
       if (parsed.error) {
         throw new BadRequestException(parsed.error);
       }
+      await assertKnownSkillSlugs(
+        this.prisma,
+        parsed.weights.map((w) => w.slug),
+      );
       data.skillWeightsJson = parsed.weights.length
         ? JSON.stringify(parsed.weights)
         : null;

@@ -17,6 +17,7 @@ import {
   findActiveScriptoriumDailies,
   type ScriptoriumDailyBind,
 } from './scriptorium-lock.util';
+import { assertKnownSkillSlugs } from '../skills/known-skills.util';
 
 export const SCRIPTORIUM_TIERS = [
   'IMMINENS',
@@ -174,6 +175,10 @@ export class ScriptoriumService {
     const dueDate = this.parseDue(input.dueDate);
     const tier = this.parseTier(input.tier, dueDate);
     const weights = this.parseWeights(input.skillWeights);
+    await assertKnownSkillSlugs(
+      this.prisma,
+      weights.map((w) => w.slug),
+    );
     const subtasks = this.parseSubtasks(input.subtasks);
     const row = await this.prisma.scriptoriumWork.create({
       data: {
@@ -252,6 +257,10 @@ export class ScriptoriumService {
     }
     if (input.skillWeights !== undefined) {
       const weights = this.parseWeights(input.skillWeights);
+      await assertKnownSkillSlugs(
+        this.prisma,
+        weights.map((w) => w.slug),
+      );
       data.skillWeightsJson = weights.length ? JSON.stringify(weights) : null;
     }
     if (input.status === 'ARCHIVED' || input.status === 'OPEN') {

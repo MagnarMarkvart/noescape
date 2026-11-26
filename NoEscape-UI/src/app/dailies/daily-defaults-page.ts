@@ -18,6 +18,7 @@ import { DefaultsReturn } from './defaults-return';
 import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import { formatMoney } from '../shared/money';
 import { CharacterService } from '../character/character.service';
+import { ConfirmService } from '../shared/ui/confirm-host';
 
 @Component({
   selector: 'app-daily-defaults-page',
@@ -27,6 +28,7 @@ import { CharacterService } from '../character/character.service';
   styleUrl: './daily-defaults-page.css',
 })
 export class DailyDefaultsPage implements OnInit {
+  private readonly confirmDialog = inject(ConfirmService);
   private readonly dailies = inject(DailiesService);
   private readonly character = inject(CharacterService);
   private readonly route = inject(ActivatedRoute);
@@ -84,8 +86,14 @@ export class DailyDefaultsPage implements OnInit {
     return n > 0 ? formatMoney(n, this.character.currency()) : '';
   }
 
-  protected remove(t: DailyTaskTemplate): void {
-    if (!confirm(`Remove “${t.name}” from defaults?`)) {
+  protected async remove(t: DailyTaskTemplate): Promise<void> {
+    const ok = await this.confirmDialog.ask({
+      kicker: 'Dailies',
+      title: `Remove “${t.name}” from defaults?`,
+      body: 'Days already planned keep their tasks.',
+      confirmLabel: 'Remove',
+    });
+    if (!ok) {
       return;
     }
     this.dailies.removeTemplate(t.id).subscribe({
