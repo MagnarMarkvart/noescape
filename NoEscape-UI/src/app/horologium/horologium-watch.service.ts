@@ -4,6 +4,7 @@ import {
   inject,
   Injectable,
   signal,
+  untracked,
 } from '@angular/core';
 import { Observable, of, tap } from 'rxjs';
 import { CharacterService } from '../character/character.service';
@@ -199,6 +200,19 @@ export class HorologiumWatchService {
     });
     effect(() => {
       this.timer.linkedWatchName.set(this.selected()?.name ?? null);
+      this.timer.linkedWatchId.set(this.selected()?.id ?? null);
+    });
+    // Another device started the sessio with a Vigilia attached: adopt it so
+    // the widget and live elapsed show here too (selection is per-tab).
+    effect(() => {
+      const serverId = this.timer.serverWatchId();
+      const rows = this.watches();
+      if (serverId == null || untracked(() => this.selectedId()) != null) {
+        return;
+      }
+      if (rows.some((w) => w.id === serverId)) {
+        queueMicrotask(() => this.select(serverId));
+      }
     });
     effect(() => {
       const wantExtras = this.desiredRunning();

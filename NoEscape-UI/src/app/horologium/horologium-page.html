@@ -521,7 +521,7 @@
         </form>
         }
 
-        @if (!isVigilia() && !isConsuetudo() && (dailies().length > 0 || boundDaily())) {
+        @if (!isVigilia() && !isConsuetudo() && (taskOptions().length > 0 || boundDaily() || vigiliaQuestId())) {
         <fieldset class="task-bind" [disabled]="!canEdit()">
           <legend>Task</legend>
           <select
@@ -529,7 +529,7 @@
             (change)="selectDaily($any($event.target).value)"
           >
             <option value="">None — Focus &amp; Discipline only</option>
-            @for (d of dailies(); track bindKey(d)) {
+            @for (d of taskOptions(); track bindKey(d)) {
               <option [value]="bindKey(d)">
                 @switch (d.source) {
                   @case ('daily') { Daily · {{ d.name }} }
@@ -539,6 +539,9 @@
               </option>
             }
           </select>
+          @if (vigiliaQuestId()) {
+            <p class="muted">Quest Vigilia on — only this quest's tasks can be focused.</p>
+          }
           @if (boundDaily(); as daily) {
             <p class="muted">
               @if (daily.source !== 'quest') {
@@ -683,16 +686,20 @@
               <a routerLink="/scriptorium" class="preset-manage">Scriptorium →</a>
             }
           </fieldset>
-          } @else if (!isConsuetudo() && projectWatches().length > 0) {
+          } @else if (!isConsuetudo() && (vigiliaGroups().length > 0 || projectWatches().length > 0)) {
           <fieldset class="task-bind" [disabled]="!canEdit()">
             <legend>Vigilia</legend>
             <select
-              [value]="selectedWatchId() ?? ''"
+              [value]="vigiliaSelectValue()"
               (change)="selectWatch($any($event.target).value)"
             >
               <option value="">None</option>
-              @for (w of projectWatches(); track w.id) {
-                <option [value]="w.id">{{ w.name }} · {{ watchElapsed(w) }}</option>
+              @for (g of vigiliaGroups(); track g.id) {
+                <optgroup [attr.label]="g.label">
+                  @for (o of g.options; track o.value) {
+                    <option [value]="o.value">{{ o.label }}</option>
+                  }
+                </optgroup>
               }
             </select>
             @if (selectedWatch(); as watch) {

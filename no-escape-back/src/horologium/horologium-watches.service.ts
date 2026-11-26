@@ -321,7 +321,10 @@ export class HorologiumWatchesService {
     if (existing.status !== 'ACTIVE') {
       throw new BadRequestException('Watch is archived');
     }
-    if (existing.bindKind === 'quest' && existing.completedAt) {
+    if (
+      existing.completedAt &&
+      (existing.bindKind === 'quest' || existing.questRunId != null)
+    ) {
       throw new BadRequestException('This Vigilia was already closed');
     }
     if (existing.running && existing.lastStartedAt) {

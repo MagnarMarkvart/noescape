@@ -105,6 +105,9 @@ export class HorologiumTimerService {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   /** Bound Vigilia project name — set by the watch service. */
   readonly linkedWatchName = signal<string | null>(null);
+  readonly linkedWatchId = signal<number | null>(null);
+  /** Vigilia watch attached to the running sessio on the server (any device). */
+  readonly serverWatchId = signal<number | null>(null);
 
   readonly remainingLabel = computed(() => this.formatMs(this.remainingMs()));
 
@@ -268,6 +271,7 @@ export class HorologiumTimerService {
             ? undefined
             : this.presetId(),
         watchName: this.linkedWatchName(),
+        watchId: this.linkedWatchId(),
         boundDaily: daily
           ? {
               source: daily.source,
@@ -317,6 +321,7 @@ export class HorologiumTimerService {
       return;
     }
     const payload = snapshot.sessio;
+    this.serverWatchId.set(payload?.watchId ?? null);
     if (payload) {
       this.mode.set(payload.mode === 'adhoc' ? 'adhoc' : 'planned');
       this.config.set({

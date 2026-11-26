@@ -5,6 +5,7 @@ import {
   computed,
   DestroyRef,
   effect,
+  untracked,
   HostListener,
   inject,
   isDevMode,
@@ -246,6 +247,29 @@ export class HorologiumPage implements OnInit {
   protected readonly vigiliaTrackDailies = this.character.vigiliaTrackDailies;
   protected readonly vigiliaQuests = signal<QuestView[]>([]);
   protected readonly boardDailies = signal<HorologiumBoundDaily[]>([]);
+  /** Quest a selected Vigilia is bound to (0 = none / not quest-bound). */
+  protected readonly vigiliaQuestId = computed(() => {
+    const watch = this.selectedWatch();
+    if (!watch || this.isVigilia()) {
+      return 0;
+    }
+    const kind = watch.bindKind ?? 'custom';
+    if (kind !== 'quest' && kind !== 'quest_daily_work' && kind !== 'subtask') {
+      return 0;
+    }
+    return Number(watch.questId) || 0;
+  });
+  /**
+   * Tasks offered for the sessio. When a quest Vigilia runs beside the
+   * sessio, only that quest's work (subtasks, daily slice, quest-bound
+   * dailies) may be focused — tracking a quest while doing something else
+   * makes no sense.
+   */
+  protected readonly taskOptions = computed(() => {
+    const questId = this.vigiliaQuestId();
+    const rows = this.dailies();
+    return questId ? rows.filter((d) => d.questId === questId) : rows;
+  });
   protected readonly vigiliaSelectValue = computed(() =>
     vigiliaPickerValue(this.selectedWatch()),
   );
@@ -497,6 +521,19 @@ export class HorologiumPage implements OnInit {
   });
 
   constructor() {
+    effect(() => {
+      // A quest Vigilia beside the sessio only allows that quest's tasks.
+      const questId = this.vigiliaQuestId();
+      const bound = untracked(() => this.boundDaily());
+      if (
+        questId &&
+        bound &&
+        bound.questId !== questId &&
+        untracked(() => this.canEdit())
+      ) {
+        untracked(() => this.timer.setBoundDaily(null));
+      }
+    });
     effect(() => {
       this.timer.sessionsVersion();
       this.reloadSessions();
@@ -1247,7 +1284,7 @@ export class HorologiumPage implements OnInit {
                   runId: 0,
                   dailyTaskId: slot.id,
                   subtaskId: null,
-                  questId: 0,
+                  questId: slot.questId ?? 0,
                   name: slot.title,
                   journeyLabel: slot.skillShares?.length
                     ? `${slot.title} · ${slot.skillShares.map((s) => s.name).join(' · ')}`

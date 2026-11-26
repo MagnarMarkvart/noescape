@@ -1568,6 +1568,11 @@ export class QuestsService {
         },
       });
     }
+    // The quest run is over: its Vigilias stop being trackable options.
+    await this.prisma.horologiumWatch.updateMany({
+      where: { questRunId: runId, status: 'ACTIVE', completedAt: null },
+      data: { completedAt: now, running: false, lastStartedAt: null },
+    });
   }
 
   private liveWatchMs(row: {
