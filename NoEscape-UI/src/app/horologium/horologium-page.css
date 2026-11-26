@@ -1071,24 +1071,33 @@ button.ghost {
   padding: 0.75rem 1rem 1rem;
 }
 
-.horologium-shell.focus .stage {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: auto;
-  max-width: none;
-  min-width: 0;
+.horologium-shell.focus .dial-panel,
+.horologium-shell.focus .dial-panel.notes-open {
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
 }
 
-.horologium-shell.focus .dial-board {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+/* Running view mirrors Scenery: one centred column (dial, task, controls,
+   stats) in normal flow so nothing can overlap; notes sit beside it. */
+.horologium-shell.focus .stage {
+  position: static;
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: min(22rem, calc(100% - 2rem));
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: auto 0 0;
+}
+
+.horologium-shell.focus .dial-board {
+  position: static;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(24rem, 100%);
   flex: none;
   z-index: 1;
 }
@@ -1097,11 +1106,11 @@ button.ghost {
   position: absolute;
   z-index: 4;
   top: 50%;
-  left: calc(50% + 12.25rem);
+  left: calc(50% + 13rem);
   transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  width: min(18rem, calc(50% - 13.25rem));
+  width: min(18rem, calc(50% - 14rem));
   height: min(24rem, 62dvh);
   max-height: calc(100% - 1.5rem);
 }
@@ -1114,31 +1123,37 @@ button.ghost {
 }
 
 .horologium-shell.focus .focus-props {
-  position: absolute;
+  position: static;
+  transform: none;
   z-index: 2;
-  left: 50%;
-  bottom: 0.7rem;
-  transform: translateX(-50%);
-  width: min(22rem, calc(100% - 2rem));
+  width: min(24rem, 100%);
+  margin: 0.9rem auto auto;
 }
 
 .horologium-shell.focus .ring-wrap {
-  padding: 0.55rem 0 1.15rem;
+  padding: 0.35rem 0 0.9rem;
 }
 
 .horologium-shell.focus .ring {
-  width: min(20rem, 100%, calc(100dvh - 18rem));
+  width: min(18rem, 100%, calc(100dvh - 24rem));
+  min-width: 11rem;
   max-width: 100%;
 }
 
 .horologium-shell.focus .dial-task {
-  margin: 0 auto 1.2rem;
+  margin: 0 auto 0.8rem;
+  width: 100%;
 }
 
 .horologium-shell.focus .live-stats,
 .horologium-shell.focus .watch-widget {
-  width: min(28rem, 100%);
+  width: 100%;
   margin: 0.15rem auto 0;
+}
+
+.horologium-shell.focus .live-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 @media (min-width: 900px) {
@@ -1150,27 +1165,8 @@ button.ghost {
     padding: 0.75rem 1.5rem 1rem;
   }
 
-  .horologium-shell.focus .ring-wrap {
-    padding: 0.35rem 0 1.35rem;
-  }
-
-  .horologium-shell.focus .ring {
-    width: min(20rem, 100%, calc(100dvh - 17rem));
-    max-width: 100%;
-  }
-
   .horologium-shell.focus .clock {
     font-size: clamp(2.4rem, 4vw, 3.4rem);
-  }
-
-  .horologium-shell.focus .live-stats,
-  .horologium-shell.focus .watch-widget {
-    width: 100%;
-    margin: 0;
-  }
-
-  .horologium-shell.focus .live-stats {
-    grid-template-columns: 1fr;
   }
 }
 
