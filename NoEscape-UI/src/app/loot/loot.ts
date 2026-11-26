@@ -4,7 +4,6 @@ import { API_BASE_URL } from '../core/api.config';
 
 export type LootDrop = {
   id: number;
-  roll: number;
   key: string;
   name: string;
   icon: string;
@@ -21,16 +20,12 @@ export type LootItemView = {
   icon: string;
   tier: string;
   flavor: string;
-  from: number;
-  to: number;
-  odds: number;
   count: number;
   lastFoundAt: string | null;
 };
 
 export type LootCollection = {
-  rollMax: number;
-  totalRolls: number;
+  totalFinds: number;
   items: LootItemView[];
   recent: LootDrop[];
 };

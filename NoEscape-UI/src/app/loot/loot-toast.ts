@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { DecimalPipe } from '@angular/common';
 import { LootService } from './loot';
 
 @Component({
   selector: 'app-loot-toast',
-  imports: [RouterLink, DecimalPipe],
+  imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="stack" aria-live="polite">
@@ -20,7 +19,7 @@ import { LootService } from './loot';
           <span class="text">
             <span class="name">{{ d.name }}</span>
             <span class="meta">
-              {{ d.tier }} · roll {{ d.roll | number }}
+              {{ d.tier }}
               @if (d.firstFind) { · new! }
             </span>
           </span>

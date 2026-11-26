@@ -1,4 +1,9 @@
-export const ROLL_MAX = 100_000;
+/** One roll per XP drop on 1..ROLL_MAX. Odds and thresholds: docs/loot.md (never shown in the UI). */
+export const ROLL_MAX = 1_000_000;
+/** XP bonus added to the roll is capped so a huge quest reward cannot buy a rare. */
+export const XP_BONUS_CAP = 10_000;
+/** Scores below this find nothing — most drops are empty. */
+export const FIND_FROM = 980_000;
 
 export type LootTier =
   'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic' | 'unique';
@@ -8,7 +13,7 @@ export type LootItem = {
   name: string;
   icon: string;
   tier: LootTier;
-  /** Inclusive roll range on 1..ROLL_MAX. */
+  /** Inclusive score range on 1..ROLL_MAX. */
   from: number;
   to: number;
   flavor: string;
@@ -24,15 +29,15 @@ const T = (
   flavor: string,
 ): LootItem => ({ key, name, icon, tier, from, to, flavor });
 
-/** Fixed table: the higher the roll, the rarer the find. 99 999+ is the top prize. */
+/** Fixed table: the higher the score, the rarer the find. 999 990+ is the top prize. */
 export const LOOT_TABLE: LootItem[] = [
   T(
     'copper-coin',
     'Copper Coin',
     '🪙',
     'common',
-    1,
-    10_000,
+    980_000,
+    981_999,
     'Worn smooth by many hands.',
   ),
   T(
@@ -40,8 +45,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Tallow Candle',
     '🕯️',
     'common',
-    10_001,
-    20_000,
+    982_000,
+    983_999,
     'Smoky, but it lights the page.',
   ),
   T(
@@ -49,8 +54,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Quill Feather',
     '🪶',
     'common',
-    20_001,
-    30_000,
+    984_000,
+    985_999,
     'Ready for the next entry.',
   ),
   T(
@@ -58,8 +63,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Iron Nail',
     '📌',
     'common',
-    30_001,
-    40_000,
+    986_000,
+    987_999,
     'Holds the work together.',
   ),
   T(
@@ -67,8 +72,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Clay Token',
     '🟤',
     'common',
-    40_001,
-    50_000,
+    988_000,
+    989_999,
     'A promise stamped in clay.',
   ),
   T(
@@ -76,8 +81,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Linen Scrap',
     '🧵',
     'common',
-    50_001,
-    60_000,
+    990_000,
+    991_999,
     'Patch for a long road.',
   ),
   T(
@@ -85,8 +90,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Brass Key',
     '🗝️',
     'uncommon',
-    60_001,
-    65_000,
+    992_000,
+    993_039,
     'Opens a small door somewhere.',
   ),
   T(
@@ -94,8 +99,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Wax Seal',
     '🔴',
     'uncommon',
-    65_001,
-    70_000,
+    993_040,
+    994_079,
     'Sealed, like a finished day.',
   ),
   T(
@@ -103,8 +108,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Hourglass Sand',
     '⏳',
     'uncommon',
-    70_001,
-    75_000,
+    994_080,
+    995_119,
     'Every grain was earned.',
   ),
   T(
@@ -112,8 +117,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Bone Die',
     '🎲',
     'uncommon',
-    75_001,
-    80_000,
+    995_120,
+    996_159,
     'Fortune favours the steady.',
   ),
   T(
@@ -121,8 +126,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Ink Pot',
     '🖋️',
     'uncommon',
-    80_001,
-    85_000,
+    996_160,
+    997_199,
     'Enough ink for a chapter.',
   ),
   T(
@@ -130,8 +135,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Silver Hourglass',
     '⌛',
     'rare',
-    85_001,
-    87_750,
+    997_200,
+    997_699,
     'Time, made precious.',
   ),
   T(
@@ -139,8 +144,8 @@ export const LOOT_TABLE: LootItem[] = [
     "Scholar's Lens",
     '🔍',
     'rare',
-    87_751,
-    90_500,
+    997_700,
+    998_199,
     'Detail is where mastery hides.',
   ),
   T(
@@ -148,8 +153,8 @@ export const LOOT_TABLE: LootItem[] = [
     "Knight's Pin",
     '⚔️',
     'rare',
-    90_501,
-    93_250,
+    998_200,
+    998_699,
     'Worn by those who show up.',
   ),
   T(
@@ -157,8 +162,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Map Fragment',
     '🗺️',
     'rare',
-    93_251,
-    96_000,
+    998_700,
+    999_199,
     'Part of a road not yet walked.',
   ),
   T(
@@ -166,8 +171,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Gilded Codex',
     '📕',
     'epic',
-    96_001,
-    96_875,
+    999_200,
+    999_349,
     'Knowledge bound in gold.',
   ),
   T(
@@ -175,8 +180,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Phoenix Feather',
     '🔥',
     'epic',
-    96_876,
-    97_750,
+    999_350,
+    999_499,
     'For every comeback.',
   ),
   T(
@@ -184,8 +189,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Oath Ring',
     '💍',
     'epic',
-    97_751,
-    98_625,
+    999_500,
+    999_649,
     'A vow kept daily.',
   ),
   T(
@@ -193,8 +198,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Star Chart',
     '✨',
     'epic',
-    98_626,
-    99_500,
+    999_650,
+    999_799,
     'The long plan, written in light.',
   ),
   T(
@@ -202,8 +207,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Crown of Discipline',
     '👑',
     'legendary',
-    99_501,
-    99_663,
+    999_800,
+    999_849,
     'Heavy is the head that keeps the streak.',
   ),
   T(
@@ -211,8 +216,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Dragon Scale',
     '🐉',
     'legendary',
-    99_664,
-    99_826,
+    999_850,
+    999_899,
     'Proof you faced the hard thing.',
   ),
   T(
@@ -220,8 +225,8 @@ export const LOOT_TABLE: LootItem[] = [
     "Philosopher's Stone",
     '💎',
     'legendary',
-    99_827,
-    99_990,
+    999_900,
+    999_949,
     'Turns small effort into gold.',
   ),
   T(
@@ -229,8 +234,8 @@ export const LOOT_TABLE: LootItem[] = [
     'Relic of the Unbroken',
     '🏺',
     'mythic',
-    99_991,
-    99_998,
+    999_950,
+    999_989,
     'Whispers of a hundred sealed days.',
   ),
   T(
@@ -238,17 +243,36 @@ export const LOOT_TABLE: LootItem[] = [
     'The Last Ember',
     '🌟',
     'unique',
-    99_999,
-    100_000,
-    'The rarest find. Even a one-XP task can bring it.',
+    999_990,
+    1_000_000,
+    'The rarest find. Pure luck — even a one-XP task can bring it.',
   ),
 ];
 
-export function itemForRoll(roll: number): LootItem {
+/**
+ * Score = roll + XP of the drop (bonus capped at XP_BONUS_CAP). If the bonus
+ * would push the score past ROLL_MAX the bonus is forfeited instead of clamped:
+ * clamping would pile every overflow onto the unique item and make it far more
+ * common than the tiers below it.
+ */
+export function scoreFor(roll: number, xp: number): number {
   const r = Math.min(ROLL_MAX, Math.max(1, Math.round(roll)));
-  return LOOT_TABLE.find((i) => r >= i.from && r <= i.to) ?? LOOT_TABLE[0];
+  const bonus = Math.min(XP_BONUS_CAP, Math.max(0, Math.floor(xp || 0)));
+  return r + bonus > ROLL_MAX ? r : r + bonus;
 }
 
+/** The item a score finds, or null (the usual case). */
+export function itemForScore(score: number): LootItem | null {
+  const s = Math.min(ROLL_MAX, Math.round(score));
+  if (s < FIND_FROM) return null;
+  return LOOT_TABLE.find((i) => s >= i.from && s <= i.to) ?? null;
+}
+
+export function itemByKey(key: string): LootItem | null {
+  return LOOT_TABLE.find((i) => i.key === key) ?? null;
+}
+
+/** Probability that a zero-XP drop lands on this item (docs/tests only). */
 export function oddsOf(item: LootItem): number {
   return (item.to - item.from + 1) / ROLL_MAX;
 }
