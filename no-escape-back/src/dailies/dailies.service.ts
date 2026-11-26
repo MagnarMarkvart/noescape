@@ -90,6 +90,7 @@ type EnrichedTask = {
   questSubtaskId: number | null;
   questBindKind: string | null;
   scriptoriumWorkId: number | null;
+  plannedStart?: string | null;
 };
 
 type BoardSnapshot = {
@@ -2063,7 +2064,30 @@ export class DailiesService {
       questSubtaskId: null,
       questBindKind: null,
       scriptoriumWorkId: null,
+      plannedStart: null,
     };
+  }
+
+  /** Time plan: optional "HH:MM" start for a filled daily (null clears). */
+  async setPlannedStart(id: number, raw: string | null | undefined) {
+    const task = await this.prisma.dailyTask.findUnique({ where: { id } });
+    if (!task) {
+      throw new NotFoundException(`Daily task #${id} not found`);
+    }
+    await this.assertMutableDay(task.date);
+    let value: string | null = null;
+    if (raw != null && String(raw).trim() !== '') {
+      const m = /^(\d{1,2}):(\d{2})$/.exec(String(raw).trim());
+      if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) {
+        throw new BadRequestException('plannedStart must be HH:MM');
+      }
+      value = `${m[1].padStart(2, '0')}:${m[2]}`;
+    }
+    await this.prisma.dailyTask.update({
+      where: { id },
+      data: { plannedStart: value },
+    });
+    return this.getBoard(task.date);
   }
 
   private tierCapacity(

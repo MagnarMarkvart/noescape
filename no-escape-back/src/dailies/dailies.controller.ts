@@ -167,6 +167,14 @@ export class DailiesController {
     return this.dailiesService.uncomplete(id);
   }
 
+  @Patch(':id/plan')
+  setPlannedStart(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { plannedStart?: string | null },
+  ) {
+    return this.dailiesService.setPlannedStart(id, body?.plannedStart ?? null);
+  }
+
   @Patch(':id/elapsed')
   setElapsed(
     @Param('id', ParseIntPipe) id: number,

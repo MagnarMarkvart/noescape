@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { LiveBusModule } from './live-bus/live-bus';
+import { LootModule } from './loot/loot.service';
 import { LogsModule } from './log-archive/logs.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -36,6 +38,8 @@ import { WorkIntervalsModule } from './work-intervals/work-intervals.module';
     TabulariumModule,
     WorkIntervalsModule,
     LogsModule,
+    LiveBusModule,
+    LootModule,
   ],
   controllers: [AppController],
   providers: [AppService],

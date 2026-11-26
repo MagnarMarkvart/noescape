@@ -25,6 +25,8 @@ export interface XpFeedbackEvent {
   previousProgress: SkillProgress;
   unlocks?: XpUnlockGrant[];
   questReqs?: XpQuestReqGrant[];
+  /** Drop already shown with a batch; play only the level-up beat. */
+  ceremonyOnly?: boolean;
 }
 
 /** @deprecated alias — prefer XpFeedbackEvent */

@@ -49,6 +49,8 @@ export interface DailyTaskSlot {
   /** subtask | daily_work */
   questBindKind?: string | null;
   scriptoriumWorkId?: number | null;
+  /** Time plan start "HH:MM" (null = untimed). */
+  plannedStart?: string | null;
 }
 
 export interface DailyTier {

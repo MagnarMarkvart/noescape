@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RewardsService } from '../rewards/rewards.service';
@@ -13,6 +14,7 @@ import {
   xpProgress,
 } from '../xp/xp.util';
 import { CreateActivityDto } from './dto/create-activity.dto';
+import { LootService } from '../loot/loot.service';
 
 const CATEGORY_META: Record<
   string,
@@ -30,6 +32,7 @@ export class SkillsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rewardsService: RewardsService,
+    @Optional() private readonly loot?: LootService,
   ) {}
 
   async onModuleInit() {
@@ -206,6 +209,7 @@ export class SkillsService implements OnModuleInit {
       return { activity, updated, levelUpEvent };
     });
 
+    const loot = await this.loot?.rollForXp(skillId, gained);
     const newUnlocks = leveledUp
       ? await this.rewardsService.checkUnlocks(skillId, newLevel)
       : [];
@@ -229,6 +233,7 @@ export class SkillsService implements OnModuleInit {
       levelUpEvent: result.levelUpEvent,
       newUnlocks,
       newlyMetQuestReqs,
+      loot: loot ?? null,
     };
   }
 

@@ -10,6 +10,7 @@ import { ClockApiService } from './clock-api.service';
 import { ClockEvent, ClockKind, ClockSnapshot } from './clock.model';
 import { clockSkewMs } from './clock-now';
 import { DataSyncService } from '../core/data-sync';
+import { LootService } from '../loot/loot';
 
 @Injectable({ providedIn: 'root' })
 export class ClockSyncService {
@@ -19,6 +20,7 @@ export class ClockSyncService {
   private readonly notes = inject(HorologiumNotesService);
   private readonly watches = inject(HorologiumWatchService);
   private readonly dataSync = inject(DataSyncService);
+  private readonly loot = inject(LootService);
   private readonly xpFeedback = inject(XpFeedbackService);
   private readonly skills = inject(SkillsService);
   private readonly ngZone = inject(NgZone);
@@ -110,6 +112,15 @@ export class ClockSyncService {
       });
     };
     es.addEventListener('clock.snapshot', onSnapshot);
+    es.addEventListener('loot.drop', (raw: MessageEvent) => {
+      this.ngZone.run(() => {
+        try {
+          this.loot.push(JSON.parse(String(raw.data)));
+        } catch {
+          /* ignore malformed */
+        }
+      });
+    });
     es.addEventListener('data.changed', (raw: MessageEvent) => {
       this.ngZone.run(() => {
         try {

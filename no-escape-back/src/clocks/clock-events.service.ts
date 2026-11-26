@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { LiveBus } from '../live-bus/live-bus';
 import { Observable, Subject } from 'rxjs';
 import { ClockEvent } from './clock.types';
 
@@ -41,6 +42,8 @@ export class ClockEventsService {
   private readonly rooms = new Map<string, Subject<ClockEvent>>();
   private readonly dataRooms = new Map<string, Subject<DataChangedEvent>>();
 
+  constructor(@Optional() private readonly bus?: LiveBus) {}
+
   emitData(ownerId: string, event: DataChangedEvent): void {
     let subj = this.dataRooms.get(ownerId);
     if (!subj) {
@@ -70,12 +73,16 @@ export class ClockEventsService {
       const dataSub = dataRoom.subscribe((event) => {
         subscriber.next({ type: 'data.changed', data: event });
       });
+      const busSub = this.bus?.events.subscribe((event) => {
+        subscriber.next({ type: event.type, data: event.data });
+      });
       const ping = setInterval(() => {
         subscriber.next({ type: 'ping', data: { t: Date.now() } });
       }, 25_000);
       return () => {
         sub.unsubscribe();
         dataSub.unsubscribe();
+        busSub?.unsubscribe();
         clearInterval(ping);
       };
     });
