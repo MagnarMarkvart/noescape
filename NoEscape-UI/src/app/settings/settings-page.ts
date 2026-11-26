@@ -35,6 +35,7 @@ export class SettingsPage implements OnInit {
   protected readonly menuAutoToggleMobile = signal(true);
   protected readonly menuAutoToggleDesktop = signal(true);
   protected readonly consuetudoStartInScenery = signal(true);
+  protected readonly autoCapitalize = signal(false);
   protected readonly currency = signal<CurrencyId>(DEFAULT_CURRENCY);
   protected readonly xpSoundsEnabled = this.sound.feedbackEnabled;
   protected readonly xpSoundVolume = this.sound.feedbackVolume;
@@ -51,6 +52,7 @@ export class SettingsPage implements OnInit {
         this.menuAutoToggleMobile.set(p.menuAutoToggleMobile !== false);
         this.menuAutoToggleDesktop.set(p.menuAutoToggleDesktop !== false);
         this.consuetudoStartInScenery.set(p.consuetudoStartInScenery !== false);
+        this.autoCapitalize.set(p.autoCapitalize === true);
         this.currency.set(p.currency || DEFAULT_CURRENCY);
         this.loading.set(false);
       },
@@ -98,6 +100,15 @@ export class SettingsPage implements OnInit {
     this.character.consuetudoStartInScenery.set(value);
     this.character.updateSettings({ consuetudoStartInScenery: value }).subscribe({
       error: () => this.timed.set('Could not save Consuetudo start view'),
+    });
+    this.cdr.markForCheck();
+  }
+
+  protected setAutoCapitalize(checked: boolean): void {
+    this.autoCapitalize.set(checked);
+    this.character.autoCapitalize.set(checked);
+    this.character.updateSettings({ autoCapitalize: checked }).subscribe({
+      error: () => this.timed.set('Could not save auto-capitalisation'),
     });
     this.cdr.markForCheck();
   }

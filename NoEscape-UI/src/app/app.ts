@@ -7,10 +7,11 @@ import { HorologiumWatchService } from './horologium/horologium-watch.service';
 import { AppShellService } from './shared/app-shell.service';
 import { AppSidebar } from './shared/app-sidebar';
 import { XpFeedback } from './xp-feedback/xp-feedback';
+import { ConfirmHost } from './shared/ui/confirm-host';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, AppSidebar, XpFeedback],
+  imports: [RouterOutlet, AppSidebar, XpFeedback, ConfirmHost],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

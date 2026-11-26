@@ -29,6 +29,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         <a routerLink="/settings/vigilia" routerLinkActive="active">
           Vigilia
         </a>
+        <a routerLink="/settings/logs" routerLinkActive="active">Logs</a>
       </nav>
       <router-outlet />
     </section>

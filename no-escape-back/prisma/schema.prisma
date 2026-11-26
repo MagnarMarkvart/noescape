@@ -344,6 +344,11 @@ model Character {
   pomodoroAutoContinue Boolean @default(true)
   /// Consuetudo catalog: open scenery (true) or the Horologium dial (false)
   consuetudoStartInScenery Boolean @default(true)
+  /// Title-case names/titles on save (minor words stay lower unless first)
+  autoCapitalize Boolean @default(false)
+  /// Log retention in days (null = keep forever) and the kinds it applies to (JSON array)
+  logRetentionDays  Int?
+  logRetentionKinds String?
   /// Vigilia settings — which targets Horologium's count-up layer may track.
   /// When all four are false, Vigilia is hidden from Horologium entirely.
   vigiliaTrackQuests      Boolean @default(true)

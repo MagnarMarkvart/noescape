@@ -30,6 +30,7 @@ import { RoutineView } from '../consuetudo/routines.service';
 import { UiIconBtn } from '../shared/ui/ui-icon-btn';
 import { NumberField } from '../shared/ui/number-field';
 import { ScriptoriumWorkView } from '../scriptorium/scriptorium.model';
+import { ConfirmService } from '../shared/ui/confirm-host';
 
 export interface HorologiumScene {
   id: string;
@@ -150,6 +151,7 @@ export function saveSceneryId(id: string): void {
   styleUrl: './horologium-scenery.css',
 })
 export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
+  private readonly confirmDialog = inject(ConfirmService);
   private readonly timer = inject(HorologiumTimerService);
   private readonly watches = inject(HorologiumWatchService);
   private readonly presetStore = inject(HorologiumPresetsService);
@@ -459,11 +461,14 @@ export class HorologiumSceneryOverlay implements AfterViewInit, OnDestroy {
     this.watches.toggleSolo();
   }
 
-  protected archiveWatch(id: number): void {
+  protected async archiveWatch(id: number): Promise<void> {
     const row = this.projectWatches().find((w) => w.id === id);
-    const ok = window.confirm(
-      `Archive ${row?.name ?? 'this watch'}? It leaves the active list.`,
-    );
+    const ok = await this.confirmDialog.ask({
+      kicker: 'Vigilia',
+      title: `Archive ${row?.name ?? 'this watch'}?`,
+      body: 'It leaves the active list. Tracked time stays in the logs.',
+      confirmLabel: 'Archive',
+    });
     if (!ok) {
       return;
     }

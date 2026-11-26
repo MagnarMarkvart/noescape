@@ -41,6 +41,7 @@ export class CharacterController {
       menuAutoToggleDesktop?: boolean;
       pomodoroAutoContinue?: boolean;
       consuetudoStartInScenery?: boolean;
+      autoCapitalize?: boolean;
       vigiliaTrackQuests?: boolean;
       vigiliaTrackDailies?: boolean;
       vigiliaTrackScriptorium?: boolean;

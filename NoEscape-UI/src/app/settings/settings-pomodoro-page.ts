@@ -16,6 +16,7 @@ import {
   HorologiumPresetRecord,
   HorologiumPresetsService,
 } from '../horologium/horologium-presets.service';
+import { ConfirmService } from '../shared/ui/confirm-host';
 
 @Component({
   selector: 'app-settings-pomodoro-page',
@@ -25,6 +26,7 @@ import {
   styleUrl: './settings-pomodoro-page.css',
 })
 export class SettingsPomodoroPage implements OnInit {
+  private readonly confirmDialog = inject(ConfirmService);
   private readonly presets = inject(HorologiumPresetsService);
   private readonly character = inject(CharacterService);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -166,8 +168,14 @@ export class SettingsPomodoroPage implements OnInit {
     });
   }
 
-  protected remove(row: HorologiumPresetRecord): void {
-    if (!confirm(`Delete “${row.label}”?`)) {
+  protected async remove(row: HorologiumPresetRecord): Promise<void> {
+    const ok = await this.confirmDialog.ask({
+      kicker: 'Presets',
+      title: `Delete “${row.label}”?`,
+      body: 'The preset is removed from Horologium.',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) {
       return;
     }
     this.presets.remove(row.id).subscribe({
