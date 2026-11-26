@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { LogsModule } from './logs/logs.module';
+import { LogsModule } from './log-archive/logs.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ClocksModule } from './clocks/clocks.module';
