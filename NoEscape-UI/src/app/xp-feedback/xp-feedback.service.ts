@@ -41,6 +41,8 @@ export class XpFeedbackService {
   readonly levelDownActive = signal(false);
   readonly questActive = signal(false);
   readonly currentQuest = signal<QuestCeremony | null>(null);
+  /** Other skills' gains from the same award, shown together with `current`. */
+  readonly companions = signal<XpFeedbackEvent[]>([]);
 
   publish(event: XpFeedbackEvent): void {
     if (!event.xpAmount || event.xpAmount <= 0) {
@@ -284,6 +286,7 @@ export class XpFeedbackService {
     }
     this.generation += 1;
     this.queue.length = 0;
+    this.companions.set([]);
     this.questQueue.length = 0;
     this.resetStage();
   }
@@ -340,25 +343,51 @@ export class XpFeedbackService {
     }
     const gen = this.generation;
     this.busy = true;
+    // One task/quest often awards several skills at once: show those drops
+    // together instead of one after another. Companions that levelled up get
+    // their own level-up beat right after (no second drop).
+    const ceremonyOnly = next.ceremonyOnly === true;
+    const batch: XpFeedbackEvent[] = [];
+    if (next.direction === 'gain' && !ceremonyOnly) {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      while (
+        batch.length < 5 &&
+        this.queue.length > 0 &&
+        this.queue[0].direction === 'gain' &&
+        !this.queue[0].ceremonyOnly
+      ) {
+        batch.push(this.queue.shift()!);
+      }
+    }
     this.current.set(next);
-    this.orbPercent.set(next.previousProgress.percent);
-    this.phase.set('drop');
-    this.dropActive.set(true);
-    this.playSfx(next.direction === 'gain' ? 'gain' : 'loss');
+    if (!ceremonyOnly) {
+      this.companions.set(batch);
+      this.orbPercent.set(next.previousProgress.percent);
+      this.phase.set('drop');
+      this.dropActive.set(true);
+      this.playSfx(next.direction === 'gain' ? 'gain' : 'loss');
 
-    if (!(await this.wait(80, gen))) {
-      return;
-    }
-    if (next.direction === 'gain') {
-      this.orbPercent.set(next.leveledUp ? 100 : next.skill.progress.percent);
+      if (!(await this.wait(80, gen))) {
+        return;
+      }
+      if (next.direction === 'gain') {
+        this.orbPercent.set(next.leveledUp ? 100 : next.skill.progress.percent);
+      } else {
+        this.orbPercent.set(next.leveledDown ? 0 : next.skill.progress.percent);
+      }
+
+      if (!(await this.wait(XP_DROP_MS, gen))) {
+        return;
+      }
+      this.dropActive.set(false);
+      this.companions.set([]);
+      const ceremonies = batch
+        .filter((e) => e.leveledUp)
+        .map((e) => ({ ...e, ceremonyOnly: true }));
+      this.queue.unshift(...ceremonies);
     } else {
-      this.orbPercent.set(next.leveledDown ? 0 : next.skill.progress.percent);
+      this.orbPercent.set(100);
     }
-
-    if (!(await this.wait(XP_DROP_MS, gen))) {
-      return;
-    }
-    this.dropActive.set(false);
 
     if (next.direction === 'gain' && next.leveledUp) {
       this.phase.set('levelup');

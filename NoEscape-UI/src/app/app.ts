@@ -8,10 +8,11 @@ import { AppShellService } from './shared/app-shell.service';
 import { AppSidebar } from './shared/app-sidebar';
 import { XpFeedback } from './xp-feedback/xp-feedback';
 import { ConfirmHost } from './shared/ui/confirm-host';
+import { LootToast } from './loot/loot-toast';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, AppSidebar, XpFeedback, ConfirmHost],
+  imports: [RouterOutlet, AppSidebar, XpFeedback, ConfirmHost, LootToast],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

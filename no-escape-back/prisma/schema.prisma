@@ -114,6 +114,8 @@ model DailyTask {
   @@index([questId])
   @@index([questSubtaskId])
   @@index([scriptoriumWorkId])
+  /// Optional time-plan start for the day view, "HH:MM" (local)
+  plannedStart       String?
 }
 
 /// Reusable daily presets — fill title, skill, effort, duration, optional habit.
@@ -830,4 +832,18 @@ model ListItemMemory {
   @@unique([listId, titleNormalized])
   @@index([listId])
   @@index([listId, lastUsedAt])
+}
+
+/// Loot: one RNG roll (1–100000) per XP award; higher rolls = rarer collectibles.
+model CollectibleDrop {
+  id        Int      @id @default(autoincrement())
+  roll      Int
+  itemKey   String
+  tier      String
+  skillId   Int?
+  xpGained  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([itemKey])
 }

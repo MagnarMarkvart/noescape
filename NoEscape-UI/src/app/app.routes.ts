@@ -282,6 +282,12 @@ export const routes: Routes = [
     title: 'Inventarium — No Escape',
   },
   {
+    path: 'collectanea',
+    loadComponent: () =>
+      import('./loot/collectanea-page').then((m) => m.CollectaneaPage),
+    title: 'Collectanea — No Escape',
+  },
+  {
     path: 'level-ups',
     loadComponent: () =>
       import('./level-ups/level-ups-page').then((m) => m.LevelUpsPage),

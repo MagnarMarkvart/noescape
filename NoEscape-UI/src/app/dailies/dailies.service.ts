@@ -96,6 +96,17 @@ export class DailiesService {
       .pipe(tap((slot) => this.invalidateBoard(slot.date)));
   }
 
+  setPlannedStart(id: number, plannedStart: string | null) {
+    return this.http
+      .patch<DailyBoard>(`${this.baseUrl}/${id}/plan`, { plannedStart })
+      .pipe(
+        tap((board) => {
+          this.boardCache.set(board.date, board);
+          this.board$.delete(board.date);
+        }),
+      );
+  }
+
   reorderSlots(
     date: string,
     from: { importance: TaskImportance; slotIndex: number },

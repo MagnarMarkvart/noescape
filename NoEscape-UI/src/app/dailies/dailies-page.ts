@@ -73,10 +73,13 @@ import {
   DropList,
 } from '../shared/ui/drag-sort';
 import { onRemoteChange } from '../core/data-sync';
+import { DailyTimePlan, PlanChange } from './daily-time-plan';
+import { concatMap, from, last } from 'rxjs';
 
 @Component({
   selector: 'app-dailies-page',
   imports: [
+    DailyTimePlan,
     DecimalPipe,
     FormField,
     RuneCheck,
@@ -135,6 +138,7 @@ export class DailiesPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly toast = this.timed.value;
   protected readonly editingKey = signal<string | null>(null);
+  protected readonly planOpen = signal(false);
   protected readonly saving = signal(false);
   protected readonly completingId = signal<number | null>(null);
   protected readonly pendingElapsedId = signal<number | null>(null);
@@ -702,6 +706,26 @@ export class DailiesPage implements OnInit {
         this.timed.set(this.readError(err, 'Could not add Regular slot'));
       },
     });
+  }
+
+  protected applyPlan(changes: PlanChange[]): void {
+    if (!this.canMutate() || changes.length === 0) {
+      return;
+    }
+    from(changes)
+      .pipe(
+        concatMap((change) =>
+          this.dailiesService.setPlannedStart(change.id, change.plannedStart),
+        ),
+        last(),
+      )
+      .subscribe({
+        next: (next) => this.applyBoard(next),
+        error: (err: { error?: { message?: string | string[] } }) => {
+          this.timed.set(this.readError(err, 'Could not save the time plan'));
+          this.loadBoard(this.selectedDate(), false, true);
+        },
+      });
   }
 
   protected onDailyDrop(event: DragSortDrop): void {

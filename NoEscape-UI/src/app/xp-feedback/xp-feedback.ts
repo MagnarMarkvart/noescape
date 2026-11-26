@@ -47,6 +47,15 @@ import { XpFeedbackService } from './xp-feedback.service';
             aria-hidden="true"
           >
             {{ event.direction === 'loss' ? '−' : '+' }}{{ event.xpAmount | number }} XP
+            @if (companions().length) {
+              <span class="drop-skill">{{ event.skill.icon || '◆' }} {{ event.skill.name }}</span>
+              @for (extra of companions(); track $index) {
+                <span class="drop-line">
+                  +{{ extra.xpAmount | number }} XP
+                  <span class="drop-skill">{{ extra.skill.icon || '◆' }} {{ extra.skill.name }}</span>
+                </span>
+              }
+            }
           </div>
         }
 
@@ -185,6 +194,20 @@ import { XpFeedbackService } from './xp-feedback.service';
       animation: xp-fly 2.1s cubic-bezier(0.22, 0.82, 0.28, 1) forwards;
       white-space: nowrap;
     }
+
+    .xp-drop .drop-skill {
+      margin-left: 0.45rem;
+      font-size: 0.6em;
+      color: #e8d9a8;
+    }
+
+    .xp-drop .drop-line {
+      display: block;
+      font-size: 0.72em;
+      line-height: 1.25;
+    }
+
+
 
     .xp-drop.loss {
       color: #f0b4a8;
@@ -615,6 +638,7 @@ export class XpFeedback {
   protected readonly current = this.feedback.current;
   protected readonly questCeremony = this.feedback.currentQuest;
   protected readonly dropActive = this.feedback.dropActive;
+  protected readonly companions = this.feedback.companions;
   protected readonly levelUpActive = this.feedback.levelUpActive;
   protected readonly levelDownActive = this.feedback.levelDownActive;
   protected readonly orbPercent = this.feedback.orbPercent;

@@ -12,6 +12,16 @@
     </div>
 
     <div class="toolbar-actions">
+      @if (board(); as b) {
+        @if (!b.isSealed && b.filledCount > 0) {
+          <app-ui-icon-btn
+            icon="stopwatch"
+            label="Time plan"
+            [expanded]="planOpen()"
+            (clicked)="planOpen.set(!planOpen())"
+          />
+        }
+      }
       <app-ui-icon-btn
         icon="log"
         label="Daily log"
@@ -71,6 +81,13 @@
         />
       }
     } @else {
+    @if (planOpen() && current.filledCount > 0) {
+      <app-daily-time-plan
+        [tasks]="filledTasks()"
+        [canEdit]="canMutate()"
+        (planned)="applyPlan($event)"
+      />
+    }
     <div class="day-panel" aria-label="Day progress">
       <div class="stat">
         <span class="stat-label">Done</span>
